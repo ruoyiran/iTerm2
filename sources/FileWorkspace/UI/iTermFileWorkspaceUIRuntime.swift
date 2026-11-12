@@ -14,6 +14,7 @@ import WebKit
     private var writers = [String: WeakFileView]()
     private var observer: NSObjectProtocol?
     private var stopped = false
+    @nonobjc private(set) var interactionSuspended = false
     private var authorityGeneration: UInt64 = 0
     convenience init(documentStore: iTermFileDocumentStore) {
         self.init(documentStore: documentStore, resourceDirectory: Bundle.main.resourceURL?.appendingPathComponent("FileWorkspaceUI"))
@@ -64,10 +65,10 @@ import WebKit
         for key in Array(writers.keys) where writers[key]?.value === controller { writers.removeValue(forKey: key) }
     }
     @nonobjc func requestAuthority(_ controller: iTermFileViewController) {
-        guard let id = controller.documentIdentifier else { return }
+        guard !interactionSuspended, let id = controller.documentIdentifier else { return }
         authorityGeneration &+= 1; let generation = authorityGeneration
         let grant = { [weak self, weak controller] (error: NSError?) in
-            guard let self = self, let controller = controller, generation == self.authorityGeneration, error == nil,
+            guard let self = self, let controller = controller, !self.interactionSuspended, generation == self.authorityGeneration, error == nil,
                   controller.documentIdentifier == id else { return }
             self.writers[id]?.value?.setEditAuthority(false); self.writers[id] = WeakFileView(controller)
             controller.setEditAuthority(true)
@@ -78,6 +79,7 @@ import WebKit
         guard let id = controller.documentIdentifier else { return false }; return writers[id]?.value === controller
     }
     func flushAllEdits(reason: iTermFileFlushReason, completion: @escaping (NSError?) -> Void) {
+        if reason != .save { interactionSuspended = true }
         let values = controllers.allObjects
         guard !values.isEmpty else { completion(nil); return }
         var remaining = values.count, failure: NSError?
@@ -85,7 +87,7 @@ import WebKit
             if failure == nil { failure = error }; remaining -= 1; if remaining == 0 { completion(failure) }
         } }
     }
-    func resumeEditing() { controllers.allObjects.forEach { $0.resumeEditing() } }
+    func resumeEditing() { interactionSuspended = false; controllers.allObjects.forEach { $0.resumeEditing() } }
     func shutdown() {
         guard !stopped else { return }; stopped = true
         if let observer = observer { NotificationCenter.default.removeObserver(observer) }; observer = nil

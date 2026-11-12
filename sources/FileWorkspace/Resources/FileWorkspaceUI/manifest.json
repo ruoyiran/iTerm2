@@ -10,7 +10,7 @@
     {
       "path": "app.js",
       "bytes": 2017,
-      "sha256": "c74e2363fdffdc844ac6abddd7ff5b9b4f4c3cc559046e200b082684cbaf90da",
+      "sha256": "9232f0dcfcc9c5bb3bef8e6f2de07c00c02f4eafc6646d1f15382837fb349c90",
       "mime": "text/javascript; charset=utf-8"
     },
     {
@@ -212,16 +212,16 @@
       "mime": "text/javascript; charset=utf-8"
     },
     {
+      "path": "chunks/editor-GOA57IX3.js",
+      "bytes": 62210,
+      "sha256": "ac900c781601e9009e7482860a8ce540cbf1e67936324108268e339be0cd1898",
+      "mime": "text/javascript; charset=utf-8"
+    },
+    {
       "path": "chunks/editor-Y4BFK3PW.css",
       "bytes": 146370,
       "sha256": "9dfa6eb7f6259d87fb22ef9d4d3b07fac905e33ef32e0bcebe614a8fb0e0566e",
       "mime": "text/css; charset=utf-8"
-    },
-    {
-      "path": "chunks/editor-YHBNDAK3.js",
-      "bytes": 62000,
-      "sha256": "f269cc9503fe6b0fb3aa260720978920c056cb1dcf619d33f9dcf225da5bf145",
-      "mime": "text/javascript; charset=utf-8"
     },
     {
       "path": "chunks/elixir-HQALYWIX.js",
@@ -897,7 +897,7 @@
     },
     {
       "path": "sources/FileWorkspace/Resources/src/editor.mjs",
-      "sha256": "26de1527ab096483ccf608afffa8260a5929d243b296687d04ac2b01101b7c76"
+      "sha256": "900e8921838e52585932fa8905c5d6a419929ed5f0a812e3050e14369e699b8e"
     },
     {
       "path": "sources/FileWorkspace/Resources/src/explorer.mjs",

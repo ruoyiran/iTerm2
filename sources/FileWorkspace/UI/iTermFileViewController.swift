@@ -116,6 +116,7 @@ import AppKit
     func reveal(lineNumber: Int, utf16Column: Int) { pendingReveal = (lineNumber, utf16Column); renderer?.send("reveal", payload: ["lineNumber": lineNumber, "utf16Column": utf16Column]) }
     func canPerform(_ command: iTermFileViewCommand) -> Bool {
         guard !stopped, snapshot != nil else { return false }
+        if runtime.interactionSuspended && [.save, .saveAs, .undo, .redo, .cut, .paste].contains(command) { return false }
         switch command {
         case .save, .undo, .redo, .cut, .paste: return ready && !status.isReadOnly && !composing
         case .copy: return previewController?.hasSelection ?? selection

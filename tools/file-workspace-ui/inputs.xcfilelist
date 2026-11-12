@@ -60,8 +60,8 @@ $(SRCROOT)/sources/FileWorkspace/Resources/FileWorkspaceUI/chunks/cypher-P42G5O6
 $(SRCROOT)/sources/FileWorkspace/Resources/FileWorkspaceUI/chunks/dart-MMDKJOGH.js
 $(SRCROOT)/sources/FileWorkspace/Resources/FileWorkspaceUI/chunks/dockerfile-OUGZO3ZZ.js
 $(SRCROOT)/sources/FileWorkspace/Resources/FileWorkspaceUI/chunks/ecl-DD366YRU.js
+$(SRCROOT)/sources/FileWorkspace/Resources/FileWorkspaceUI/chunks/editor-GOA57IX3.js
 $(SRCROOT)/sources/FileWorkspace/Resources/FileWorkspaceUI/chunks/editor-Y4BFK3PW.css
-$(SRCROOT)/sources/FileWorkspace/Resources/FileWorkspaceUI/chunks/editor-YHBNDAK3.js
 $(SRCROOT)/sources/FileWorkspace/Resources/FileWorkspaceUI/chunks/elixir-HQALYWIX.js
 $(SRCROOT)/sources/FileWorkspace/Resources/FileWorkspaceUI/chunks/flow9-HG2PDBRJ.js
 $(SRCROOT)/sources/FileWorkspace/Resources/FileWorkspaceUI/chunks/freemarker2-C7N2P6IC.js
