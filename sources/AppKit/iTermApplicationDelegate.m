@@ -264,6 +264,9 @@ static BOOL hasBecomeActive = NO;
 
     iTermScriptsMenuController *_scriptsMenuController;
     BOOL _disableTermination;
+    BOOL _fileQuitPending;
+    BOOL _fileQuitApproved;
+    BOOL _fileQuitOptionHeld;
 
     iTermFocusFollowsMouseController *_focusFollowsMouseController;
     iTermGlobalScopeController *_globalScopeController;
@@ -1051,17 +1054,38 @@ static NSModalResponse iTermCompareRenderingRunModal(id self, SEL _cmd) {
     }
 }
 
-- (NSApplicationTerminateReply)applicationShouldTerminate:(NSNotification *)theNotification {
+- (NSApplicationTerminateReply)applicationShouldTerminate:(NSApplication *)sender {
     DLog(@"applicationShouldTerminate:");
     NSArray *terminals;
     if (_disableTermination) {
         return NSTerminateCancel;
     }
 
+    if (!_fileQuitApproved) {
+        if (_fileQuitPending) { return NSTerminateLater; }
+        _fileQuitOptionHeld = ([NSEvent modifierFlags] & NSEventModifierFlagOption) != 0;
+        _fileQuitPending = YES;
+        if ([iTermFileSessionHost beginQuitWithCompletion:^(BOOL allowed) {
+            // Always leave the initiating applicationShouldTerminate stack before replying.
+            dispatch_async(dispatch_get_main_queue(), ^{
+                _fileQuitPending = NO;
+                if (!allowed) { [NSApp replyToApplicationShouldTerminate:NO]; return; }
+                _fileQuitApproved = YES;
+                NSApplicationTerminateReply reply = [self applicationShouldTerminate:sender];
+                if (reply == NSTerminateCancel) {
+                    _fileQuitApproved = NO;
+                    [iTermFileSessionHost cancelQuit];
+                }
+                [NSApp replyToApplicationShouldTerminate:reply == NSTerminateNow];
+            });
+        }]) { return NSTerminateLater; }
+        _fileQuitPending = NO;
+    }
+
     // Capture the option-key state for the “Quit and Close All Windows”
     // detection below. We sample it before any modal prompt so a slow user
     // releasing the key doesn’t change the answer.
-    const BOOL optionHeldAtQuit = ([NSEvent modifierFlags] & NSEventModifierFlagOption) != 0;
+    const BOOL optionHeldAtQuit = _fileQuitApproved ? _fileQuitOptionHeld : (([NSEvent modifierFlags] & NSEventModifierFlagOption) != 0);
 
     // Sparkle normally tells us before it quits us for an update (see
     // sparkleWillRestartApp:). These are the two cases where it does not, and
@@ -1220,6 +1244,7 @@ static NSModalResponse iTermCompareRenderingRunModal(id self, SEL _cmd) {
         [[iTermRemotePreferences sharedInstance] applicationWillTerminate];
     }
 
+    [iTermFileSessionHost finishQuit];
     DLog(@"applicationShouldTerminate returning Now");
     return NSTerminateNow;
 }

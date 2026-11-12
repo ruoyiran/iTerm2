@@ -355,20 +355,36 @@ func fileDocumentError(_ code: Int) -> NSError {
             }
             let path = document.path
             let revision = document.revision
+            let generation = document.lifecycleGeneration
             self.io.async {
                 let result = Result { try Self.read(path) }
                 self.state.async {
                     do {
-                        let loaded = try result.get()
-                        guard document.revision == revision else { throw fileDocumentError(7) }
-                        document.text = loaded.text
-                        document.format = loaded.format
-                        document.canonicalPath = loaded.canonicalPath
-                        document.kind = loaded.kind
-                        document.baseline = loaded.baseline
-                        document.readOnly = loaded.readOnly
-                        document.tooLarge = loaded.tooLarge
-                        document.conflict = false
+                        guard self.documents[documentIdentifier] === document, !document.saving,
+                              document.revision == revision, document.lifecycleGeneration == generation else { throw fileDocumentError(7) }
+                        switch result {
+                        case .success(let loaded):
+                            document.text = loaded.text
+                            document.format = loaded.format
+                            document.canonicalPath = loaded.canonicalPath
+                            document.kind = loaded.kind
+                            document.baseline = loaded.baseline
+                            document.readOnly = loaded.readOnly
+                            document.tooLarge = loaded.tooLarge
+                            document.conflict = false
+                        case .failure(let error):
+                            let failure = error as NSError
+                            guard (failure.domain == NSPOSIXErrorDomain && failure.code == Int(ENOENT)) ||
+                                  (failure.domain == NSCocoaErrorDomain && failure.code == NSFileReadNoSuchFileError) else { throw error }
+                            // Explicit discard of a deleted source does not recreate it. A nil
+                            // buffer is clean, so queued persistence cannot resurrect its draft.
+                            document.text = nil
+                            document.format = nil
+                            document.kind = .unsupported
+                            document.readOnly = true
+                            document.tooLarge = false
+                            document.conflict = true
+                        }
                         document.undo.removeAll(); document.redo.removeAll()
                         document.revision += 1
                         self.changed(document)

@@ -264,6 +264,8 @@ typedef NS_ENUM(NSUInteger, iTermSessionViewFindDriver) {
 // the inner edge of the panel area.
 @property (nonatomic) CGFloat actualPanelReservation;
 @property (nonatomic, readonly) BOOL isBrowser;
+@property (nonatomic, strong, nullable) NSViewController *fileViewController;
+@property (nonatomic, readonly) BOOL hasNonTerminalContent;
 
 // The session's per-profile HDR-cursor setting (KEY_HDR_CURSOR). When on, the
 // metal framebuffer is fp16 and EDR is engaged (via the metal view and the HDR

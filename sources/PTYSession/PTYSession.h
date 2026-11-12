@@ -131,6 +131,7 @@ extern NSString *const PTYSessionArrangementOptionsInhibitRelaunch;
 @class iTermQuickLookController;
 @protocol iTermSessionScope;
 @class SessionView;
+@class iTermFileSessionPane, iTermFileSessionHost;
 @class iTermSessionNoteModel;
 @class iTermSessionToolbarItem;
 @class TmuxHistory;
@@ -412,6 +413,7 @@ backgroundColor:(nullable NSColor *)backgroundColor;
 @end
 
 @class SessionView;
+@class iTermFileSessionPane, iTermFileSessionHost;
 @interface PTYSession : NSResponder <
     iTermEchoProbeDelegate,
     iTermFindDriverDelegate,
@@ -425,6 +427,15 @@ backgroundColor:(nullable NSColor *)backgroundColor;
     TmuxGatewayDelegate,
     VT100ScreenDelegate>
 @property(nonatomic, weak, nullable) id<PTYSessionDelegate> delegate;
+@property(nonatomic, readonly) BOOL isFileSession;
+@property(nonatomic, readonly) BOOL isTerminalSession;
+@property(nonatomic, copy, nullable) NSDictionary *fileSessionDescriptor;
+@property(nonatomic, retain, nullable) iTermFileSessionPane *fileSessionPane;
+@property(nonatomic, retain, nullable) iTermFileSessionHost *fileSessionHost;
+- (instancetype)initSynthetic:(BOOL)synthetic fileDescriptor:(nullable NSDictionary *)descriptor NS_DESIGNATED_INITIALIZER;
++ (PTYSession *)fileSessionWithDescriptor:(NSDictionary *)descriptor profile:(nullable NSDictionary *)profile;
++ (nullable PTYSession *)fileSessionWithPane:(iTermFileSessionPane *)pane profile:(nullable NSDictionary *)profile;
+
 
 // A session is active when it's in a visible tab and it needs periodic redraws (something is
 // blinking, it isn't idle, etc), or when a background tab is updating its tab label. This controls
@@ -938,7 +949,7 @@ backgroundColor:(nullable NSColor *)backgroundColor;
 + (void)removeAllRegisteredSessions;
 
 - (instancetype)init NS_UNAVAILABLE;
-- (nullable instancetype)initSynthetic:(BOOL)synthetic NS_DESIGNATED_INITIALIZER;
+- (nullable instancetype)initSynthetic:(BOOL)synthetic;
 
 - (void)didFinishInitialization;
 

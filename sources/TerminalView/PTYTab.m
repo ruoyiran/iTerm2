@@ -678,7 +678,7 @@ static void SetAgainstGrainDim(BOOL isVertical, NSSize *dest, CGFloat value) {
                                   tmuxController:tmuxController_
                               partialAttachments:nil
                                 reservedTabGUIDs:[NSSet set]
-                                         options:nil];
+                                         options:@{ PTYSessionArrangementOptionsForDuplication: @YES }];
     return theCopy;
 }
 
@@ -3362,6 +3362,12 @@ static void SetAgainstGrainDim(BOOL isVertical, NSSize *dest, CGFloat value) {
 - (NSSize)_minSessionSize:(SessionView*)sessionView respectPinning:(BOOL)respectPinning {
     NSSize size;
     PTYSession *session = [self sessionForSessionView:sessionView];
+    if (session.isFileSession) {
+        const NSSize content = session.fileSessionPane.controller.minimumContentSize;
+        return NSMakeSize(MAX(240, content.width), MAX(150, content.height) +
+            (sessionView.showTitle ? SessionView.titleHeight : 0) + sessionView.toolbarReservedHeight +
+            (sessionView.showBottomStatusBar ? iTermGetStatusBarHeight() : 0));
+    }
     if (session.isBrowserSession) {
         return NSMakeSize(395, 150);
     }
@@ -6318,7 +6324,7 @@ typedef struct {
             // A browser session's grid is measured in points (its cells are 1x1), not in
             // the profile font's cells. Scaling it by the font would make the pane many
             // times too big.
-            const NSSize cellSize = (session.isBrowserSession ?
+            const NSSize cellSize = ((session.isBrowserSession || session.isFileSession) ?
                                      NSMakeSize(session.textview.charWidth, session.textview.lineHeight) :
                                      [PTYTab cellSizeForBookmark:session.profile]);
             newSubviewSize = [PTYTab _sessionSizeWithCellSize:cellSize

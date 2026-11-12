@@ -46,6 +46,51 @@ final class FileDocumentTests: XCTestCase {
         return result
     }
 
+    func testDiscardRecoveredMissingDocumentRemovesDraftWithoutRecreatingSource() throws {
+        let path = try fixture("missing.txt", Data("original".utf8))
+        let initial = try XCTUnwrap(open(path))
+        let dirty = try XCTUnwrap(edit(initial, [iTermFileTextEdit(range: NSRange(location: 0, length: 8), replacement: "draft")]))
+        let released = expectation(description: "persist original owner")
+        store.releaseDocument(documentIdentifier: dirty.documentIdentifier) { error in XCTAssertNil(error); released.fulfill() }
+        wait(for: [released], timeout: 5)
+        try FileManager.default.removeItem(atPath: path)
+        store = iTermFileDocumentStore(storageDirectory: root.appendingPathComponent("drafts"))
+        let recovered = expectation(description: "recover missing dirty document")
+        store.recoverDrafts { values, error in XCTAssertNil(error); XCTAssertEqual(values.first?.text, "draft"); recovered.fulfill() }
+        wait(for: [recovered], timeout: 5)
+        let discarded = expectation(description: "discard missing source")
+        store.discardChanges(documentIdentifier: dirty.documentIdentifier) { value, error in
+            XCTAssertNil(error); XCTAssertEqual(value?.documentIdentifier, dirty.documentIdentifier)
+            XCTAssertEqual(value?.filePath, path); XCTAssertNil(value?.text)
+            XCTAssertEqual(value?.isDirty, false); XCTAssertEqual(value?.isReadOnly, true)
+            discarded.fulfill()
+        }
+        wait(for: [discarded], timeout: 5)
+        let flushed = expectation(description: "discard remains durable")
+        store.flushDrafts { error in XCTAssertNil(error); flushed.fulfill() }; wait(for: [flushed], timeout: 5)
+        let finalRelease = expectation(description: "release clean missing metadata")
+        store.releaseDocument(documentIdentifier: dirty.documentIdentifier) { error in XCTAssertNil(error); finalRelease.fulfill() }
+        wait(for: [finalRelease], timeout: 5)
+        let fresh = iTermFileDocumentStore(storageDirectory: root.appendingPathComponent("drafts"))
+        let empty = expectation(description: "no discarded recovery")
+        fresh.recoverDrafts { values, error in XCTAssertNil(error); XCTAssertTrue(values.isEmpty); empty.fulfill() }
+        wait(for: [empty], timeout: 5)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: path))
+    }
+
+    func testDiscardUnreadableSourceKeepsDirtyBuffer() throws {
+        let path = try fixture("unreadable.txt", Data("old".utf8))
+        let initial = try XCTUnwrap(open(path))
+        let dirty = try XCTUnwrap(edit(initial, [iTermFileTextEdit(range: NSRange(location: 0, length: 3), replacement: "retained")]))
+        XCTAssertEqual(chmod(path, 0), 0); defer { _ = chmod(path, 0o600) }
+        let attempted = expectation(description: "unreadable is not missing")
+        store.discardChanges(documentIdentifier: dirty.documentIdentifier) { _, error in XCTAssertNotNil(error); attempted.fulfill() }
+        wait(for: [attempted], timeout: 5)
+        let retained = expectation(description: "dirty text retained")
+        store.snapshot(documentIdentifier: dirty.documentIdentifier) { value in XCTAssertEqual(value?.text, "retained"); XCTAssertEqual(value?.isDirty, true); retained.fulfill() }
+        wait(for: [retained], timeout: 5)
+    }
+
     func testOpenReusesCanonicalDocumentAndPreservesUTF8() throws {
         let path = try fixture("a.md", Data([0xef, 0xbb, 0xbf]) + Data("hello\r\n🌍\r\n".utf8))
         let link = root.appendingPathComponent("alias.md").path

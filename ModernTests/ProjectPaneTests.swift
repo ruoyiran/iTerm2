@@ -57,6 +57,21 @@ final class ProjectPaneTests: XCTestCase {
         controller.activeTabDidChange()
         return (catalog, window, controller)
     }
+    func testFilePaneRemainsLaunchSourceButIsNeverReusedAsTerminal() {
+        let (catalog, window, controller) = setup()
+        let project = catalog.projects[0]
+        window.projectSessionContexts = [iTermProjectSessionContext(sessionIdentifier: "file", tabIdentifier: "mixed",
+            projectIdentifier: project.identifier, exited: false, isTerminal: false)]
+        window.projectActiveSessionIdentifier = "file"
+        controller.activeTabDidChange()
+        XCTAssertEqual(controller.selectedProjectIdentifier, project.identifier)
+        XCTAssertTrue(controller.isLaunchRequestCurrent(targetSessionIdentifier: "file", generation: controller.selectionGeneration))
+        controller.selectProject(project, openIfNeeded: true)
+        XCTAssertTrue(window.selected.isEmpty)
+        XCTAssertEqual(window.requests.count, 1)
+        XCTAssertEqual(window.requests.first?.target, "file")
+    }
+
     private func context(_ id: String, _ owner: String?, tab: String = "mixed", exited: Bool = false) -> iTermProjectSessionContext {
         iTermProjectSessionContext(sessionIdentifier: id, tabIdentifier: tab, projectIdentifier: owner, exited: exited)
     }

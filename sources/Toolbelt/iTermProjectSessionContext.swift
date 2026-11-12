@@ -6,12 +6,17 @@ import Foundation
     let tabIdentifier: String
     let projectIdentifier: String?
     let exited: Bool
+    let isTerminal: Bool
 
-    init(sessionIdentifier: String, tabIdentifier: String, projectIdentifier: String?, exited: Bool = false) {
+    convenience init(sessionIdentifier: String, tabIdentifier: String, projectIdentifier: String?, exited: Bool = false) {
+        self.init(sessionIdentifier: sessionIdentifier, tabIdentifier: tabIdentifier, projectIdentifier: projectIdentifier, exited: exited, isTerminal: true)
+    }
+    init(sessionIdentifier: String, tabIdentifier: String, projectIdentifier: String?, exited: Bool, isTerminal: Bool) {
         self.sessionIdentifier = sessionIdentifier
         self.tabIdentifier = tabIdentifier
         self.projectIdentifier = projectIdentifier
         self.exited = exited
+        self.isTerminal = isTerminal
         super.init()
     }
 }

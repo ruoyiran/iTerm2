@@ -493,6 +493,22 @@ NSString *const SessionViewWasSelectedForInspectionNotification = @"SessionViewW
     [self.window makeFirstResponder:_browserViewController];
 }
 
+- (BOOL)hasNonTerminalContent { return self.isBrowser || _fileViewController != nil || [(PTYSession *)self.delegate isFileSession]; }
+
+- (void)setFileViewController:(NSViewController *)controller {
+    if (_fileViewController == controller) { return; }
+    [_fileViewController.view removeFromSuperview];
+    _fileViewController = controller;
+    if (controller) {
+        [self insertSubview:controller.view atIndex:_contentViewIndex + 1];
+        [self setTerminalViewsHidden:YES];
+        NSResponder *previous = self.nextResponder;
+        self.mainResponder = controller;
+        controller.nextResponder = previous;
+        [self updateBrowserViewFrame];
+    }
+}
+
 - (BOOL)isBrowser {
     return _browserViewController != nil;
 }
@@ -881,7 +897,7 @@ NSString *const SessionViewWasSelectedForInspectionNotification = @"SessionViewW
         iTermMetalClipView *metalClipView = (iTermMetalClipView *)_scrollview.contentView;
         metalClipView.useMetal = useMetal;
         // In browser mode, always keep legacy view hidden
-        _legacyView.hidden = !useMetal || self.isBrowser;
+        _legacyView.hidden = !useMetal || self.hasNonTerminalContent;
         
         [self updateLayout];
         [self setNeedsDisplay:YES];
@@ -1050,7 +1066,7 @@ NSString *const SessionViewWasSelectedForInspectionNotification = @"SessionViewW
     _metalView.paused = YES;
     _metalView.enableSetNeedsDisplay = NO;
     // In browser mode, keep metal view hidden
-    _metalView.hidden = self.isBrowser;
+    _metalView.hidden = self.hasNonTerminalContent;
     _metalView.alphaValue = 0;
 
     // Start the metal driver going. It will receive delegate calls from iTermMTKView that kick off
@@ -1112,7 +1128,7 @@ NSString *const SessionViewWasSelectedForInspectionNotification = @"SessionViewW
 
 - (void)updateImageAndBackgroundViewVisibility {
     // In browser mode, keep terminal views hidden
-    if (self.isBrowser) {
+    if (self.hasNonTerminalContent) {
         return;
     }
     
@@ -1236,8 +1252,8 @@ NSString *const SessionViewWasSelectedForInspectionNotification = @"SessionViewW
 
 - (void)updateSessionSelectorButton {
     NSString *reason = iTermSessionSelector.currentReason;
-    const BOOL isTerminal = !self.isBrowser;
-    const BOOL wanted = [iTermSessionSelector wantsSessionOfKindTerminal:isTerminal];
+    const BOOL isTerminal = !self.hasNonTerminalContent;
+    const BOOL wanted = ![(PTYSession *)self.delegate isFileSession] && [iTermSessionSelector wantsSessionOfKindTerminal:isTerminal];
     if (reason != nil && _sessionSelectorButton.superview == nil && wanted) {
         [self addSessionSelectorButtonWithReason:reason];
     } else if (!wanted && _sessionSelectorButton.superview != nil) {
@@ -1303,7 +1319,7 @@ NSString *const SessionViewWasSelectedForInspectionNotification = @"SessionViewW
         if (self.composerHeight > 0) {
             [self.delegate sessionViewUpdateComposerFrame];
         }
-        if (_browserViewController) {
+        if (self.hasNonTerminalContent) {
             [self updateBrowserViewFrame];
         }
         [self updateActivePaneBorder];
@@ -2034,7 +2050,7 @@ typedef struct {
 
 - (void)setSuppressLegacyDrawing:(BOOL)suppressLegacyDrawing {
     // In browser mode, always keep legacy view hidden
-    _legacyView.hidden = suppressLegacyDrawing || self.isBrowser;
+    _legacyView.hidden = suppressLegacyDrawing || self.hasNonTerminalContent;
 }
 
 - (void)smearCursorFrom:(NSRect)from to:(NSRect)to color:(NSColor *)color {
@@ -2589,9 +2605,7 @@ typedef struct {
 }
 
 - (void)updateBrowserViewFrame {
-    if (!_browserViewController) {
-        return;
-    }
+    if (!_browserViewController && !_fileViewController) { return; }
 
     // Browser view should cover the entire content area, similar to how scrollview is positioned
     CGFloat titleHeight = _showTitle ? _title.frame.size.height : 0;
@@ -2603,7 +2617,7 @@ typedef struct {
                                      self.frame.size.width,
                                      self.frame.size.height - titleHeight - toolbarHeight - reservedSpaceOnBottom);
 
-    _browserViewController.view.frame = browserFrame;
+    (_fileViewController ?: _browserViewController).view.frame = browserFrame;
 }
 
 typedef NS_OPTIONS(NSUInteger, iTermCornerFlags) {
@@ -2622,7 +2636,7 @@ typedef NS_OPTIONS(NSUInteger, iTermCornerFlags) {
     }
 
     // Get the border view's frame (scrollview or browser view) in window coordinates
-    NSRect borderFrame = self.isBrowser ? _browserViewController.view.frame : _scrollview.frame;
+    NSRect borderFrame = self.hasNonTerminalContent ? (_fileViewController ?: _browserViewController).view.frame : _scrollview.frame;
     NSRect frameInWindow = [self convertRect:borderFrame toView:nil];
 
     // Get window content bounds
@@ -2712,8 +2726,8 @@ typedef NS_OPTIONS(NSUInteger, iTermCornerFlags) {
     _activePaneBorderView.borderColor = borderColor;
 
     // Use the appropriate content frame based on session type
-    if (self.isBrowser) {
-        _activePaneBorderView.frame = _browserViewController.view.frame;
+    if (self.hasNonTerminalContent) {
+        _activePaneBorderView.frame = (_fileViewController ?: _browserViewController).view.frame;
     } else {
         _activePaneBorderView.frame = _scrollview.frame;
     }
@@ -2744,7 +2758,7 @@ typedef NS_OPTIONS(NSUInteger, iTermCornerFlags) {
         return;
     }
     // In browser mode, minimaps should stay hidden
-    if (self.isBrowser) {
+    if (self.hasNonTerminalContent) {
         return;
     }
     NSRect frame = [self convertRect:_scrollview.verticalScroller.bounds

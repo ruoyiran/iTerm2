@@ -4886,6 +4886,9 @@
 		EC5FF890F669A5E2DEA4BF64 /* iTermFileViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 926B4C44D26C47A924C384C6 /* iTermFileViewController.swift */; };
 		F416B930AF9BB58AAD9E6072 /* iTermFilePreviewViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 781D08D8C1A949EC547202A8 /* iTermFilePreviewViewController.swift */; };
 		F5323A214C7408AEE4705371 /* FileWorkspaceUI in Resources */ = {isa = PBXBuildFile; fileRef = C6D2D9F116576C5FE74263C5 /* FileWorkspaceUI */; };
+		0FA39CE8E93A5E79E3DEAFA6 /* iTermFileSessionDescriptor.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4EB5954940B3B0C7403E726 /* iTermFileSessionDescriptor.swift */; };
+		1664497C30D8DF828A2C8E3D /* iTermFileSessionCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = E251D6482037D914E7C9E9CD /* iTermFileSessionCoordinator.swift */; };
+		8913A2571A7E64E3E7BC3F95 /* iTermFileSessionHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECFA7032BBE2FF96A3F6DB30 /* iTermFileSessionHost.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -9255,6 +9258,9 @@
 		BE6115B34BA65B57796D14CB /* iTermFileWorkspaceUIRuntime.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = iTermFileWorkspaceUIRuntime.swift; sourceTree = "<group>"; };
 		C758F318461463631E07A4DD /* iTermFileUIContracts.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = iTermFileUIContracts.swift; sourceTree = "<group>"; };
 		C6D2D9F116576C5FE74263C5 /* FileWorkspaceUI */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = folder; name = FileWorkspaceUI; path = Resources/FileWorkspaceUI; sourceTree = "<group>"; };
+		E251D6482037D914E7C9E9CD /* iTermFileSessionCoordinator.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = iTermFileSessionCoordinator.swift; sourceTree = "<group>"; };
+		ECFA7032BBE2FF96A3F6DB30 /* iTermFileSessionHost.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = iTermFileSessionHost.swift; sourceTree = "<group>"; };
+		F4EB5954940B3B0C7403E726 /* iTermFileSessionDescriptor.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = iTermFileSessionDescriptor.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -15457,6 +15463,7 @@
 		B16999917FF591646F3888DC /* FileWorkspace */ = {
 			isa = PBXGroup;
 			children = (
+				64F9E925FE0DDF740A58303E /* Native */,
 				0695944D6EC2D2601B258A06 /* iTermFileDocument.swift */,
 				04337DD9E2BF396F368A9949 /* iTermFileDocumentStore.swift */,
 				702D314E6745C62CB9C5230F /* iTermFileDraftStore.swift */,
@@ -15485,6 +15492,17 @@
 			);
 			name = UI;
 			path = UI;
+			sourceTree = "<group>";
+		};
+		64F9E925FE0DDF740A58303E /* Native */ = {
+			isa = PBXGroup;
+			children = (
+				F4EB5954940B3B0C7403E726 /* iTermFileSessionDescriptor.swift */,
+				E251D6482037D914E7C9E9CD /* iTermFileSessionCoordinator.swift */,
+				ECFA7032BBE2FF96A3F6DB30 /* iTermFileSessionHost.swift */,
+			);
+			name = Native;
+			path = Native;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -18988,6 +19006,9 @@
 				26A182B539D3130D9CAB8E8B /* iTermProjectSidebarTree.swift in Sources */,
 				9BB0A5D7EBD9755A76861ED7 /* iTermProjectSessionContext.swift in Sources */,
 				6B8D707F5E29B12661218411 /* iTermProjectTerminalMenu.swift in Sources */,
+				0FA39CE8E93A5E79E3DEAFA6 /* iTermFileSessionDescriptor.swift in Sources */,
+				1664497C30D8DF828A2C8E3D /* iTermFileSessionCoordinator.swift in Sources */,
+				8913A2571A7E64E3E7BC3F95 /* iTermFileSessionHost.swift in Sources */,
 				C7D353B754D8B784AA580E5C /* IT2HostGrants.swift in Sources */,
 				E7C62A122214F1586F8C2EED /* iTermRemoteIt2.swift in Sources */,
 				AA98CC958BF6A53E358DCDA3 /* iTermBundledIt2.swift in Sources */,

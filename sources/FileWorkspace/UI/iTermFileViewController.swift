@@ -154,7 +154,13 @@ import AppKit
     func flushEdits(reason: iTermFileFlushReason, completion: @escaping (NSError?) -> Void) {
         if reason == .focusTransfer { transferSuspended = true }
         else if reason != .save { explicitlySuspended = true }
-        if let error = error { completion(error); return }
+        if let error = error {
+            // An open failure with no editor buffer has nothing to acknowledge. A sync failure
+            // with a snapshot/edit session must still retain input and fail the barrier.
+            let metadataOnly = snapshot == nil && editSession == nil && !pending && !composing && flushes.isEmpty
+            completion(metadataOnly ? nil : error)
+            return
+        }
         guard let renderer = renderer, ready else { completion(status.hasPendingEdits ? fileUIError(3) : nil); return }
         let id = UUID().uuidString, document = documentIdentifier, epoch = renderer.fence.epoch
         flushes[id] = { [weak self, weak renderer] error in
