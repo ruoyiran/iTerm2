@@ -23,6 +23,8 @@ import AppKit
     private var selection = false
     private var preview = false
     private var ready = false
+    // Native previews may be ready before a leased WK page has installed its message receiver.
+    private var rendererReady = false
     private var visible = false
     private var acquiring = false
     private var acquisition: FileUIAcquisition?
@@ -59,7 +61,7 @@ import AppKit
     func applyContext(_ context: iTermFileBrowserContext) {
         guard self.context !== context else { return }
         if status.hasPendingEdits || composing { fail(fileUIError(3)); return }
-        self.context = context; token = UUID().uuidString; ready = false
+        self.context = context; token = UUID().uuidString; ready = false; rendererReady = false
         renderer?.bind(viewIdentifier: viewIdentifier, context: context, token: token, purpose: "editor")
     }
     func applyDocumentChanges(_ snapshot: iTermFileDocumentSnapshot, edits: [iTermFileTextEdit]?) {
@@ -70,38 +72,38 @@ import AppKit
             let callbacks = flushes.values; flushes.removeAll(); callbacks.forEach { $0(fileUIError(3)) }
             runtime.unregister(self); runtime.register(self)
             editSession = FileUIEditSession(store: runtime.documentStore, documentIdentifier: snapshot.documentIdentifier)
-            renderer?.send("editAuthority", payload: ["granted": false]); error = nil
+            if rendererReady { renderer?.send("editAuthority", payload: ["granted": false]) }; error = nil
         }
         self.snapshot = snapshot; path = snapshot.filePath; recoveredIdentifier = snapshot.documentIdentifier
-        if renderer != nil && ready {
+        if renderer != nil && rendererReady {
             var payload: [String: Any] = ["snapshot": snapshot.fileUIDictionary(includeText: edits == nil)]
             if let edits = edits { payload["edits"] = edits.map(\.fileUIDictionary) }; renderer?.send("document", payload: payload)
         }
         if !usesNativePreview {
             if previewController != nil { previewController?.shutdown(); previewController?.view.removeFromSuperview(); previewController?.removeFromParent(); previewController = nil; renderer?.isHidden = false }
         } else if visible { showPreview() }
-        if changedDocument && ready && focusRequested { runtime.requestAuthority(self) }
+        if changedDocument && rendererReady && focusRequested && previewController == nil { runtime.requestAuthority(self) }
         if visible && renderer == nil && previewController == nil { setVisible(true) }
         publish()
     }
     func showOpenFailure(path: String, documentIdentifier: String?, error: NSError) {
         guard !status.hasPendingEdits, !composing else { fail(fileUIError(3)); return }
         runtime.unregister(self); runtime.register(self)
-        acquisition?.cancel(); acquisition = nil; acquiring = false; renderer = nil; editSession = nil; ready = false
+        acquisition?.cancel(); acquisition = nil; acquiring = false; renderer = nil; editSession = nil; ready = false; rendererReady = false
         previewController?.shutdown(); previewController?.view.removeFromSuperview(); previewController?.removeFromParent(); previewController = nil
         snapshot = nil; self.path = path; recoveredIdentifier = documentIdentifier; fail(error)
     }
-    func restoreViewState(_ state: iTermFileViewState) { cachedViewState = state; renderer?.send("restoreViewState", payload: state.dictionary); if usesNativePreview { showPreview() } }
-    func setPreview(_ preview: Bool) { self.preview = preview; renderer?.send("viewFlags", payload: ["preview": preview]); publish() }
+    func restoreViewState(_ state: iTermFileViewState) { cachedViewState = state; if rendererReady { renderer?.send("restoreViewState", payload: state.dictionary) }; if usesNativePreview { showPreview() } }
+    func setPreview(_ preview: Bool) { self.preview = preview; if rendererReady { renderer?.send("viewFlags", payload: ["preview": preview]) }; publish() }
     func setVisible(_ visible: Bool) {
         self.visible = visible
         if !visible {
             if renderer == nil { acquisition?.cancel(); acquisition = nil; acquiring = false }
-            focusRequested = false
+            cancelPendingFocus()
             previewController?.shutdown(); previewController?.view.removeFromSuperview(); previewController?.removeFromParent(); previewController = nil
             flushEdits(reason: .suspend) { [weak self] error in
                 guard let self = self, !self.visible, error == nil else { return }
-                self.acquisition?.cancel(); self.acquisition = nil; self.renderer = nil; self.ready = false
+                self.acquisition?.cancel(); self.acquisition = nil; self.renderer = nil; self.ready = false; self.rendererReady = false
             }; return
         }
         if usesNativePreview { showPreview(); return }
@@ -112,20 +114,26 @@ import AppKit
             guard self.visible, !self.stopped, let renderer = renderer else {
                 if let renderer = renderer { self.runtime.release(renderer) }; if let error = error { self.fail(error) }; return
             }
-            self.renderer = renderer; renderer.fileDelegate = self; renderer.frame = self.view.bounds
+            self.renderer = renderer; self.rendererReady = false; renderer.fileDelegate = self; renderer.frame = self.view.bounds
             renderer.autoresizingMask = [.width, .height]; self.view.addSubview(renderer)
             renderer.bind(viewIdentifier: self.viewIdentifier, context: self.context, token: self.token, purpose: "editor")
         }
     }
-    func focusEditor() { focusRequested = true; runtime.requestAuthority(self); if previewController != nil { view.window?.makeFirstResponder(preferredFirstResponder) } else { renderer?.send("focus") } }
-    func reveal(lineNumber: Int, utf16Column: Int) { pendingReveal = (lineNumber, utf16Column); renderer?.send("reveal", payload: ["lineNumber": lineNumber, "utf16Column": utf16Column]) }
+    func cancelPendingFocus() { focusRequested = false }
+    func focusEditor() {
+        focusRequested = true
+        if previewController != nil { view.window?.makeFirstResponder(preferredFirstResponder) }
+        else if rendererReady { runtime.requestAuthority(self); renderer?.send("focus") }
+    }
+    func reveal(lineNumber: Int, utf16Column: Int) { pendingReveal = (lineNumber, utf16Column); if rendererReady { renderer?.send("reveal", payload: ["lineNumber": lineNumber, "utf16Column": utf16Column]) } }
     func canPerform(_ command: iTermFileViewCommand) -> Bool {
         guard !stopped, snapshot != nil else { return false }
         if (runtime.interactionSuspended || blocksEditAuthority) && [.save, .saveAs, .undo, .redo, .cut, .paste].contains(command) { return false }
         switch command {
-        case .save, .undo, .redo, .cut, .paste: return ready && !status.isReadOnly && !composing
-        case .copy: return previewController?.hasSelection ?? selection
-        case .find, .findNext, .findPrevious, .selectAll: return ready && previewController == nil
+        case .save, .undo, .redo: return ready && !status.isReadOnly && !composing
+        case .cut, .paste: return rendererReady && previewController == nil && !status.isReadOnly && !composing
+        case .copy: return previewController?.hasSelection ?? (rendererReady && selection)
+        case .find, .findNext, .findPrevious, .selectAll: return rendererReady && previewController == nil
         case .toggleMarkdownPreview: return snapshot?.kind == .markdown && snapshot?.text != nil
         case .saveAs: return snapshot?.text != nil
         case .pin: return preview
@@ -161,7 +169,7 @@ import AppKit
             completion(metadataOnly ? nil : error)
             return
         }
-        guard let renderer = renderer, ready else { completion(status.hasPendingEdits ? fileUIError(3) : nil); return }
+        guard let renderer = renderer, rendererReady else { completion(status.hasPendingEdits ? fileUIError(3) : nil); return }
         let id = UUID().uuidString, document = documentIdentifier, epoch = renderer.fence.epoch
         flushes[id] = { [weak self, weak renderer] error in
             guard let self = self, let renderer = renderer, self.renderer === renderer,
@@ -175,12 +183,12 @@ import AppKit
     }
     func resumeEditing() {
         guard !runtime.interactionSuspended else { return }
-        explicitlySuspended = false; transferSuspended = false; renderer?.send("resume")
+        explicitlySuspended = false; transferSuspended = false; if rendererReady { renderer?.send("resume") }
     }
     @nonobjc func setEditAuthority(_ granted: Bool) {
         let permitted = granted && !blocksEditAuthority && !runtime.interactionSuspended
-        if permitted && transferSuspended { transferSuspended = false; renderer?.send("resume") }
-        renderer?.send("editAuthority", payload: ["granted": permitted])
+        if permitted && transferSuspended { transferSuspended = false; if rendererReady { renderer?.send("resume") } }
+        if rendererReady { renderer?.send("editAuthority", payload: ["granted": permitted]) }
     }
     func shutdown() {
         guard !stopped else { return }; stopped = true; runtime.unregister(self)
@@ -188,14 +196,14 @@ import AppKit
         acquisition?.cancel(); acquisition = nil; acquiring = false; renderer = nil; previewController?.shutdown(); previewController = nil; delegate = nil
     }
     @nonobjc func fileUIWebViewReady(_ webView: iTermFileWorkspaceWebView) {
-        guard renderer === webView, let snapshot = snapshot else { return }; ready = true; errorLabel.isHidden = true
+        guard renderer === webView, let snapshot = snapshot else { return }; rendererReady = true; ready = true; errorLabel.isHidden = true
         editSession = FileUIEditSession(store: runtime.documentStore, documentIdentifier: snapshot.documentIdentifier)
         webView.send("document", payload: ["snapshot": snapshot.fileUIDictionary(includeText: true)])
         webView.send("restoreViewState", payload: cachedViewState.dictionary)
         webView.send("viewFlags", payload: ["preview": preview])
         if let reveal = pendingReveal { webView.send("reveal", payload: ["lineNumber": reveal.0, "utf16Column": reveal.1]) }
         if explicitlySuspended || transferSuspended || runtime.interactionSuspended { webView.send("flush", payload: ["suspend": true]) }
-        if focusRequested { runtime.requestAuthority(self); webView.send("focus") }; publish()
+        if focusRequested && previewController == nil { runtime.requestAuthority(self); webView.send("focus") }; publish()
     }
     @nonobjc func fileUIWebView(_ webView: iTermFileWorkspaceWebView, received type: String, payload: [String: Any], identifier: String) {
         guard renderer === webView else { return }

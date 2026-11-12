@@ -233,6 +233,303 @@ final class FileSessionTests: XCTestCase {
         XCTAssertTrue(live.controller.canPerform(.paste))
     }
 
+    func testNativeCloseCancellationPreservesDirtyBufferHistoryAndDraft() throws {
+        for nativeAllows in [false, true] {
+            let fixture = try Fixture(); defer { fixture.cleanup() }
+            let pane = fixture.open("close-entry"); fixture.edit(pane, "dirty")
+            fixture.wait { done in fixture.store.persistDraft(documentIdentifier: pane.documentIdentifier!) { error in XCTAssertNil(error); done() } }
+            fixture.coordinator.delegate = fixture; fixture.decision = .discard
+            var committed = 0, askedNative = 0
+            let revision = fixture.snapshot(pane)!.revision
+            fixture.wait { done in fixture.coordinator.performNativeClose([pane], canClose: { true }, confirmClose: {
+                askedNative += 1; return nativeAllows
+            }, commit: { committed += 1 }, completion: { allowed in XCTAssertEqual(allowed, nativeAllows); done() }) }
+            XCTAssertEqual(askedNative, 1); XCTAssertEqual(committed, nativeAllows ? 1 : 0)
+            XCTAssertEqual(fixture.snapshot(pane)?.text, nativeAllows ? "original" : "dirty")
+            XCTAssertEqual(fixture.snapshot(pane)?.revision, revision + (nativeAllows ? 1 : 0))
+            if !nativeAllows {
+                let recovery = iTermFileDocumentStore(storageDirectory: fixture.drafts)
+                fixture.wait { done in recovery.recoverDrafts { values, error in
+                    XCTAssertNil(error); XCTAssertEqual(values.first?.text, "dirty"); done()
+                } }
+                fixture.wait { done in fixture.store.undo(documentIdentifier: pane.documentIdentifier!) { value, error in
+                    XCTAssertNil(error); XCTAssertEqual(value?.text, "original"); done()
+                } }
+            }
+        }
+    }
+
+    func testNativeCloseLayoutRefusalDoesNotAskOrMutate() throws {
+        let fixture = try Fixture(); defer { fixture.cleanup() }
+        let pane = fixture.open("locked"); fixture.edit(pane, "dirty")
+        fixture.coordinator.delegate = fixture; fixture.decision = .discard
+        fixture.wait { done in fixture.coordinator.performNativeClose([pane], canClose: { false },
+            confirmClose: { XCTFail("Locked layout asked for confirmation"); return true },
+            commit: { XCTFail("Locked layout closed") }, completion: { allowed in XCTAssertFalse(allowed); done() }) }
+        XCTAssertEqual(fixture.prompts, 0); XCTAssertEqual(fixture.snapshot(pane)?.text, "dirty")
+    }
+
+    func testNativeMixedRevivalMapKeepsTerminalAndReconstructsFileLeaves() throws {
+        let terminal = NSObject()
+        for malformed in [false, true] {
+            let file: [String: Any] = ["Session GUID": "file", "File Session": malformed ? "invalid" : ["version": 1, "filePath": "/tmp/a", "rootDirectory": "/tmp", "projectIdentifier": "owner", "viewState": ["scrollTop": 17.0]]]
+            let root: [String: Any] = ["View Type": "Splitter", "isVertical": true, "Subviews": [
+                ["View Type": "SessionView", "Session": ["Session GUID": "terminal"]],
+                ["View Type": "SessionView", "Session": file]]]
+            let tab: [String: Any] = ["Root": root, "Floating Panes": [["Node": ["View Type": "SessionView", "Session": file]]]]
+            for consumer in ["tab", "window"] {
+                let map = try XCTUnwrap(iTermSessionRevivalMap.build(tab, sessions: ["terminal": terminal]), consumer)
+                XCTAssertTrue(map["terminal"] === terminal)
+                XCTAssertEqual(map.count, 1)
+                XCTAssertNil(map["file"], "File leaf must be reconstructed by the existing fail-closed native file restore branch")
+                XCTAssertEqual((tab["Root"] as? NSDictionary), root as NSDictionary)
+            }
+        }
+        let missingTerminal: [String: Any] = ["Root": ["View Type": "SessionView", "Session": ["Session GUID": "unavailable"]]]
+        XCTAssertNil(iTermSessionRevivalMap.build(missingTerminal, sessions: [:]))
+    }
+
+    func testHistoryMutationReservesAdmissionThroughWriterAcknowledgment() throws {
+        for redo in [false, true] {
+            for ending in ["success", "error", "retired"] {
+                let fixture = try Fixture(); defer { fixture.cleanup() }
+                let writer = fixture.open("writer"), target = fixture.open("history")
+                fixture.edit(writer, "after")
+                if redo { fixture.wait { done in fixture.store.undo(documentIdentifier: writer.documentIdentifier!) { _, error in XCTAssertNil(error); done() } } }
+                let before = fixture.snapshot(writer)!
+                let web = try makeVisible(writer, fixture: fixture)
+                let gate = FlushGate(original: web.fileDelegate!); web.fileDelegate = gate
+                defer { web.fileDelegate = gate.original }
+                let held = expectation(description: "history writer flush held"); gate.onHeld = { held.fulfill() }
+                let finished = expectation(description: "history mutation finished")
+                fixture.coordinator.undo(target, redo: redo) { error in
+                    if ending == "success" { XCTAssertNil(error) } else { XCTAssertNotNil(error) }
+                    finished.fulfill()
+                }
+                wait(for: [held], timeout: 8)
+                fixture.wait { done in fixture.coordinator.beginOperation { error in XCTAssertNotNil(error); done() } }
+                fixture.wait { done in fixture.coordinator.prepareClose([writer, target], quitting: false) { allowed in XCTAssertFalse(allowed); done() } }
+                fixture.wait { done in fixture.coordinator.rebind(target, descriptor: target.descriptor, context: target.descriptor.context) { error in XCTAssertNotNil(error); done() } }
+                if ending == "retired" { fixture.coordinator.abandon(target) }
+                gate.release(failed: ending == "error")
+                wait(for: [finished], timeout: 8)
+                let after = fixture.snapshot(writer)!
+                XCTAssertEqual(after.text, ending == "success" ? (redo ? "after" : "original") : before.text)
+                XCTAssertEqual(after.revision, before.revision + (ending == "success" ? 1 : 0))
+                fixture.wait { done in fixture.coordinator.beginOperation { error in XCTAssertNil(error); done() } }
+                fixture.wait { done in fixture.coordinator.finishOperation { error in XCTAssertNil(error); done() } }
+            }
+        }
+    }
+
+    func testStaleCloseDurabilityErrorDoesNotCancelNewOperation() throws {
+        let fixture = try Fixture(); defer { fixture.cleanup() }
+        let live = fixture.open("live"), closing = fixture.open("closing-copy")
+        _ = try makeVisible(live, fixture: fixture)
+        fixture.edit(live, "durable dirty")
+        fixture.wait { done in fixture.store.persistDraft(documentIdentifier: live.documentIdentifier!) { error in XCTAssertNil(error); done() } }
+        let blockedFile = fixture.root.appendingPathComponent("blocked.txt")
+        try Data("block".utf8).write(to: blockedFile)
+        let entered = expectation(description: "owned coordinator lock")
+        let release = DispatchSemaphore(value: 0)
+        DispatchQueue.global().async {
+            var error: NSError?
+            NSFileCoordinator().coordinate(writingItemAt: blockedFile, options: .forReplacing, error: &error) { _ in
+                entered.fulfill(); _ = release.wait(timeout: .now() + 15)
+            }
+        }
+        wait(for: [entered], timeout: 5)
+        let queued = expectation(description: "final durability queued")
+        let oldDone = expectation(description: "old close retired")
+        fixture.coordinator.performNativeClose([closing], canClose: { true }, confirmClose: {
+            fixture.store.openFile(atPath: blockedFile.path) { _, _ in }
+            DispatchQueue.main.async { queued.fulfill() }
+            return true
+        }, commit: { XCTFail("Canceled close committed") }, completion: { allowed in XCTAssertFalse(allowed); oldDone.fulfill() })
+        wait(for: [queued], timeout: 5)
+        fixture.coordinator.cancelOperation()
+        fixture.wait { done in fixture.coordinator.beginOperation { error in XCTAssertNil(error); done() } }
+        let backup = fixture.root.appendingPathComponent("old-drafts")
+        try FileManager.default.moveItem(at: fixture.drafts, to: backup)
+        try Data("not a directory".utf8).write(to: fixture.drafts)
+        release.signal()
+        wait(for: [oldDone], timeout: 10)
+        XCTAssertTrue(fixture.coordinator.operationInProgress)
+        XCTAssertFalse(live.controller.canPerform(.paste))
+        try FileManager.default.removeItem(at: fixture.drafts)
+        try FileManager.default.moveItem(at: backup, to: fixture.drafts)
+        fixture.wait { done in fixture.coordinator.finishOperation { error in XCTAssertNil(error); done() } }
+        XCTAssertTrue(live.controller.canPerform(.paste))
+    }
+
+    private func makeVisible(_ pane: iTermFileSessionPane, fixture: Fixture) throws -> iTermFileWorkspaceWebView {
+        pane.delegate = fixture
+        let ready = expectation(description: "editor ready")
+        fixture.changed = { value in if value === pane && value.controller.status.isReady { fixture.changed = nil; ready.fulfill() } }
+        pane.controller.view.frame = NSRect(x: 0, y: 0, width: 480, height: 600)
+        pane.controller.setVisible(true); pane.controller.focusEditor(); wait(for: [ready], timeout: 20)
+        var failure: NSError?
+        fixture.wait { done in pane.controller.flushEdits(reason: .save) { error in failure = error; done() } }
+        if let failure { throw failure }
+        return try XCTUnwrap(pane.controller.view.subviews.compactMap { $0 as? iTermFileWorkspaceWebView }.first)
+    }
+
+    private final class FlushGate: FileUIWebViewDelegate {
+        let original: FileUIWebViewDelegate
+        var onHeld: (() -> Void)?
+        private var pending: ((Bool) -> Void)?
+        private var captured = false
+        init(original: FileUIWebViewDelegate) { self.original = original }
+        func release(failed: Bool) { let action = pending; pending = nil; action?(failed) }
+        func fileUIWebViewReady(_ web: iTermFileWorkspaceWebView) { original.fileUIWebViewReady(web) }
+        func fileUIWebView(_ web: iTermFileWorkspaceWebView, failed error: NSError) { original.fileUIWebView(web, failed: error) }
+        func fileUIWebView(_ web: iTermFileWorkspaceWebView, received type: String, payload: [String: Any], identifier: String) {
+            if type == "flushResult" && !captured {
+                captured = true
+                pending = { failed in
+                    var value = payload; if failed { value["error"] = 3 }
+                    self.original.fileUIWebView(web, received: type, payload: value, identifier: identifier)
+                }
+                onHeld?()
+            } else { original.fileUIWebView(web, received: type, payload: payload, identifier: identifier) }
+        }
+    }
+
+    func testActualMainMenuRoutesSaveUndoRedoAndPreservesOtherResponders() throws {
+        let fixture = try Fixture(); defer { fixture.cleanup() }
+        let pane = fixture.open("menu"), copy = fixture.open("copy")
+        // Make the next lease synchronous while its JS page is still unbootstrapped.
+        let owner = NSObject()
+        var lease: FileUIAcquisition?
+        fixture.wait { done in lease = fixture.runtime.acquire(owner: owner) { renderer, error in
+            XCTAssertNil(error)
+            if let renderer { fixture.runtime.release(renderer) }
+            done()
+        } }
+        withExtendedLifetime((owner, lease)) {}
+        let web = try makeVisible(pane, fixture: fixture)
+        let originalHost = NSView(); originalHost.addSubview(pane.controller.view)
+        let actions = iTermFileMenuActions(pane: pane)
+        iTermFileMenuActions.register(actions, rootView: pane.controller.view)
+        var saveAsRequests = 0; actions.requestSaveAs = { saveAsRequests += 1 }
+        let save = try nativeMenuItem("692"), undo = try nativeMenuItem("1061"), redo = try nativeMenuItem("1063")
+        XCTAssertEqual(save.keyEquivalent, "s")
+        fixture.edit(pane, "menu edit")
+        XCTAssertTrue(pane.controller.status.isReady, "native file ready")
+        XCTAssertFalse(pane.controller.status.isReadOnly, "native file editable")
+        XCTAssertFalse(pane.controller.status.isComposing, "no composition")
+        XCTAssertNil(pane.controller.status.error)
+        XCTAssertFalse(fixture.coordinator.operationInProgress)
+        for item in [save, undo, redo] { XCTAssertEqual(iTermFileMenuActions.validate(item, firstResponder: web)?.boolValue, true) }
+        let saved = expectation(description: "native menu save")
+        XCTAssertEqual(iTermFileMenuActions.perform(save, firstResponder: web) { command, error in XCTAssertNil(error); XCTAssertEqual(command, .save); saved.fulfill() }?.boolValue, true)
+        wait(for: [saved], timeout: 8)
+        XCTAssertEqual(saveAsRequests, 0)
+        XCTAssertEqual(try String(contentsOf: fixture.file, encoding: .utf8), "menu edit")
+        for (item, command, text) in [(undo, iTermFileViewCommand.undo, "original"), (redo, .redo, "menu edit")] {
+            let done = expectation(description: "native menu history")
+            XCTAssertEqual(iTermFileMenuActions.perform(item, firstResponder: web) { actual, error in XCTAssertNil(error); XCTAssertEqual(actual, command); done.fulfill() }?.boolValue, true)
+            wait(for: [done], timeout: 8); XCTAssertEqual(fixture.snapshot(copy)?.text, text)
+        }
+        let saveAs = try nativeMenuItem("FileSaveAsNative")
+        XCTAssertEqual(iTermFileMenuActions.perform(saveAs, firstResponder: web)?.boolValue, true)
+        XCTAssertEqual(saveAsRequests, 1)
+        fixture.wait { done in fixture.coordinator.beginOperation { error in XCTAssertNil(error); done() } }
+        for item in [save, undo, redo, saveAs] {
+            XCTAssertEqual(iTermFileMenuActions.validate(item, firstResponder: web)?.boolValue, false)
+            XCTAssertEqual(iTermFileMenuActions.perform(item, firstResponder: web)?.boolValue, false)
+        }
+        fixture.coordinator.cancelOperation()
+        let ordinary = NSTextView(); ordinary.isEditable = true
+        let field = NSTextField(); field.isEditable = true
+        for responder: NSResponder in [ordinary, field, NSView()] {
+            XCTAssertNil(iTermFileMenuActions.validate(save, firstResponder: responder))
+            XCTAssertNil(iTermFileMenuActions.perform(undo, firstResponder: responder))
+        }
+        let newHost = NSView(); newHost.addSubview(pane.controller.view)
+        XCTAssertEqual(iTermFileMenuActions.validate(undo, firstResponder: web)?.boolValue, true)
+        pane.controller.view.addSubview(ordinary)
+        XCTAssertNil(iTermFileMenuActions.perform(undo, firstResponder: ordinary))
+        web.fileDelegate?.fileUIWebView(web, received: "status", payload: ["isComposing": true], identifier: "composition")
+        for item in [save, undo, redo, saveAs] {
+            XCTAssertEqual(iTermFileMenuActions.validate(item, firstResponder: web)?.boolValue, false)
+            XCTAssertEqual(iTermFileMenuActions.perform(item, firstResponder: web)?.boolValue, false)
+        }
+        web.fileDelegate?.fileUIWebView(web, received: "status", payload: ["isComposing": false], identifier: "composition")
+    }
+
+    func testNativePreviewMenuResolvesDocumentHistory() throws {
+        let fixture = try Fixture(fileName: "preview.md"); defer { fixture.cleanup() }
+        let pane = fixture.open("preview"), copy = fixture.open("copy")
+        fixture.edit(pane, "changed markdown")
+        pane.controller.restoreViewState(iTermFileViewState(dictionary: ["showsMarkdownPreview": true]))
+        pane.controller.setVisible(true)
+        let actions = iTermFileMenuActions(pane: pane)
+        iTermFileMenuActions.register(actions, rootView: pane.controller.view)
+        let preview = pane.controller.preferredFirstResponder
+        let undo = try nativeMenuItem("1061")
+        XCTAssertEqual(iTermFileMenuActions.validate(undo, firstResponder: preview)?.boolValue, true)
+        let done = expectation(description: "preview native undo")
+        XCTAssertEqual(iTermFileMenuActions.perform(undo, firstResponder: preview) { command, error in
+            XCTAssertEqual(command, .undo); XCTAssertNil(error); done.fulfill()
+        }?.boolValue, true)
+        wait(for: [done], timeout: 8)
+        XCTAssertEqual(fixture.snapshot(copy)?.text, "original")
+    }
+
+    func testWarmLoadingPaneDemotionCancelsDeferredFocus() throws {
+        let fixture = try Fixture(); defer { fixture.cleanup() }
+        let pane = fixture.open("demoted")
+        let owner = NSObject(); var lease: FileUIAcquisition?
+        fixture.wait { done in lease = fixture.runtime.acquire(owner: owner) { renderer, error in
+            XCTAssertNil(error); if let renderer { fixture.runtime.release(renderer) }; done()
+        } }
+        withExtendedLifetime((owner, lease)) {}
+        pane.delegate = fixture
+        let ready = expectation(description: "demoted page ready")
+        fixture.changed = { value in if value === pane && value.controller.status.isReady { fixture.changed = nil; ready.fulfill() } }
+        pane.controller.view.frame = NSRect(x: 0, y: 0, width: 480, height: 600)
+        pane.controller.setVisible(true)
+        pane.controller.focusEditor()
+        pane.controller.cancelPendingFocus()
+        pane.controller.restoreViewState(iTermFileViewState(dictionary: ["selectionStartLine": 1, "selectionStartColumn": 3]))
+        pane.controller.setPreview(true)
+        pane.controller.reveal(lineNumber: 1, utf16Column: 3)
+        pane.controller.resumeEditing()
+        wait(for: [ready], timeout: 15)
+        fixture.wait { done in pane.controller.flushEdits(reason: .save) { error in XCTAssertNil(error); done() } }
+        XCTAssertNil(pane.controller.status.error)
+        XCTAssertFalse(fixture.runtime.hasAuthority(pane.controller))
+        XCTAssertTrue(pane.controller.status.isPreview)
+        let web = try XCTUnwrap(pane.controller.view.subviews.compactMap { $0 as? iTermFileWorkspaceWebView }.first)
+        let untouched = expectation(description: "no late editor focus")
+        web.callAsyncJavaScript("const e = monaco.editor.getEditors()[0]; return { readOnly: e.getOption(monaco.editor.EditorOption.readOnly), column: e.getPosition().column };", arguments: [:], in: nil, in: .page) { result in
+            if case .success(let value) = result, let state = value as? [String: Any] {
+                XCTAssertEqual(state["readOnly"] as? Bool, true); XCTAssertEqual(state["column"] as? Int, 3)
+            } else { XCTFail("Deferred editor state was not restored") }
+            untouched.fulfill()
+        }
+        wait(for: [untouched], timeout: 5)
+        pane.controller.focusEditor()
+        let focused = expectation(description: "explicit later focus")
+        web.callAsyncJavaScript("return new Promise(resolve => { const e = monaco.editor.getEditors()[0], k = monaco.editor.EditorOption.readOnly; if (!e.getOption(k)) { resolve(true); return; } const s = e.onDidChangeConfiguration(() => { if (!e.getOption(k)) { s.dispose(); resolve(true); } }); })", arguments: [:], in: nil, in: .page) { result in
+            XCTAssertEqual(try? result.get() as? Bool, true); focused.fulfill()
+        }
+        wait(for: [focused], timeout: 5)
+    }
+
+    private func nativeMenuItem(_ identifier: String) throws -> NSMenuItem {
+        let url = try XCTUnwrap(ProcessInfo.processInfo.environment["FILE_SESSION_MAIN_MENU"].map { URL(fileURLWithPath: $0) })
+        let xml = try XMLDocument(contentsOf: url)
+        let node = try XCTUnwrap(xml.nodes(forXPath: "//menuItem[@id='\(identifier)']").first as? XMLElement)
+        let connection = try XCTUnwrap(node.nodes(forXPath: "connections/action").first as? XMLElement)
+        let targetID = try XCTUnwrap(connection.attribute(forName: "target")?.stringValue)
+        let target = try XCTUnwrap(xml.nodes(forXPath: "//*[@id='\(targetID)']").first as? XMLElement)
+        XCTAssertEqual(target.attribute(forName: "customClass")?.stringValue, "iTermApplicationDelegate")
+        let item = NSMenuItem(title: node.attribute(forName: "title")?.stringValue ?? "", action: NSSelectorFromString(try XCTUnwrap(connection.attribute(forName: "selector")?.stringValue)), keyEquivalent: node.attribute(forName: "keyEquivalent")?.stringValue ?? "")
+        return item
+    }
+
     private final class EditGate: FileUIWebViewDelegate {
         let original: FileUIWebViewDelegate
         var onEdit: (() -> Void)?
@@ -265,10 +562,10 @@ final class FileSessionTests: XCTestCase {
         func fileSessionPaneDidReceiveFocus(_ pane: iTermFileSessionPane) {}
         func fileSessionPane(_ pane: iTermFileSessionPane, request command: iTermFileViewCommand) {}
 
-        init(testing: Bool = true) throws {
+        init(testing: Bool = true, fileName: String = "file.txt") throws {
             root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
             try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-            file = root.appendingPathComponent("file.txt"); drafts = root.appendingPathComponent("drafts")
+            file = root.appendingPathComponent(fileName); drafts = root.appendingPathComponent("drafts")
             try Data("original".utf8).write(to: file)
             store = iTermFileDocumentStore(storageDirectory: drafts)
             runtime = iTermFileWorkspaceUIRuntime(documentStore: store,

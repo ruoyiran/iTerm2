@@ -10667,6 +10667,7 @@ extendResultsAcrossSoftBoundaries:(BOOL)extendResultsAcrossSoftBoundaries {
 }
 
 - (void)setFocused:(BOOL)focused {
+    if (self.isFileSession && !focused) { [self.fileSessionPane.controller cancelPendingFocus]; }
     DLog(@"setFocused:%@ self=%@", @(focused), self);
     if (_disableFocusReporting) {
         DLog(@"Focus reporting disabled");

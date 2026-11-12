@@ -153,6 +153,11 @@
 // Declared here rather than in PseudoTerminal+Private.h because the generated
 // Swift header cannot be imported from a header that the bridging header pulls in.
 @interface PseudoTerminal () <iTermWindowLocationLockControllerDelegate>
+- (BOOL)confirmCloseSession:(PTYSession *)session;
+- (BOOL)confirmWindowClose;
+- (void (^)(void))preparedTmuxWindowCloseForController:(TmuxController *)controller;
+- (void (^)(void))preparedTmuxTabClose:(PTYTab *)tab;
+- (void (^)(void))preparedTabClose:(PTYTab *)tab;
 @end
 
 @class QLPreviewPanel;
@@ -2704,6 +2709,11 @@ typedef NS_ENUM(NSInteger, iTermCloseSubject) {
 }
 
 - (void)killOrHideTmuxTab:(PTYTab *)aTab {
+    void (^action)(void) = [self preparedTmuxTabClose:aTab];
+    if (action) { action(); }
+}
+
+- (void (^)(void))preparedTmuxTabClose:(PTYTab *)aTab {
     iTermWarningSelection selection =
         [iTermWarning showWarningWithTitle:NSLocalizedStringWithDefaultValue(@"PseudoTerminal.KillOrHideTmux", nil, [NSBundle mainBundle], @"Kill tmux window, terminating its jobs, or hide it? Hidden windows may be restored from the tmux dashboard.", @"Confirmation prompt when closing a tmux tab")
                                    actions:@[ NSLocalizedStringWithDefaultValue(@"PseudoTerminal.Hide", nil, [NSBundle mainBundle], @"Hide", @"Button that hides a tmux window"), iTermLocalizedCancel(), NSLocalizedStringWithDefaultValue(@"PseudoTerminal.Kill", nil, [NSBundle mainBundle], @"Kill", @"Button that kills a tmux window") ]
@@ -2713,11 +2723,21 @@ typedef NS_ENUM(NSInteger, iTermCloseSubject) {
                                silenceable:kiTermWarningTypePermanentlySilenceable
                                    heading:nil
                                     window:self.window];
-    if (selection == kiTermWarningSelection1) {
-        [[aTab tmuxController] killWindow:[aTab tmuxWindow]];
-    } else if (selection == kiTermWarningSelection0) {
-        [[aTab tmuxController] hideWindow:[aTab tmuxWindow]];
+    if (selection != kiTermWarningSelection0 && selection != kiTermWarningSelection1) { return nil; }
+    return [[^{
+        if (selection == kiTermWarningSelection1) { [[aTab tmuxController] killWindow:[aTab tmuxWindow]]; }
+        else { [[aTab tmuxController] hideWindow:[aTab tmuxWindow]]; }
+    } copy] autorelease];
+}
+
+- (void (^)(void))preparedTabClose:(PTYTab *)tab {
+    if ([self tabIsAttachedTmuxTabWithSessions:tab]) {
+        if ([self numberOfTabsWithTmuxController:tab.tmuxController] == 1) {
+            return [self preparedTmuxWindowCloseForController:tab.tmuxController];
+        }
+        return [self preparedTmuxTabClose:tab];
     }
+    return [[^{ [self closeTab:tab soft:YES]; } copy] autorelease];
 }
 
 - (void)closeTab:(PTYTab *)aTab {
@@ -2943,7 +2963,6 @@ typedef NS_ENUM(NSInteger, iTermCloseSubject) {
 }
 
 - (BOOL)closeTabIfConfirmed:(PTYTab *)tab {
-    if ([iTermFileSessionHost deferClosing:tab.sessions continuation:^{ [self closeTabIfConfirmed:tab]; }]) { return NO; }
     const BOOL shouldClose = [self tabView:_contentView.tabView
                     shouldCloseTabViewItem:tab.tabViewItem
                       suppressConfirmation:[self willShowTmuxWarningWhenClosingTab:tab]];
@@ -2968,7 +2987,6 @@ typedef NS_ENUM(NSInteger, iTermCloseSubject) {
 }
 
 - (BOOL)closeSessionWithConfirmation:(PTYSession *)aSession {
-    if ([iTermFileSessionHost deferClosing:@[aSession] continuation:^{ [self closeSessionWithConfirmation:aSession]; }]) { return NO; }
     if (_layoutLocked) {
         RLog(@"Layout is locked, refusing to close session");
         return NO;
@@ -2977,6 +2995,16 @@ typedef NS_ENUM(NSInteger, iTermCloseSubject) {
     if ([[tab sessions] count] == 1) {
         return [self closeTabIfConfirmed:tab];
     }
+    if ([iTermFileSessionHost deferClosing:@[aSession]
+                                  canClose:^BOOL { return !_layoutLocked && [self.allSessions containsObject:aSession]; }
+                              confirmClose:^BOOL { return [self confirmCloseSession:aSession]; }
+                              continuation:^{ [self closeSessionWithoutConfirmation:aSession]; }]) { return NO; }
+    if (![self confirmCloseSession:aSession]) { return NO; }
+    [self closeSessionWithoutConfirmation:aSession];
+    return YES;
+}
+
+- (BOOL)confirmCloseSession:(PTYSession *)aSession {
     BOOL okToClose = NO;
     if ([aSession exited]) {
         okToClose = YES;
@@ -2989,12 +3017,7 @@ typedef NS_ENUM(NSInteger, iTermCloseSubject) {
                                      closeTitle:[NSString stringWithFormat:NSLocalizedStringWithDefaultValue(@"PseudoTerminal.CloseSessionTitle", nil, [NSBundle mainBundle], @"Close session “%@”?", @"Close-confirmation title for a session; %@ is the session name"), [PseudoTerminal nameForClosingSession:aSession]]
                               additionalMessage:[iTermWorkgroupInstance closeCascadeWarningForSessions:@[aSession]]];
     }
-    if (okToClose) {
-        [self closeSessionWithoutConfirmation:aSession];
-        return YES;
-    }
-
-    return NO;
+    return okToClose;
 }
 
 - (void)closeSessionWithoutConfirmation:(PTYSession *)aSession {
@@ -5528,7 +5551,22 @@ hidingToolbeltShouldResizeWindow:(BOOL)hidingToolbeltShouldResizeWindow
 }
 
 - (BOOL)windowShouldClose:(NSNotification *)aNotification {
-    if ([iTermFileSessionHost deferClosing:self.allSessions continuation:^{ [self.window performClose:nil]; }]) { return NO; }
+    NSMutableArray *actions = [NSMutableArray array];
+    if ([iTermFileSessionHost deferClosing:self.allSessions
+                                  canClose:^BOOL { return !_closing && !_deallocing; }
+                              confirmClose:^BOOL {
+        if (![self confirmWindowClose]) { return NO; }
+        void (^action)(void) = [self preparedTmuxWindowCloseForController:nil];
+        if (!action) { return NO; }
+        [actions addObject:action]; return YES;
+    } continuation:^{
+        for (void (^action)(void) in actions) { action(); }
+        [self.window close];
+    }]) { return NO; }
+    return [self confirmWindowClose] && [self killOrHideTmuxWindowForController:nil];
+}
+
+- (BOOL)confirmWindowClose {
     RLog(@"windowShouldClose %@", self);
     // This counts as an interaction because it is only called when the user initiates the closing of the window (as opposed to a session dying on you).
     iTermApplicationDelegate *appDelegate = [iTermApplication.sharedApplication delegate];
@@ -5550,19 +5588,18 @@ hidingToolbeltShouldResizeWindow:(BOOL)hidingToolbeltShouldResizeWindow
         shouldClose = YES;
     }
 
-    if (shouldClose) {
-        if (![self killOrHideTmuxWindowForController:nil]) {
-            shouldClose = NO;
-        }
-    }
-
-    RLog(@"Return %@", @(shouldClose));
     return shouldClose;
 }
 
 // If controller is nil, then do all of them.
 // Returns YES if the close should proceed, NO if the user canceled.
 - (BOOL)killOrHideTmuxWindowForController:(TmuxController *)controller {
+    void (^action)(void) = [self preparedTmuxWindowCloseForController:controller];
+    if (!action) { return NO; }
+    action(); return YES;
+}
+
+- (void (^)(void))preparedTmuxWindowCloseForController:(TmuxController *)controller {
     // The window can hold tabs from more than one tmux session. Only the ones being closed count.
     int n = 0;
     for (PTYTab *aTab in [self tabs]) {
@@ -5591,6 +5628,8 @@ hidingToolbeltShouldResizeWindow:(BOOL)hidingToolbeltShouldResizeWindow
         // performing an action on a tmux object without waiting for the
         // server to tell us to do it.
 
+        if (selection == kiTermWarningSelection3 || selection == kItermWarningSelectionError) { return nil; }
+        return [[^{
         NSMutableArray<TmuxController *> *controllersToDetach = [NSMutableArray array];
 
         for (PTYTab *aTab in [self tabs]) {
@@ -5613,14 +5652,14 @@ hidingToolbeltShouldResizeWindow:(BOOL)hidingToolbeltShouldResizeWindow
                         break;
                     case kiTermWarningSelection3:
                         // Cancel
-                        return NO;
+                        return;
                     case kiTermWarningSelection4:
                     case kiTermWarningSelection5:
                     case kiTermWarningSelection6:
                         ITAssertWithMessage(NO, @"Unexpected selection %@", @(selection));
                         break;
                     case kItermWarningSelectionError:
-                        return NO;
+                        return;
                 }
             }
         }
@@ -5628,8 +5667,9 @@ hidingToolbeltShouldResizeWindow:(BOOL)hidingToolbeltShouldResizeWindow
         for (TmuxController *controllerToDetach in controllersToDetach) {
             [controllerToDetach requestDetach];
         }
+        } copy] autorelease];
     }
-    return YES;
+    return [[^{} copy] autorelease];
 }
 
 - (void)closeInstantReplayWindow {
@@ -8454,7 +8494,10 @@ hidingToolbeltShouldResizeWindow:(BOOL)hidingToolbeltShouldResizeWindow
         return NO;
     }
 
-    if ([iTermFileSessionHost deferClosing:aTab.sessions continuation:^{ [self closeTabIfConfirmed:aTab]; }]) { return NO; }
+    if ([iTermFileSessionHost deferClosing:aTab.sessions
+                                  canClose:^BOOL { return !_layoutLocked && [self.tabs containsObject:aTab]; }
+                              confirmClose:^BOOL { return [self confirmCloseTab:aTab suppressConfirmation:suppressConfirmation]; }
+                              continuation:^{ [self closeTab:aTab]; }]) { return NO; }
     return [self confirmCloseTab:aTab suppressConfirmation:suppressConfirmation];
 }
 
@@ -10877,9 +10920,18 @@ deferringExpansion:(BOOL)deferExpansion {
     }
     NSMutableArray *fileCloseSessions = [NSMutableArray array];
     for (PTYTab *tab in closable) { [fileCloseSessions addObjectsFromArray:tab.sessions]; }
-    if ([iTermFileSessionHost deferClosing:fileCloseSessions continuation:^{
-        [self closeTabs:closable confirmWith:question skippingPinned:NO alwaysConfirm:alwaysConfirm];
-    }]) { return; }
+    NSMutableArray *actions = [NSMutableArray array];
+    if ([iTermFileSessionHost deferClosing:fileCloseSessions canClose:^BOOL {
+        return !_layoutLocked && ![closable anyWithBlock:^BOOL(PTYTab *tab) { return ![self.tabs containsObject:tab]; }];
+    } confirmClose:^BOOL {
+        if (![self confirmCloseTabs:closable question:question alwaysConfirm:alwaysConfirm]) { return NO; }
+        for (PTYTab *tab in closable) {
+            void (^action)(void) = [self preparedTabClose:tab];
+            if (!action) { return NO; }
+            [actions addObject:action];
+        }
+        return YES;
+    } continuation:^{ for (void (^action)(void) in actions) { action(); } }]) { return; }
     if (![self confirmCloseTabs:closable question:question alwaysConfirm:alwaysConfirm]) {
         return;
     }

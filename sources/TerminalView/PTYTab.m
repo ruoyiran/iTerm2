@@ -5191,56 +5191,13 @@ NSString *const PTYTabArrangementOptionsPendingJumps = @"PTYTabArrangementOption
     return [self arrangementConstructingIdMap:NO contents:contents];
 }
 
-+ (BOOL)_recursiveBuildSessionMap:(NSMutableDictionary<NSString *, PTYSession *> *)sessionMap
-                  withArrangement:(NSDictionary *)arrangement
-                         sessions:(NSArray *)sessions {
-    if ([arrangement[TAB_ARRANGEMENT_VIEW_TYPE] isEqualToString:VIEW_TYPE_SPLITTER]) {
-        for (NSDictionary *subviewDict in arrangement[SUBVIEWS]) {
-            if (![self _recursiveBuildSessionMap:sessionMap
-                                 withArrangement:subviewDict
-                                        sessions:sessions]) {
-                return NO;
-            }
-        }
-        return YES;
-    } else {
-        // Is a session view
-        NSString *sessionGuid = [PTYSession guidInArrangement:arrangement[TAB_ARRANGEMENT_SESSION]];
-        if (!sessionGuid) {
-            return NO;
-        }
-        PTYSession *session = nil;
-        for (PTYSession *aSession in sessions) {
-            if ([aSession.guid isEqualToString:sessionGuid]) {
-                session = aSession;
-                break;
-            }
-        }
-        if (!session) {
-            // An archived session is created from its arrangement.
-            return [PTYSession arrangementIsMarkedAsArchive:arrangement[TAB_ARRANGEMENT_SESSION]];
-        }
-        sessionMap[sessionGuid] = session;
-        return YES;
-    }
-}
-
-+ (NSDictionary<NSString *, PTYSession *> *)sessionMapWithArrangement:(NSDictionary *)arrangement
+ + (NSDictionary<NSString *, PTYSession *> *)sessionMapWithArrangement:(NSDictionary *)arrangement
                                                              sessions:(NSArray *)sessions {
-    NSMutableDictionary<NSString *, PTYSession *> *sessionMap = [NSMutableDictionary dictionary];
-    if (![self _recursiveBuildSessionMap:sessionMap
-                         withArrangement:arrangement[TAB_ARRANGEMENT_ROOT]
-                                sessions:sessions]) {
-        return nil;
+    NSMutableDictionary *retained = [NSMutableDictionary dictionary];
+    for (PTYSession *session in sessions) {
+        if (session.guid) { retained[session.guid] = session; }
     }
-    // Floats too, or undoing a close would give them new sessions and leave the old ones running.
-    for (NSDictionary *record in [NSArray castFrom:arrangement[TAB_ARRANGEMENT_FLOATING_PANES]]) {
-        NSDictionary *node = [NSDictionary castFrom:record[FLOATING_PANE_NODE]];
-        if (node && ![self _recursiveBuildSessionMap:sessionMap withArrangement:node sessions:sessions]) {
-            return nil;
-        }
-    }
-    return sessionMap;
+    return [iTermSessionRevivalMap build:arrangement sessions:retained];
 }
 
 typedef struct {

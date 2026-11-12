@@ -451,6 +451,17 @@ static NSModalResponse iTermCompareRenderingRunModal(id self, SEL _cmd) {
 
 - (BOOL)validateMenuItem:(NSMenuItem *)menuItem {
     const SEL action = [menuItem action];
+    if (action == @selector(saveSelectedTextOrFile:) || action == @selector(saveFileAs:)) {
+        NSNumber *fileEnabled = [iTermFileMenuActions validate:menuItem firstResponder:NSApp.keyWindow.firstResponder];
+        if (fileEnabled) { return fileEnabled.boolValue; }
+        if (action == @selector(saveFileAs:)) { return NO; }
+        menuItem.title = NSLocalizedStringWithDefaultValue(@"FileSession.SaveSelectedText", nil, [NSBundle mainBundle], @"Save Selected Text…", @"Legacy terminal save-selection menu title when file editor does not own focus");
+        NSMenuItem *legacy = [[menuItem copy] autorelease];
+        legacy.action = @selector(saveDocumentAs:);
+        id target = [NSApp targetForAction:legacy.action to:nil from:legacy];
+        return target && (![target conformsToProtocol:@protocol(NSMenuItemValidation)] || [target validateMenuItem:legacy]);
+    }
+
     if (action == @selector(newSessionInTabAtIndex:) ||
         action == @selector(newSession:) ||
         action == @selector(newSessionWithSameProfile:)) {
@@ -3381,7 +3392,25 @@ static iTermKeyEventReplayer *gReplayer;
                 defaultDelay:0.125];
 }
 
+- (BOOL)performFileMenuAction:(SEL)selector sender:(id)sender {
+    NSMenuItem *item = [NSMenuItem castFrom:sender];
+    if (!item || item.action != selector) {
+        item = [[[NSMenuItem alloc] initWithTitle:@"" action:selector keyEquivalent:@""] autorelease];
+    }
+    return [iTermFileMenuActions perform:item firstResponder:NSApp.keyWindow.firstResponder completion:nil] != nil;
+}
+
+- (IBAction)saveSelectedTextOrFile:(id)sender {
+    if ([self performFileMenuAction:_cmd sender:sender]) { return; }
+    [NSApp sendAction:@selector(saveDocumentAs:) to:nil from:sender];
+}
+
+- (IBAction)saveFileAs:(id)sender {
+    [self performFileMenuAction:_cmd sender:sender];
+}
+
 - (IBAction)undo:(id)sender {
+    if ([self performFileMenuAction:_cmd sender:sender]) { return; }
     // ⌘Z is idiomatic text undo: it undoes the focused editor. Undo Close moved to
     // Shell > Undo Close (⌘⇧T). The first time the user presses ⌘Z while a session
     // they just closed is still restorable, show a one-time notice explaining the
@@ -3415,6 +3444,7 @@ static iTermKeyEventReplayer *gReplayer;
 // undo a settings-table edit while a text field is focused, and ⌘⇧Z still redoes
 // in editable web content), while keeping text editors on their private stacks.
 - (void)performUndoRedoSelector:(SEL)selector sender:(id)sender {
+    if ([self performFileMenuAction:selector sender:sender]) { return; }
     const BOOL isUndo = (selector == @selector(undo:));
     NSResponder *firstResponder = [[NSApp keyWindow] firstResponder];
     if ([firstResponder isKindOfClass:[NSText class]]) {
@@ -3475,6 +3505,8 @@ static iTermKeyEventReplayer *gReplayer;
 - (BOOL)validateUndoRedoMenuItem:(NSMenuItem *)menuItem
                         selector:(SEL)selector
                   allowMigration:(BOOL)allowMigration {
+    NSNumber *fileEnabled = [iTermFileMenuActions validate:menuItem firstResponder:NSApp.keyWindow.firstResponder];
+    if (fileEnabled) { return fileEnabled.boolValue; }
     const BOOL isUndo = (selector == @selector(undo:));
     NSString *genericTitle = isUndo
         ? NSLocalizedStringWithDefaultValue(@"UndoMenu.Undo", nil, [NSBundle mainBundle], @"Undo", @"Generic Undo menu item title shown when there is nothing specific to undo")

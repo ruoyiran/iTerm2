@@ -4,6 +4,7 @@ import AppKit
 @objcMembers final class iTermFileSessionHost: NSObject, iTermFileSessionPaneDelegate, iTermFileSessionCoordinatorDelegate {
     private static let prompts = iTermFileSessionHost(session: nil)
     private weak var session: PTYSession?
+    private var actions: iTermFileMenuActions?
     private var loading = false
     private var pendingClose: (() -> Void)?
     init(session: PTYSession?) { self.session = session; super.init() }
@@ -17,6 +18,16 @@ import AppKit
         session.fileSessionPane = pane
         let host = iTermFileSessionHost(session: session)
         session.fileSessionHost = host; pane.delegate = host
+        let actions = iTermFileMenuActions(pane: pane); host.actions = actions
+        actions.requestSaveAs = { [weak host, weak pane] in if let pane { host?.requestSaveAs(pane) } }
+        actions.didFail = { [weak coordinator = pane.coordinator] error in
+            if let coordinator { Self.prompts.fileSessionCoordinator(coordinator, didFail: error) }
+        }
+        actions.saveFailed = { [weak pane] outcome, error, path in
+            guard let pane, let coordinator = pane.coordinator else { return }
+            Self.handleSaveFailure(pane, coordinator: coordinator, path: path, outcome: outcome, error: error)
+        }
+        iTermFileMenuActions.register(actions, rootView: pane.controller.view)
         session.view?.fileViewController = pane.controller
         host.fileSessionPaneDidChange(pane)
         host.updateVisibility()
@@ -72,34 +83,30 @@ import AppKit
         session?.textViewDidBecomeFirstResponder()
     }
     func fileSessionPane(_ pane: iTermFileSessionPane, request command: iTermFileViewCommand) {
-        guard let coordinator = pane.coordinator else { return }
-        if command == .undo || command == .redo {
-            coordinator.undo(pane, redo: command == .redo) { error in
-                if let error { Self.prompts.fileSessionCoordinator(coordinator, didFail: error) }
-            }; return
-        }
-        guard command == .save || command == .saveAs else { return }
-        if command == .saveAs {
-            let panel = NSSavePanel(); panel.nameFieldStringValue = (pane.descriptor.filePath as NSString).lastPathComponent
-            panel.directoryURL = URL(fileURLWithPath: pane.descriptor.filePath).deletingLastPathComponent()
-            guard let window = session?.view?.window else { return }
-            panel.beginSheetModal(for: window) { response in
-                guard response == .OK, let path = panel.url?.path else { return }
-                Self.save(pane, coordinator: coordinator, path: path, overwrite: false)
-            }
-        } else { Self.save(pane, coordinator: coordinator, path: nil, overwrite: false) }
+        actions?.perform(command)
     }
-    private static func save(_ pane: iTermFileSessionPane, coordinator: iTermFileSessionCoordinator, path: String?, overwrite: Bool) {
-        coordinator.save(pane, toPath: path, overwrite: overwrite) { outcome, error in
-            if outcome == .saved { return }
-            if outcome == .conflict && !overwrite {
-                let answer = iTermWarning.show(withTitle: String(localized: "FileSession.OverwriteQuestion",
-                    defaultValue: "The file changed on disk. Replace it with the editor contents?", comment: "Explicit overwrite confirmation after a file save conflict"),
-                    actions: [String(localized: "FileSession.Replace", defaultValue: "Replace", comment: "Button to overwrite a conflicting disk file"), iTermLocalizedCancel()],
-                    accessory: nil, identifier: nil, silenceable: .kiTermWarningTypePersistent, heading: nil, window: pane.controller.view.window)
-                if answer == .kiTermWarningSelection0 { save(pane, coordinator: coordinator, path: path, overwrite: true) }
-            } else { prompts.fileSessionCoordinator(coordinator, didFail: error ?? iTermFileSessionCoordinator.error(3)) }
+    private func requestSaveAs(_ pane: iTermFileSessionPane) {
+        let panel = NSSavePanel(); panel.nameFieldStringValue = (pane.descriptor.filePath as NSString).lastPathComponent
+        panel.directoryURL = URL(fileURLWithPath: pane.descriptor.filePath).deletingLastPathComponent()
+        guard let window = session?.view?.window else { return }
+        panel.beginSheetModal(for: window) { [weak self] response in
+            guard response == .OK, let path = panel.url?.path else { return }
+            self?.actions?.save(toPath: path, overwrite: false)
         }
+    }
+    private static func handleSaveFailure(_ pane: iTermFileSessionPane, coordinator: iTermFileSessionCoordinator,
+                                          path: String?, outcome: iTermFileSaveOutcome, error: NSError?) {
+        if outcome == .conflict {
+            let answer = iTermWarning.show(withTitle: String(localized: "FileSession.OverwriteQuestion",
+                defaultValue: "The file changed on disk. Replace it with the editor contents?", comment: "Explicit overwrite confirmation after a file save conflict"),
+                actions: [String(localized: "FileSession.Replace", defaultValue: "Replace", comment: "Button to overwrite a conflicting disk file"), iTermLocalizedCancel()],
+                accessory: nil, identifier: nil, silenceable: .kiTermWarningTypePersistent, heading: nil, window: pane.controller.view.window)
+            if answer == .kiTermWarningSelection0 {
+                coordinator.save(pane, toPath: path, overwrite: true) { result, error in
+                    if result != .saved { prompts.fileSessionCoordinator(coordinator, didFail: error ?? iTermFileSessionCoordinator.error(3)) }
+                }
+            }
+        } else { prompts.fileSessionCoordinator(coordinator, didFail: error ?? iTermFileSessionCoordinator.error(3)) }
     }
     func fileSessionCoordinator(_ coordinator: iTermFileSessionCoordinator, decideFor documents: [iTermFileDocumentSnapshot],
                                 quitting: Bool, completion: @escaping (iTermFileCloseDecision) -> Void) {
@@ -121,20 +128,21 @@ import AppKit
             identifier: nil, silenceable: .kiTermWarningTypePersistent, heading: nil, window: NSApp.keyWindow)
     }
     static func deferClosing(_ sessions: [PTYSession], continuation: @escaping () -> Void) -> Bool {
+        deferClosing(sessions, canClose: { true }, confirmClose: { true }, continuation: continuation)
+    }
+    static func deferClosing(_ sessions: [PTYSession], canClose: @escaping () -> Bool,
+                             confirmClose: @escaping () -> Bool, continuation: @escaping () -> Void) -> Bool {
         guard !iTermController.sharedInstance().applicationIsQuitting else { return false }
         let files = sessions.filter { $0.isFileSession }
         if let waiting = files.first(where: { $0.fileSessionHost?.loading == true }) {
-            waiting.fileSessionHost?.pendingClose = continuation
+            waiting.fileSessionHost?.pendingClose = { _ = deferClosing(sessions, canClose: canClose, confirmClose: confirmClose, continuation: continuation) }
             return true
         }
         let panes = files.compactMap(\.fileSessionPane)
         guard !panes.isEmpty, let coordinator = iTermFileSessionCoordinator.installed else { return false }
         if panes.allSatisfy({ coordinator.isCloseApproved($0) }) { return false }
-        coordinator.prepareClose(panes, quitting: false) { allowed in
-            guard allowed else { return }
-            continuation()
-            coordinator.completeClose(quitting: false)
-        }
+        coordinator.performNativeClose(panes, canClose: canClose, confirmClose: confirmClose,
+                                       commit: continuation, completion: { _ in })
         return true
     }
     static func sessionWillTerminate(_ session: PTYSession) {
@@ -154,10 +162,4 @@ extension PTYSession {
         guard isFileSession, let controller = fileSessionPane?.controller, controller.canPerform(command) else { return }
         controller.perform(command)
     }
-    @objc func saveDocument(_ sender: Any?) { filePerformCommand(.save) }
-    @objc func saveDocumentAs(_ sender: Any?) { filePerformCommand(.saveAs) }
-    @objc func undo(_ sender: Any?) { filePerformCommand(.undo) }
-    @objc func redo(_ sender: Any?) { filePerformCommand(.redo) }
-    @objc func copy(_ sender: Any?) { filePerformCommand(.copy) }
-    @objc func cut(_ sender: Any?) { filePerformCommand(.cut) }
 }

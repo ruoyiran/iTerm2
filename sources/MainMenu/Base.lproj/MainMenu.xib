@@ -291,7 +291,12 @@
                             <menuItem title="Save Selected Text…" keyEquivalent="s" identifier="Save Selected Text…" id="692">
                                 <accessibility identifier="Save Selected Text…"/>
                                 <connections>
-                                    <action selector="saveDocumentAs:" target="-1" id="695"/>
+                                    <action selector="saveSelectedTextOrFile:" target="201" id="695"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Save File As…" keyEquivalent="S" identifier="Save File As…" id="FileSaveAsNative">
+                                <connections>
+                                    <action selector="saveFileAs:" target="201" id="FileSaveAsAction"/>
                                 </connections>
                             </menuItem>
                             <menuItem isSeparatorItem="YES" id="693">

@@ -639,6 +639,7 @@
 		1DBBA5E01B3CB0590026E3B6 /* restore-arrangement.png in Resources */ = {isa = PBXBuildFile; fileRef = 1DBBA5DC1B3CB0590026E3B6 /* restore-arrangement.png */; };
 		1DBBA5E11B3CB0590026E3B6 /* restore-arrangement@2x.png in Resources */ = {isa = PBXBuildFile; fileRef = 1DBBA5DD1B3CB0590026E3B6 /* restore-arrangement@2x.png */; };
 		1DBBA5E31B3CB0590026E3B6 /* restore-arrangement@2x.png in Resources */ = {isa = PBXBuildFile; fileRef = 1DBBA5DD1B3CB0590026E3B6 /* restore-arrangement@2x.png */; };
+		1DBD871A4259393FDC5CBB2A /* iTermFileMenuActions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 786F7C697CCD2216615D6C33 /* iTermFileMenuActions.swift */; };
 		1DC13AC318864E2200034DAE /* CommandHistoryPopup.h in Headers */ = {isa = PBXBuildFile; fileRef = 1DC13AC118864E2200034DAE /* CommandHistoryPopup.h */; };
 		1DC2A1CC1949165D005769D5 /* Maximized.png in Resources */ = {isa = PBXBuildFile; fileRef = 1DC2A1CA1949165D005769D5 /* Maximized.png */; };
 		1DC2A1CE1949165D005769D5 /* Maximized@2x.png in Resources */ = {isa = PBXBuildFile; fileRef = 1DC2A1CB1949165D005769D5 /* Maximized@2x.png */; };
@@ -4856,6 +4857,7 @@
 		F968986D3911FB8752DFAA33 /* OrchestrationToolProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC80F2A9A6FBB24419560FD1 /* OrchestrationToolProvider.swift */; };
 		F96B31FFBFC5DFE713E9C670 /* EnterWorkgroupBrowserTrigger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 171DC262300F3B977D7FF1DB /* EnterWorkgroupBrowserTrigger.swift */; };
 		F97014D02D2DF9126FFEEDE5 /* Conductor+Panes.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2F4FBFFB7556EFAE2CFB347 /* Conductor+Panes.swift */; };
+		F9E339626F8615535C0FB880 /* iTermSessionRevivalMap.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89C296B6DA32DDD37A5CAA5B /* iTermSessionRevivalMap.swift */; };
 		FA10B94EEB6D07B5497126EB /* BashWordSplitter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 413B31365A66C69AAB923889 /* BashWordSplitter.swift */; };
 		FA29DC893FAE2253F478E70E /* ClaudeInteractivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78369949C86466303F34E966 /* ClaudeInteractivity.swift */; };
 		FA5B9FA3388BB9FD13BC8FAF /* MarkdownPreprocessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBDB9A87EC97AD96C031C761 /* MarkdownPreprocessor.swift */; };
@@ -6137,6 +6139,7 @@
 		77FCEB05FACE33F5F7947261 /* iTermWindowBorderView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = iTermWindowBorderView.swift; sourceTree = "<group>"; };
 		78369949C86466303F34E966 /* ClaudeInteractivity.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ClaudeInteractivity.swift; sourceTree = "<group>"; };
 		7849CABC92F458456EBAA49C /* iTermProjectWindowController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = iTermProjectWindowController.swift; sourceTree = "<group>"; };
+		786F7C697CCD2216615D6C33 /* iTermFileMenuActions.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = iTermFileMenuActions.swift; sourceTree = "<group>"; };
 		78BC7E35842CFC775D14EB91 /* CompanionPluginHTTPError.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CompanionPluginHTTPError.swift; sourceTree = "<group>"; };
 		78C411C47C727715D6E54062 /* DiffWaitingPromptView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DiffWaitingPromptView.swift; sourceTree = "<group>"; };
 		795985DF96920C5D3F9FD1D6 /* TmuxWorkgroupPeerCreator.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TmuxWorkgroupPeerCreator.swift; sourceTree = "<group>"; };
@@ -6193,6 +6196,7 @@
 		88578347A529CFE749B6F433 /* AIChatWireLogger.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AIChatWireLogger.swift; sourceTree = "<group>"; };
 		889A9128E944B618CDE75E18 /* iTermCursorSlideAnimator.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = iTermCursorSlideAnimator.h; path = sources/Drawing/iTermCursorSlideAnimator.h; sourceTree = SOURCE_ROOT; };
 		892E0BD48FA7347FC4326EB6 /* NSTextView+iTermUndoSafety.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; path = "NSTextView+iTermUndoSafety.m"; sourceTree = "<group>"; };
+		89C296B6DA32DDD37A5CAA5B /* iTermSessionRevivalMap.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = iTermSessionRevivalMap.swift; sourceTree = "<group>"; };
 		89D3137ADD4526A5A2012D83 /* iTermLayoutMutator.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = iTermLayoutMutator.swift; sourceTree = "<group>"; };
 		89D37AD1DBE4D076D5A412AC /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = Base; path = Base.lproj/iTermKeyMapping.xib; sourceTree = "<group>"; };
 		89D84C6E401120F8E67C44A3 /* ChatFindBarView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ChatFindBarView.swift; sourceTree = "<group>"; };
@@ -15500,6 +15504,8 @@
 				F4EB5954940B3B0C7403E726 /* iTermFileSessionDescriptor.swift */,
 				E251D6482037D914E7C9E9CD /* iTermFileSessionCoordinator.swift */,
 				ECFA7032BBE2FF96A3F6DB30 /* iTermFileSessionHost.swift */,
+				89C296B6DA32DDD37A5CAA5B /* iTermSessionRevivalMap.swift */,
+				786F7C697CCD2216615D6C33 /* iTermFileMenuActions.swift */,
 			);
 			name = Native;
 			path = Native;
@@ -20757,6 +20763,8 @@
 				EC5FF890F669A5E2DEA4BF64 /* iTermFileViewController.swift in Sources */,
 				8254838FF3C61D47DE416A6D /* iTermFileWorkspaceUIRuntime.swift in Sources */,
 				1E9A5423CBA9533F522A3516 /* iTermFileWorkspaceWebView.swift in Sources */,
+				F9E339626F8615535C0FB880 /* iTermSessionRevivalMap.swift in Sources */,
+				1DBD871A4259393FDC5CBB2A /* iTermFileMenuActions.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

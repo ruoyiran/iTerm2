@@ -78,7 +78,7 @@ import AppKit
     private var recoveryWaiters = [() -> Void]()
     private var pendingOpens = 0
     private var reservedViewIdentifiers = Set<String>()
-    private var pendingSaves = 0
+    private var pendingMutations = 0
     private var operation = false
     private var operationGeneration: UInt64 = 0
     private var approved = Set<String>()
@@ -86,7 +86,7 @@ import AppKit
     private var cleanup = Set<String>()
     var panes: [iTermFileSessionPane] { registry.allObjects.filter { !$0.closed } }
     var operationInProgress: Bool { operation }
-    var hasResources: Bool { !panes.isEmpty || pendingOpens > 0 || pendingSaves > 0 || !releasePending.isEmpty }
+    var hasResources: Bool { !panes.isEmpty || pendingOpens > 0 || pendingMutations > 0 || !releasePending.isEmpty }
 
     init(documentStore: iTermFileDocumentStore, runtime: iTermFileWorkspaceUIRuntime) {
         self.documentStore = documentStore; self.runtime = runtime; super.init()
@@ -137,22 +137,32 @@ import AppKit
     func save(_ pane: iTermFileSessionPane, toPath: String?, overwrite: Bool,
               completion: @escaping (iTermFileSaveOutcome, NSError?) -> Void) {
         guard !operation, !pane.closed, let identifier = pane.documentIdentifier else { completion(.missing, Self.error(2)); return }
-        pendingSaves += 1
+        pendingMutations += 1
+        let generation = operationGeneration
         let finished: (iTermFileSaveOutcome, NSError?) -> Void = { [self] outcome, error in
-            pendingSaves -= 1; completion(outcome, error)
+            pendingMutations -= 1; performCleanup(); completion(outcome, error)
         }
         // Drain every controller, including a different pane that still owns write authority.
         runtime.flushAllEdits(reason: .save) { [self] error in
             guard error == nil else { finished(.failed, error); return }
+            guard !pane.closed, pane.coordinator === self, pane.documentIdentifier == identifier,
+                  generation == operationGeneration, !operation else { finished(.stale, Self.error(1)); return }
             if let toPath { documentStore.saveAs(documentIdentifier: identifier, toPath: toPath, overwrite: overwrite, completion: finished) }
             else { documentStore.save(documentIdentifier: identifier, overwrite: overwrite, completion: finished) }
         }
     }
     func undo(_ pane: iTermFileSessionPane, redo: Bool, completion: @escaping (NSError?) -> Void) {
-        guard !operation, let id = pane.documentIdentifier else { completion(Self.error(1)); return }
+        guard !operation, !pane.closed, pane.coordinator === self, let id = pane.documentIdentifier else { completion(Self.error(1)); return }
+        pendingMutations += 1
+        let generation = operationGeneration
+        let finish: (NSError?) -> Void = { [self] error in
+            pendingMutations -= 1; performCleanup(); completion(error)
+        }
         runtime.flushAllEdits(reason: .save) { [self] error in
-            guard error == nil else { completion(error); return }
-            let done: (iTermFileDocumentSnapshot?, NSError?) -> Void = { _, error in completion(error) }
+            guard error == nil else { finish(error); return }
+            guard !operation, generation == operationGeneration, !pane.closed,
+                  pane.coordinator === self, pane.documentIdentifier == id else { finish(Self.error(1)); return }
+            let done: (iTermFileDocumentSnapshot?, NSError?) -> Void = { _, error in finish(error) }
             if redo { documentStore.redo(documentIdentifier: id, completion: done) }
             else { documentStore.undo(documentIdentifier: id, completion: done) }
         }
@@ -177,7 +187,7 @@ import AppKit
         }
     }
     func beginOperation(completion: @escaping (NSError?) -> Void) {
-        guard !operation, pendingOpens == 0, pendingSaves == 0, releasePending.isEmpty else { completion(Self.error(1)); return }
+        guard !operation, pendingOpens == 0, pendingMutations == 0, releasePending.isEmpty else { completion(Self.error(1)); return }
         operation = true; operationGeneration &+= 1
         let generation = operationGeneration
         runtime.flushAllEdits(reason: .suspend) { [self] error in
@@ -194,8 +204,24 @@ import AppKit
         }
     }
     func cancelOperation() { operationGeneration &+= 1; approved.removeAll(); operation = false; runtime.resumeEditing(); performCleanup() }
+    /// Real native close entry: native cancellation is resolved before file effects, never afterward.
+    func performNativeClose(_ closing: [iTermFileSessionPane], canClose: @escaping () -> Bool,
+                            confirmClose: @escaping () -> Bool, commit: @escaping () -> Void,
+                            completion: @escaping (Bool) -> Void) {
+        guard canClose() else { completion(false); return }
+        prepareClose(closing, quitting: false, nativeConfirmation: { canClose() && confirmClose() && canClose() }) { [self] allowed in
+            guard allowed else { completion(false); return }
+            commit()
+            completeClose(quitting: false)
+            completion(true)
+        }
+    }
     func prepareClose(_ closing: [iTermFileSessionPane], quitting: Bool, completion: @escaping (Bool) -> Void) {
-        guard !operation, pendingOpens == 0, pendingSaves == 0, releasePending.isEmpty else { completion(false); return }
+        prepareClose(closing, quitting: quitting, nativeConfirmation: { true }, completion: completion)
+    }
+    func prepareClose(_ closing: [iTermFileSessionPane], quitting: Bool, nativeConfirmation: @escaping () -> Bool,
+                      completion: @escaping (Bool) -> Void) {
+        guard !operation, pendingOpens == 0, pendingMutations == 0, releasePending.isEmpty else { completion(false); return }
         operation = true; operationGeneration &+= 1
         let generation = operationGeneration
         let closingIDs = Set(closing.map(\.viewIdentifier))
@@ -211,12 +237,16 @@ import AppKit
                 let decide: (iTermFileCloseDecision) -> Void = { [self] decision in
                     guard operation, generation == operationGeneration else { completion(false); return }
                     guard decision != .cancel, quitting || decision != .keepDrafts else { cancelOperation(); completion(false); return }
+                    guard nativeConfirmation(), operation, generation == operationGeneration else {
+                        if operation && generation == operationGeneration { cancelOperation() }
+                        completion(false); return
+                    }
                     persist(dirty, decision: decision, generation: generation) { [self] error in
                         guard operation, generation == operationGeneration else { completion(false); return }
                         guard error == nil else { fail(error!, completion: completion); return }
                         documentStore.flushDrafts { [self] error in
-                            guard error == nil else { fail(error!, completion: completion); return }
                             guard operation, generation == operationGeneration else { completion(false); return }
+                            guard error == nil else { fail(error!, completion: completion); return }
                             approved = closingIDs; completion(true)
                         }
                     }
@@ -246,7 +276,7 @@ import AppKit
         if quitting { runtime.shutdown() } else { runtime.resumeEditing(); performCleanup() }
     }
     private func performCleanup() {
-        guard !operation, pendingOpens == 0 else { return }
+        guard !operation, pendingOpens == 0, pendingMutations == 0 else { return }
         let live = Set(panes.compactMap(\.documentIdentifier))
         for id in cleanup.subtracting(live).subtracting(releasePending) {
             cleanup.remove(id); releasePending.insert(id)
