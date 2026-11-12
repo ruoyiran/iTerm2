@@ -9,8 +9,8 @@
     },
     {
       "path": "app.js",
-      "bytes": 2128,
-      "sha256": "d8b11ed4ab0eabd93b05061ed5e321fdba2f5343680015fc27663cc7812a22a7",
+      "bytes": 2154,
+      "sha256": "5856d052a9cd5e237788cee9e8bace48bd2526ebfbc9b0e0d8892b27b7177e98",
       "mime": "text/javascript; charset=utf-8"
     },
     {
@@ -74,15 +74,15 @@
       "mime": "text/javascript; charset=utf-8"
     },
     {
-      "path": "chunks/chunk-E5KL7K2E.js",
-      "bytes": 4895,
-      "sha256": "45bb33fe02e337b5dea4ba3f43076a2263065a871357e0ae65400a5629d0ddcb",
+      "path": "chunks/chunk-DCM5NK4S.js",
+      "bytes": 23390,
+      "sha256": "553bd9a7dcd3cd0bb9465b7a39e6f8baa41d1edd3a379ab6e8b437ed8f67834c",
       "mime": "text/javascript; charset=utf-8"
     },
     {
-      "path": "chunks/chunk-HOI4JYTP.js",
-      "bytes": 23137,
-      "sha256": "a58c0fe82730fcb90aa79ca11ac9a911040fba659dcdff20641a54628e48cfb0",
+      "path": "chunks/chunk-E5KL7K2E.js",
+      "bytes": 4895,
+      "sha256": "45bb33fe02e337b5dea4ba3f43076a2263065a871357e0ae65400a5629d0ddcb",
       "mime": "text/javascript; charset=utf-8"
     },
     {
@@ -212,16 +212,16 @@
       "mime": "text/javascript; charset=utf-8"
     },
     {
+      "path": "chunks/editor-4AR2HRTO.js",
+      "bytes": 62465,
+      "sha256": "449d7cea14540059df45de94876de803a6237324d1a1298dc832c1f4677f106d",
+      "mime": "text/javascript; charset=utf-8"
+    },
+    {
       "path": "chunks/editor-Y4BFK3PW.css",
       "bytes": 146370,
       "sha256": "9dfa6eb7f6259d87fb22ef9d4d3b07fac905e33ef32e0bcebe614a8fb0e0566e",
       "mime": "text/css; charset=utf-8"
-    },
-    {
-      "path": "chunks/editor-Z4V7YDID.js",
-      "bytes": 62465,
-      "sha256": "a987cf54551e1147be4c568e87cc394a004b2d67491c26b2f532cba98f32fe20",
-      "mime": "text/javascript; charset=utf-8"
     },
     {
       "path": "chunks/elixir-HQALYWIX.js",
@@ -885,7 +885,7 @@
     },
     {
       "path": "sources/FileWorkspace/Resources/src/bootstrap.mjs",
-      "sha256": "09276932ae1e92c0e8df085f2492390e51232423969de0f3dfc0088a165202d6"
+      "sha256": "e42e0db1491037885342e50f74c5358042e8b31314fae82e8ff71af66988c4e4"
     },
     {
       "path": "sources/FileWorkspace/Resources/src/bridge.mjs",
@@ -901,7 +901,7 @@
     },
     {
       "path": "sources/FileWorkspace/Resources/src/explorer.mjs",
-      "sha256": "c32b8d81148d0448cad4309e1752ac33a8a1247385459fa1e95be8c6fe060647"
+      "sha256": "1e051d0d5904b5ad9510dba215dd8efba5f267c09b32c0c269de19aab111c7db"
     },
     {
       "path": "sources/FileWorkspace/Resources/src/tree-state.mjs",

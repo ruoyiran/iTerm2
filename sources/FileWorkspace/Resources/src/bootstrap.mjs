@@ -5,7 +5,7 @@ const post=message=>window.webkit.messageHandlers.fileWorkspace.postMessage(mess
 const bridge=new MessageBridge(post);const root=document.getElementById('workspace');let surface=null,configuration=0;const transfers=new Map();
 window.fileWorkspace={async receive(message){
  if(message.type==='configure') {
-  const version=++configuration;const keepExplorer=message.payload.purpose==='explorer'&&surface instanceof Explorer&&bridge.identity?.viewIdentifier===message.viewIdentifier;if(!keepExplorer){surface?.dispose();surface=null;}transfers.clear();bridge.configure(message);
+  const version=++configuration;const keepExplorer=message.payload.purpose==='explorer'&&surface instanceof Explorer&&bridge.identity?.viewIdentifier===message.viewIdentifier;if(keepExplorer)surface.beginContextTransition();else{surface?.dispose();surface=null;}transfers.clear();bridge.configure(message);
   const t=key=>message.payload.labels?.[key]??key;const send=(type,payload,id)=>bridge.send(type,payload,id);
   if(message.payload.purpose==='editor'){const {FileEditor}=await import('./editor.mjs');if(version!==configuration)return;surface=new FileEditor(root,send,t);}else if(!keepExplorer)surface=new Explorer(root,send,t);
   bridge.send('ready',{});return;

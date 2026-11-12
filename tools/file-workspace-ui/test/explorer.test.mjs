@@ -110,3 +110,9 @@ test('context changes invalidate retained create forms and detached menu callbac
   }finally{f.close();}
  }
 });
+test('disposing a suspended explorer releases the shared root for its next renderer owner',()=>{
+ const f=fixture();try {
+  f.explorer.beginContextTransition();assert.equal(f.root.inert,true);
+  f.explorer.dispose();assert.equal(f.root.inert,false);assert.equal(f.root.children.length,0);
+ }finally{f.close();}
+});

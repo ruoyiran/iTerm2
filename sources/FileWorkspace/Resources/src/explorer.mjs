@@ -5,7 +5,7 @@ export function button(label, action, symbol) { const b=element('button','icon-b
 const parentPath=path=>path.slice(0,path.lastIndexOf('/'))||'/';
 export class Explorer {
   constructor(root, send, translate) {
-    this.root=root;this.send=send;this.t=translate;this.state=new TreeState();this.mode='names';this.collapsed=new Set();this.focused=null;this.resultFocus=null;this.rows=[];this.composing=false;this.nameTimer=null;this.scope=null;
+    this.root=root;this.contextReady=false;this.root.inert=true;this.send=(type,payload,id)=>this.contextReady?send(type,payload,id):null;this.t=translate;this.state=new TreeState();this.mode='names';this.collapsed=new Set();this.focused=null;this.resultFocus=null;this.rows=[];this.composing=false;this.nameTimer=null;this.scope=null;
     this.build();this.focusHandler=()=>this.send('focus',{});this.root.addEventListener('focusin',this.focusHandler);
   }
   build() {
@@ -72,6 +72,9 @@ export class Explorer {
     this.transientGeneration=(this.transientGeneration??0)+1;clearTimeout(this.nameTimer);
     this.form?.remove();this.form=null;this.formRequest=null;this.composing=false;this.closeMenu();
   }
+  beginContextTransition() {
+    this.invalidateTransientUI();this.cancelSearch();this.contextReady=false;this.root.inert=true;
+  }
   changeContext(payload) {
     this.invalidateTransientUI();this.cancelSearch();this.rememberContext();this.resultFocus=null;this.scope=payload.rootDirectory?payload:null;
     const saved=this.recentContexts.get(this.contextKey(this.scope));this.recentContexts.delete(this.contextKey(this.scope));
@@ -79,6 +82,7 @@ export class Explorer {
     this.title.textContent=payload.title||this.t('selectProject');this.names.value=saved?.names??'';this.contents.value=saved?.contents??'';
     this.include.value=saved?.include??'';this.exclude.value=saved?.exclude??'';this.flags=saved?.flags??{caseSensitive:false,wholeWord:false,regularExpression:false};
     for(const b of this.contentRow.querySelectorAll('[data-flag]'))b.setAttribute('aria-pressed',String(this.flags[b.dataset.flag]));
+    this.contextReady=true;this.root.inert=false;
     this.setMode(saved?.mode??'names');if(this.scope)this.refresh();
   }
   receive(type,payload) {
@@ -179,5 +183,5 @@ export class Explorer {
     this.closeMenu();this.form?.remove();const scope=this.scope,generation=this.transientGeneration;const form=element('form','inline-input');const current=()=>this.scope===scope&&this.transientGeneration===generation&&this.form===form;const input=element('input');input.setAttribute('aria-label',this.t(kind==='rename'?'rename':'name'));input.value=kind==='rename'?row.name:'';form.append(icon(kind==='createFolder'?'folder-plus':'file-plus'),input,button(this.t('cancel'),()=>form.remove(),'x'));this.viewport.before(form);this.form=form;
     form.addEventListener('submit',event=>{event.preventDefault();if(!current()||this.composing||!input.value)return;const directoryPath=row?.isDirectory?row.path:row?parentPath(row.path):this.scope?.rootDirectory;this.formRequest=this.send(kind,{paths:row?[row.path]:[],directoryPath,name:input.value});});input.addEventListener('compositionstart',()=>{if(current())this.composing=true;});input.addEventListener('compositionend',()=>{if(current())this.composing=false;});input.addEventListener('keydown',event=>{if(current()&&event.key==='Escape')form.remove();});input.focus();input.select();
   }
-  dispose() {this.invalidateTransientUI();this.root.removeEventListener('focusin',this.focusHandler);clearTimeout(this.nameTimer);this.cancelSearch();this.closeMenu();this.root.replaceChildren();}
+  dispose() {this.beginContextTransition();this.root.removeEventListener('focusin',this.focusHandler);clearTimeout(this.nameTimer);this.cancelSearch();this.closeMenu();this.root.replaceChildren();this.root.inert=false;}
 }
