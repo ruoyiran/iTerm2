@@ -49,6 +49,7 @@ func fileDocumentError(_ code: Int) -> NSError {
 
     @nonobjc private static func read(_ path: String) throws -> FileDocument {
         let url = try validatePath(path)
+        try validateRegularTarget(url, allowMissing: false)
         var result: Result<FileDocument, Error>?
         var error: NSError?
         NSFileCoordinator().coordinate(readingItemAt: url, options: [], error: &error) { coordinated in
@@ -57,6 +58,17 @@ func fileDocumentError(_ code: Int) -> NSError {
         if let error = error { throw error }
         guard let result = result else { throw fileDocumentError(2) }
         return try result.get()
+    }
+
+    // NSFileCoordinator may try to access a FIFO before entering its accessor. Reject special files first.
+    @nonobjc private static func validateRegularTarget(_ url: URL, allowMissing: Bool) throws {
+        let canonical = url.resolvingSymlinksInPath().standardizedFileURL
+        var info = stat()
+        if lstat(canonical.path, &info) != 0 {
+            if allowMissing && errno == ENOENT { return }
+            throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
+        }
+        guard info.st_mode & S_IFMT == S_IFREG else { throw fileDocumentError(3) }
     }
 
     @nonobjc private static func readUncoordinated(_ url: URL, originalPath: String) throws -> FileDocument {
@@ -284,6 +296,7 @@ func fileDocumentError(_ code: Int) -> NSError {
     @nonobjc private static func write(_ data: Data, target: String, originalCanonical: String,
                                       baseline: FileSignature, saveAs: Bool, overwrite: Bool) throws -> FileDocument {
         let url = try validatePath(target)
+        try validateRegularTarget(url, allowMissing: saveAs)
         var result: Result<FileDocument, Error>?
         var coordinationError: NSError?
         NSFileCoordinator().coordinate(writingItemAt: url, options: .forReplacing, error: &coordinationError) { coordinated in

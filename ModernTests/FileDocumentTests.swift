@@ -299,6 +299,7 @@ final class FileDocumentTests: XCTestCase {
         _ = replace(initial, "mine")
         try Data("same bytes".utf8).write(to: URL(fileURLWithPath: path), options: .atomic)
         XCTAssertEqual(save(initial.documentIdentifier), .conflict)
+        XCTAssertEqual(save(initial.documentIdentifier, overwrite: true, toPath: special), .failed)
         let alias = root.appendingPathComponent("alias").path
         try FileManager.default.createSymbolicLink(atPath: alias, withDestinationPath: path)
         store = iTermFileDocumentStore(storageDirectory: root.appendingPathComponent("other-drafts"))
