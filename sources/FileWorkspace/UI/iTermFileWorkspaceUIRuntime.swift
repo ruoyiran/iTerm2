@@ -1,0 +1,98 @@
+import AppKit
+import WebKit
+
+@objcMembers final class iTermFileWorkspaceUIRuntime: NSObject {
+    @nonobjc let documentStore: iTermFileDocumentStore
+    private let dataStore = WKWebsiteDataStore.nonPersistent()
+    private var server: iTermFileUIAssetServer?
+    private var assetURL: URL?
+    private var startupError: NSError?
+    private var waiting = [(URL?, NSError?) -> Void]()
+    private var idle = [iTermFileWorkspaceWebView]()
+    private var leased = Set<iTermFileWorkspaceWebView>()
+    private let controllers = NSHashTable<iTermFileViewController>.weakObjects()
+    private var writers = [String: WeakFileView]()
+    private var observer: NSObjectProtocol?
+    private var stopped = false
+    private var authorityGeneration: UInt64 = 0
+    convenience init(documentStore: iTermFileDocumentStore) {
+        self.init(documentStore: documentStore, resourceDirectory: Bundle.main.resourceURL?.appendingPathComponent("FileWorkspaceUI"))
+    }
+    @nonobjc init(documentStore: iTermFileDocumentStore, resourceDirectory: URL?) {
+        self.documentStore = documentStore; super.init()
+        observer = NotificationCenter.default.addObserver(forName: NSNotification.Name(iTermFileDocumentStore.didChangeNotification), object: documentStore, queue: .main) { [weak self] note in
+            guard let snapshot = note.userInfo?["snapshot"] as? iTermFileDocumentSnapshot else { return }
+            for controller in self?.controllers.allObjects ?? [] where controller.documentIdentifier == snapshot.documentIdentifier {
+                controller.applyDocumentChanges(snapshot, edits: note.userInfo?["edits"] as? [iTermFileTextEdit])
+            }
+        }
+        let resource = resourceDirectory
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            do {
+                guard let resource = resource else { throw fileUIError(1) }
+                let server = try iTermFileUIAssetServer(resourceDirectory: resource)
+                DispatchQueue.main.async { [weak self] in
+                    guard let self = self, !self.stopped else { server.stop(); return }; self.server = server
+                    server.start { [weak self] result in
+                        guard let self = self, !self.stopped else { return }
+                        switch result { case .success(let url): self.assetURL = url; case .failure(let error): self.startupError = error as NSError }
+                        let callbacks = self.waiting; self.waiting.removeAll(); callbacks.forEach { $0(self.assetURL, self.startupError) }
+                    }
+                }
+            } catch { DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }; self.startupError = error as NSError
+                let callbacks = self.waiting; self.waiting.removeAll(); callbacks.forEach { $0(nil, error as NSError) }
+            } }
+        }
+    }
+    @nonobjc func acquire(completion: @escaping (iTermFileWorkspaceWebView?, NSError?) -> Void) {
+        guard !stopped else { completion(nil, fileUIError(2)); return }
+        let ready: (URL?, NSError?) -> Void = { [weak self] url, error in
+            guard let self = self, !self.stopped, let url = url else { completion(nil, error ?? fileUIError(2)); return }
+            let renderer = self.idle.popLast() ?? iTermFileWorkspaceWebView(dataStore: self.dataStore)
+            self.leased.insert(renderer); completion(renderer, nil); renderer.loadAssets(url)
+        }
+        if assetURL != nil || startupError != nil { ready(assetURL, startupError) } else { waiting.append(ready) }
+    }
+    @nonobjc func release(_ renderer: iTermFileWorkspaceWebView) {
+        guard leased.remove(renderer) != nil else { return }; renderer.unbind()
+        if !stopped && idle.count < 2 { idle.append(renderer) } else { renderer.shutdown() }
+    }
+    @nonobjc func register(_ controller: iTermFileViewController) { controllers.add(controller) }
+    @nonobjc func unregister(_ controller: iTermFileViewController) {
+        controllers.remove(controller)
+        for key in Array(writers.keys) where writers[key]?.value === controller { writers.removeValue(forKey: key) }
+    }
+    @nonobjc func requestAuthority(_ controller: iTermFileViewController) {
+        guard let id = controller.documentIdentifier else { return }
+        authorityGeneration &+= 1; let generation = authorityGeneration
+        let grant = { [weak self, weak controller] (error: NSError?) in
+            guard let self = self, let controller = controller, generation == self.authorityGeneration, error == nil,
+                  controller.documentIdentifier == id else { return }
+            self.writers[id]?.value?.setEditAuthority(false); self.writers[id] = WeakFileView(controller)
+            controller.setEditAuthority(true)
+        }
+        if let previous = writers[id]?.value, previous !== controller { previous.flushEdits(reason: .focusTransfer, completion: grant) } else { grant(nil) }
+    }
+    @nonobjc func hasAuthority(_ controller: iTermFileViewController) -> Bool {
+        guard let id = controller.documentIdentifier else { return false }; return writers[id]?.value === controller
+    }
+    func flushAllEdits(reason: iTermFileFlushReason, completion: @escaping (NSError?) -> Void) {
+        let values = controllers.allObjects
+        guard !values.isEmpty else { completion(nil); return }
+        var remaining = values.count, failure: NSError?
+        for controller in values { controller.flushEdits(reason: reason) { error in
+            if failure == nil { failure = error }; remaining -= 1; if remaining == 0 { completion(failure) }
+        } }
+    }
+    func resumeEditing() { controllers.allObjects.forEach { $0.resumeEditing() } }
+    func shutdown() {
+        guard !stopped else { return }; stopped = true
+        if let observer = observer { NotificationCenter.default.removeObserver(observer) }; observer = nil
+        controllers.allObjects.forEach { $0.shutdown() }; (idle + Array(leased)).forEach { $0.shutdown() }
+        idle.removeAll(); leased.removeAll(); writers.removeAll(); server?.stop(); server = nil
+        let callbacks = waiting; waiting.removeAll(); callbacks.forEach { $0(nil, fileUIError(2)) }
+    }
+    deinit { if let observer = observer { NotificationCenter.default.removeObserver(observer) }; server?.stop() }
+}
+private final class WeakFileView { weak var value: iTermFileViewController?; init(_ value: iTermFileViewController) { self.value = value } }

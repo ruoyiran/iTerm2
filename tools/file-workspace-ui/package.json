@@ -1,0 +1,28 @@
+{
+  "name": "iterm2-file-workspace-ui",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node --test test/*.test.mjs",
+    "verify": "node verify-resources.mjs"
+  },
+  "dependencies": {
+    "monaco-editor": "0.55.1"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2",
+    "lucide-static": "0.577.0",
+    "geist": "1.9.2",
+    "happy-dom": "21.0.4"
+  },
+  "overrides": {
+    "monaco-editor": {
+      "dompurify": "3.4.17"
+    }
+  }
+}

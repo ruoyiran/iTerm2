@@ -1,0 +1,4 @@
+Orca file explorer presentation and Monaco patch adapted from stablyai/orca (MIT, Lovecast Inc.), reference commit 729f757b592244176420a86114c1ea23911eeeba, version 1.4.214. No Electron or application store code included.
+Monaco 0.55.1; exact Orca patch SHA256 53b71f7d8a7c00b76ffdb73ce83d18e31692f193f5fafa6a390e48f5b3fdd636; DOMPurify overridden to 3.4.17.
+Lucide SVG subset from lucide-static 0.577.0. Geist font and matching OFL from geist 1.9.2 npm package, dist/fonts/geist-sans/Geist-Variable.woff2. Font SHA256 3626eba547294501c8a4d662c7d9ea3b49734409a4c5a1ccf12fa86429b1687e.
+Package tarball integrity values and all transitive versions are recorded in tools/file-workspace-ui/package-lock.json. Resources are bundled for offline operation.

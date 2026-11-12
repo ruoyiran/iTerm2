@@ -4875,6 +4875,16 @@
 		829C84100EAD015BD4E53AF6 /* iTermFileDraftStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 702D314E6745C62CB9C5230F /* iTermFileDraftStore.swift */; };
 		8A03960F9CA08730C73D6116 /* iTermFileDocumentStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04337DD9E2BF396F368A9949 /* iTermFileDocumentStore.swift */; };
 		CEE26DA06146C45B783BD1C0 /* iTermFileDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0695944D6EC2D2601B258A06 /* iTermFileDocument.swift */; };
+		1E9A5423CBA9533F522A3516 /* iTermFileWorkspaceWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 66828093492096EFD71C3852 /* iTermFileWorkspaceWebView.swift */; };
+		2EE7BB60A04420265401995E /* iTermFileBrowserViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F37A3723BB80F544BC970B9 /* iTermFileBrowserViewController.swift */; };
+		65F3A7148EA4F05850B58421 /* iTermFileUIAssetServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A457B682A6B14DD61A8D0C1C /* iTermFileUIAssetServer.swift */; };
+		8254838FF3C61D47DE416A6D /* iTermFileWorkspaceUIRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE6115B34BA65B57796D14CB /* iTermFileWorkspaceUIRuntime.swift */; };
+		8AE6EE71B8B447F89A6923F3 /* iTermFileUIEditSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51C9307797E8052A17D6A67F /* iTermFileUIEditSession.swift */; };
+		C1EE05B8ECC0E39DD9B8A237 /* iTermFileUIMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2EF9654D52570E3C5A26B559 /* iTermFileUIMessage.swift */; };
+		CAEAD495A64A60507F1503FE /* iTermFileUIContracts.swift in Sources */ = {isa = PBXBuildFile; fileRef = C758F318461463631E07A4DD /* iTermFileUIContracts.swift */; };
+		E1477B0B8DB5E8D02778B224 /* iTermFileUIStrings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0755EFDC09B660086D6003BD /* iTermFileUIStrings.swift */; };
+		EC5FF890F669A5E2DEA4BF64 /* iTermFileViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 926B4C44D26C47A924C384C6 /* iTermFileViewController.swift */; };
+		F416B930AF9BB58AAD9E6072 /* iTermFilePreviewViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 781D08D8C1A949EC547202A8 /* iTermFilePreviewViewController.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -9233,6 +9243,16 @@
 		04337DD9E2BF396F368A9949 /* iTermFileDocumentStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = iTermFileDocumentStore.swift; sourceTree = "<group>"; };
 		0695944D6EC2D2601B258A06 /* iTermFileDocument.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = iTermFileDocument.swift; sourceTree = "<group>"; };
 		702D314E6745C62CB9C5230F /* iTermFileDraftStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = iTermFileDraftStore.swift; sourceTree = "<group>"; };
+		0755EFDC09B660086D6003BD /* iTermFileUIStrings.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = iTermFileUIStrings.swift; sourceTree = "<group>"; };
+		0F37A3723BB80F544BC970B9 /* iTermFileBrowserViewController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = iTermFileBrowserViewController.swift; sourceTree = "<group>"; };
+		2EF9654D52570E3C5A26B559 /* iTermFileUIMessage.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = iTermFileUIMessage.swift; sourceTree = "<group>"; };
+		51C9307797E8052A17D6A67F /* iTermFileUIEditSession.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = iTermFileUIEditSession.swift; sourceTree = "<group>"; };
+		66828093492096EFD71C3852 /* iTermFileWorkspaceWebView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = iTermFileWorkspaceWebView.swift; sourceTree = "<group>"; };
+		781D08D8C1A949EC547202A8 /* iTermFilePreviewViewController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = iTermFilePreviewViewController.swift; sourceTree = "<group>"; };
+		926B4C44D26C47A924C384C6 /* iTermFileViewController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = iTermFileViewController.swift; sourceTree = "<group>"; };
+		A457B682A6B14DD61A8D0C1C /* iTermFileUIAssetServer.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = iTermFileUIAssetServer.swift; sourceTree = "<group>"; };
+		BE6115B34BA65B57796D14CB /* iTermFileWorkspaceUIRuntime.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = iTermFileWorkspaceUIRuntime.swift; sourceTree = "<group>"; };
+		C758F318461463631E07A4DD /* iTermFileUIContracts.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = iTermFileUIContracts.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -15440,9 +15460,28 @@
 				702D314E6745C62CB9C5230F /* iTermFileDraftStore.swift */,
 				9BE205FD000DB64D69331D05 /* iTermFileBrowserService.swift */,
 				ABDEA0B0CD4E66B1972D2350 /* iTermFileBrowserFileSystem.swift */,
+				EC258C56D5A525815C28C80C /* UI */,
 			);
 			name = FileWorkspace;
 			path = FileWorkspace;
+			sourceTree = "<group>";
+		};
+		EC258C56D5A525815C28C80C /* UI */ = {
+			isa = PBXGroup;
+			children = (
+				0F37A3723BB80F544BC970B9 /* iTermFileBrowserViewController.swift */,
+				781D08D8C1A949EC547202A8 /* iTermFilePreviewViewController.swift */,
+				A457B682A6B14DD61A8D0C1C /* iTermFileUIAssetServer.swift */,
+				C758F318461463631E07A4DD /* iTermFileUIContracts.swift */,
+				51C9307797E8052A17D6A67F /* iTermFileUIEditSession.swift */,
+				2EF9654D52570E3C5A26B559 /* iTermFileUIMessage.swift */,
+				0755EFDC09B660086D6003BD /* iTermFileUIStrings.swift */,
+				926B4C44D26C47A924C384C6 /* iTermFileViewController.swift */,
+				BE6115B34BA65B57796D14CB /* iTermFileWorkspaceUIRuntime.swift */,
+				66828093492096EFD71C3852 /* iTermFileWorkspaceWebView.swift */,
+			);
+			name = UI;
+			path = UI;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -16989,6 +17028,7 @@
 				A69FF3DC2E14A06D00AFF7A8 /* Make symlink to iTerm */,
 				A6C1FE6E284C1BF200EA8A3B /* Embed Foundation Extensions */,
 				A64BD0CD295FAA67001F3F7E /* CopyFiles */,
+				90E37E291AE6574A703EBC7F /* Copy File Workspace UI */,
 			);
 			buildRules = (
 			);
@@ -18743,6 +18783,26 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "#!/bin/bash\nset -euo pipefail\n\nversion_file=\"${SRCROOT}/last-xcode-version\"\ncurrent=\"$(xcodebuild -version)\"\nlast=\"$(< \"$version_file\")\"\nif [[ \"$current\" == \"$last\" ]]; then\n    touch \"${DERIVED_FILE_DIR}/xcode-version-check.stamp\"\n    exit 0\nfi\n\n# versions differ → block\necho 'You must run `make paranoid-deps` before you can build because your xcode version is out of sync with the prebuild dependencies in the repo'\necho \"Your version is:\"\nprintf '%s\\n' \"$current\"\necho \"The last-built-for version is:\"\nprintf '%s\\n' \"$last\"\nexit 1\n";
+		};
+		90E37E291AE6574A703EBC7F /* Copy File Workspace UI */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+				"$(SRCROOT)/tools/file-workspace-ui/inputs.xcfilelist",
+			);
+			inputPaths = (
+			);
+			name = "Copy File Workspace UI";
+			outputFileListPaths = (
+				"$(SRCROOT)/tools/file-workspace-ui/outputs.xcfilelist",
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "exec /usr/bin/env python3 \"${SRCROOT}/tools/copy_file_workspace_ui.py\"";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -20661,6 +20721,16 @@
 				829C84100EAD015BD4E53AF6 /* iTermFileDraftStore.swift in Sources */,
 				90B91022EC57FD944CE3BDAC /* iTermFileBrowserService.swift in Sources */,
 				F79C34352196DB40C21A8D7A /* iTermFileBrowserFileSystem.swift in Sources */,
+				2EE7BB60A04420265401995E /* iTermFileBrowserViewController.swift in Sources */,
+				F416B930AF9BB58AAD9E6072 /* iTermFilePreviewViewController.swift in Sources */,
+				65F3A7148EA4F05850B58421 /* iTermFileUIAssetServer.swift in Sources */,
+				CAEAD495A64A60507F1503FE /* iTermFileUIContracts.swift in Sources */,
+				8AE6EE71B8B447F89A6923F3 /* iTermFileUIEditSession.swift in Sources */,
+				C1EE05B8ECC0E39DD9B8A237 /* iTermFileUIMessage.swift in Sources */,
+				E1477B0B8DB5E8D02778B224 /* iTermFileUIStrings.swift in Sources */,
+				EC5FF890F669A5E2DEA4BF64 /* iTermFileViewController.swift in Sources */,
+				8254838FF3C61D47DE416A6D /* iTermFileWorkspaceUIRuntime.swift in Sources */,
+				1E9A5423CBA9533F522A3516 /* iTermFileWorkspaceWebView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

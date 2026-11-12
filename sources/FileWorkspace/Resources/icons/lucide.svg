@@ -1,0 +1,139 @@
+<svg xmlns="http://www.w3.org/2000/svg">
+<symbol id="files" viewBox="0 0 24 24">
+  <path d="M15 2h-4a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V8" />
+  <path d="M16.706 2.706A2.4 2.4 0 0 0 15 2v5a1 1 0 0 0 1 1h5a2.4 2.4 0 0 0-.706-1.706z" />
+  <path d="M5 7a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h8a2 2 0 0 0 1.732-1" />
+</symbol>
+<symbol id="list-collapse" viewBox="0 0 24 24">
+  <path d="M10 5h11" />
+  <path d="M10 12h11" />
+  <path d="M10 19h11" />
+  <path d="m3 10 3-3-3-3" />
+  <path d="m3 20 3-3-3-3" />
+</symbol>
+<symbol id="refresh-cw" viewBox="0 0 24 24">
+  <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
+  <path d="M21 3v5h-5" />
+  <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
+  <path d="M8 16H3v5" />
+</symbol>
+<symbol id="ellipsis" viewBox="0 0 24 24">
+  <circle cx="12" cy="12" r="1" />
+  <circle cx="19" cy="12" r="1" />
+  <circle cx="5" cy="12" r="1" />
+</symbol>
+<symbol id="list-filter" viewBox="0 0 24 24">
+  <path d="M2 5h20" />
+  <path d="M6 12h12" />
+  <path d="M9 19h6" />
+</symbol>
+<symbol id="search" viewBox="0 0 24 24">
+  <path d="m21 21-4.34-4.34" />
+  <circle cx="11" cy="11" r="8" />
+</symbol>
+<symbol id="x" viewBox="0 0 24 24">
+  <path d="M18 6 6 18" />
+  <path d="m6 6 12 12" />
+</symbol>
+<symbol id="case-sensitive" viewBox="0 0 24 24">
+  <path d="m2 16 4.039-9.69a.5.5 0 0 1 .923 0L11 16" />
+  <path d="M22 9v7" />
+  <path d="M3.304 13h6.392" />
+  <circle cx="18.5" cy="12.5" r="3.5" />
+</symbol>
+<symbol id="whole-word" viewBox="0 0 24 24">
+  <circle cx="7" cy="12" r="3" />
+  <path d="M10 9v6" />
+  <circle cx="17" cy="12" r="3" />
+  <path d="M14 7v8" />
+  <path d="M22 17v1c0 .5-.5 1-1 1H3c-.5 0-1-.5-1-1v-1" />
+</symbol>
+<symbol id="regex" viewBox="0 0 24 24">
+  <path d="M17 3v10" />
+  <path d="m12.67 5.5 8.66 5" />
+  <path d="m12.67 10.5 8.66-5" />
+  <path d="M9 17a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v2a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2v-2z" />
+</symbol>
+<symbol id="chevron-right" viewBox="0 0 24 24">
+  <path d="m9 18 6-6-6-6" />
+</symbol>
+<symbol id="chevron-down" viewBox="0 0 24 24">
+  <path d="m6 9 6 6 6-6" />
+</symbol>
+<symbol id="file" viewBox="0 0 24 24">
+  <path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z" />
+  <path d="M14 2v5a1 1 0 0 0 1 1h5" />
+</symbol>
+<symbol id="file-text" viewBox="0 0 24 24">
+  <path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z" />
+  <path d="M14 2v5a1 1 0 0 0 1 1h5" />
+  <path d="M10 9H8" />
+  <path d="M16 13H8" />
+  <path d="M16 17H8" />
+</symbol>
+<symbol id="folder" viewBox="0 0 24 24">
+  <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" />
+</symbol>
+<symbol id="link" viewBox="0 0 24 24">
+  <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+  <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+</symbol>
+<symbol id="file-plus" viewBox="0 0 24 24">
+  <path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z" />
+  <path d="M14 2v5a1 1 0 0 0 1 1h5" />
+  <path d="M9 15h6" />
+  <path d="M12 18v-6" />
+</symbol>
+<symbol id="folder-plus" viewBox="0 0 24 24">
+  <path d="M12 10v6" />
+  <path d="M9 13h6" />
+  <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" />
+</symbol>
+<symbol id="copy" viewBox="0 0 24 24">
+  <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
+  <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
+</symbol>
+<symbol id="external-link" viewBox="0 0 24 24">
+  <path d="M15 3h6v6" />
+  <path d="M10 14 21 3" />
+  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+</symbol>
+<symbol id="pencil" viewBox="0 0 24 24">
+  <path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z" />
+  <path d="m15 5 4 4" />
+</symbol>
+<symbol id="trash-2" viewBox="0 0 24 24">
+  <path d="M10 11v6" />
+  <path d="M14 11v6" />
+  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+  <path d="M3 6h18" />
+  <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+</symbol>
+<symbol id="save" viewBox="0 0 24 24">
+  <path d="M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" />
+  <path d="M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7" />
+  <path d="M7 3v4a1 1 0 0 0 1 1h7" />
+</symbol>
+<symbol id="save-all" viewBox="0 0 24 24">
+  <path d="M10 2v3a1 1 0 0 0 1 1h5" />
+  <path d="M18 18v-6a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v6" />
+  <path d="M18 22H4a2 2 0 0 1-2-2V6" />
+  <path d="M8 18a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9.172a2 2 0 0 1 1.414.586l2.828 2.828A2 2 0 0 1 22 6.828V16a2 2 0 0 1-2.01 2z" />
+</symbol>
+<symbol id="undo-2" viewBox="0 0 24 24">
+  <path d="M9 14 4 9l5-5" />
+  <path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11" />
+</symbol>
+<symbol id="redo-2" viewBox="0 0 24 24">
+  <path d="m15 14 5-5-5-5" />
+  <path d="M20 9H9.5A5.5 5.5 0 0 0 4 14.5A5.5 5.5 0 0 0 9.5 20H13" />
+</symbol>
+<symbol id="eye" viewBox="0 0 24 24">
+  <path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0" />
+  <circle cx="12" cy="12" r="3" />
+</symbol>
+<symbol id="pin" viewBox="0 0 24 24">
+  <path d="M12 17v5" />
+  <path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z" />
+</symbol>
+</svg>
