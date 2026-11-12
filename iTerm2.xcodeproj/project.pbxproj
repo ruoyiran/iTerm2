@@ -4870,6 +4870,9 @@
 		FE12FC00AADEA00D04DE5D07 /* WorkgroupIntrospection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DD8FF2B2AC39B0DDA9E1724 /* WorkgroupIntrospection.swift */; };
 		FF3B684ED38B492D80D4A595 /* TmuxDroppedOutputScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 415BDAAF720E15F25603BBC9 /* TmuxDroppedOutputScanner.swift */; };
 		FF762198E91EE94A792CFEC8 /* ai-models.json in Resources */ = {isa = PBXBuildFile; fileRef = DF18C01510605DB0C639038F /* ai-models.json */; };
+		829C84100EAD015BD4E53AF6 /* iTermFileDraftStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 702D314E6745C62CB9C5230F /* iTermFileDraftStore.swift */; };
+		8A03960F9CA08730C73D6116 /* iTermFileDocumentStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04337DD9E2BF396F368A9949 /* iTermFileDocumentStore.swift */; };
+		CEE26DA06146C45B783BD1C0 /* iTermFileDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0695944D6EC2D2601B258A06 /* iTermFileDocument.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -9223,6 +9226,9 @@
 		FEB3C0ECCFDFDE46188EB219 /* SetProfileBooleanTrigger.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SetProfileBooleanTrigger.swift; sourceTree = "<group>"; };
 		FECE5E04FE9D0FCDF073F6F5 /* companion-browser-editing.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = "companion-browser-editing.js"; sourceTree = "<group>"; };
 		FFC0CAAEB95C4E4BB2939E6F /* mul */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; name = mul; path = mul.lproj/AboutWindow.xcstrings; sourceTree = "<group>"; };
+		04337DD9E2BF396F368A9949 /* iTermFileDocumentStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = iTermFileDocumentStore.swift; sourceTree = "<group>"; };
+		0695944D6EC2D2601B258A06 /* iTermFileDocument.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = iTermFileDocument.swift; sourceTree = "<group>"; };
+		702D314E6745C62CB9C5230F /* iTermFileDraftStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = iTermFileDraftStore.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -9582,6 +9588,7 @@
 				E1544F152E3FDAA029F3DC53 /* TabGroups */,
 				9E8EE77086E04B6E9BACAF1D /* Localizable.xcstrings */,
 				E85C9259B4BF4E83BBC22D64 /* InfoPlist.xcstrings */,
+				B16999917FF591646F3888DC /* FileWorkspace */,
 			);
 			name = Classes;
 			path = sources/;
@@ -15421,6 +15428,17 @@
 			path = CGSInternal;
 			sourceTree = "<group>";
 		};
+		B16999917FF591646F3888DC /* FileWorkspace */ = {
+			isa = PBXGroup;
+			children = (
+				0695944D6EC2D2601B258A06 /* iTermFileDocument.swift */,
+				04337DD9E2BF396F368A9949 /* iTermFileDocumentStore.swift */,
+				702D314E6745C62CB9C5230F /* iTermFileDraftStore.swift */,
+			);
+			name = FileWorkspace;
+			path = FileWorkspace;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXHeadersBuildPhase section */
@@ -20632,6 +20650,9 @@
 				26A182B539D3130D9CAB8E8B /* iTermProjectSidebarTree.swift in Sources */,
 				9BB0A5D7EBD9755A76861ED7 /* iTermProjectSessionContext.swift in Sources */,
 				6B8D707F5E29B12661218411 /* iTermProjectTerminalMenu.swift in Sources */,
+				CEE26DA06146C45B783BD1C0 /* iTermFileDocument.swift in Sources */,
+				8A03960F9CA08730C73D6116 /* iTermFileDocumentStore.swift in Sources */,
+				829C84100EAD015BD4E53AF6 /* iTermFileDraftStore.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
