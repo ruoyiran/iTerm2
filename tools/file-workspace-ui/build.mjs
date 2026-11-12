@@ -19,9 +19,6 @@ const inputs=[path.join(source,'index.html'),...await files(path.join(source,'sr
 for(const filename of inputs.sort()){manifest.inputs.push({path:path.relative(repo,filename),sha256:hash(await readFile(filename))});}
 await writeFile(path.join(staging,'manifest.json'),JSON.stringify(manifest,null,2)+'\n');
 await rm(target,{recursive:true,force:true});await rename(staging,target);
-const inputLines=['$(SRCROOT)/tools/copy_file_workspace_ui.py','$(SRCROOT)/sources/FileWorkspace/Resources/FileWorkspaceUI/manifest.json',...manifest.inputs.map(x=>'$(SRCROOT)/'+x.path),...manifest.files.map(x=>'$(SRCROOT)/sources/FileWorkspace/Resources/FileWorkspaceUI/'+x.path)];
-const outputRoot='$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/FileWorkspaceUI';
-const outputLines=[outputRoot,...['manifest.json',...manifest.files.map(x=>x.path)].map(x=>outputRoot+'/'+x)];
+const inputLines=['$(SRCROOT)/tools/verify_file_workspace_ui.py','$(SRCROOT)/sources/FileWorkspace/Resources/FileWorkspaceUI/manifest.json',...manifest.inputs.map(x=>'$(SRCROOT)/'+x.path),...manifest.files.map(x=>'$(SRCROOT)/sources/FileWorkspace/Resources/FileWorkspaceUI/'+x.path)];
 await writeFile(path.join(tooling,'inputs.xcfilelist'),inputLines.join('\n')+'\n');
-await writeFile(path.join(tooling,'outputs.xcfilelist'),outputLines.join('\n')+'\n');
 console.log(`Packaged ${manifest.files.length} offline file UI assets.`);

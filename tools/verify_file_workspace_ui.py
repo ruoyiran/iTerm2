@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""Verify and copy the offline file UI; never install packages during Xcode builds."""
+"""Verify offline UI inputs; native Copy Bundle Resources owns all bundle writes."""
 import hashlib
 import json
 import os
 from pathlib import Path
-import shutil
 import sys
 
 REPO = Path(__file__).resolve().parent.parent
@@ -48,14 +47,11 @@ except (OSError, ValueError, KeyError) as error:
     sys.exit(1)
 
 try:
-    if '--verify' not in sys.argv:
-        destination = Path(os.environ['TARGET_BUILD_DIR']) / os.environ['UNLOCALIZED_RESOURCES_FOLDER_PATH'] / 'FileWorkspaceUI'
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        if destination.exists():
-            shutil.rmtree(destination)
-        shutil.copytree(SOURCE, destination)
+    if '--stamp' in sys.argv:
+        index = sys.argv.index('--stamp')
+        stamp = Path(sys.argv[index + 1])
+        stamp.write_text(digest(SOURCE / 'manifest.json') + '\n')
     print(f"Verified {len(manifest['files'])} file UI resources")
-except (OSError, ValueError, KeyError) as error:
-    print('error: File workspace UI copy: ' + str(error), file=sys.stderr)
-    print('The Copy File Workspace UI phase must declare its owned FileWorkspaceUI output directory, including directory cleanup.', file=sys.stderr)
+except (OSError, ValueError, IndexError) as error:
+    print('error: File workspace UI verification stamp: ' + str(error), file=sys.stderr)
     sys.exit(1)

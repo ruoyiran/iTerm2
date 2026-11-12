@@ -66,3 +66,24 @@ test('focusQuery selects and reveals both query modes before focusing',()=>{
   f.explorer.receive('focusQuery',{contents:false});assert.equal(document.activeElement.dataset.query,'names');assert.equal(document.activeElement.parentElement.hidden,false);
  } finally {f.close();}
 });
+test('result group activation retains focus for the next navigation key',()=>{
+ const f=fixture();try {
+  f.root.querySelector('[data-mode="contents"]').click();const query=f.root.querySelector('[data-query="contents"]');query.value='match';query.dispatchEvent(new f.w.KeyboardEvent('keydown',{key:'Enter',bubbles:true}));
+  const search=f.sent.findLast(x=>x.type==='searchContents');f.explorer.receive('search',{token:'scope',requestIdentifier:search.id,matches:['a','b'].map(name=>({path:'/r/'+name,relativePath:name,lines:[{lineNumber:1,snippet:name,snippetColumn:0,ranges:[{location:0,length:1}]}]})),isComplete:true});
+  f.root.querySelector('.result-group').focus();document.activeElement.dispatchEvent(new f.w.KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true}));
+  assert.equal(document.activeElement.isConnected,true);assert.equal(document.activeElement.classList.contains('result-group'),true);assert.equal(document.activeElement.textContent,'a');
+  document.activeElement.dispatchEvent(new f.w.KeyboardEvent('keydown',{key:'ArrowDown',bubbles:true,cancelable:true}));assert.equal(document.activeElement.textContent,'b');
+  document.activeElement.dispatchEvent(new f.w.KeyboardEvent('keydown',{key:' ',bubbles:true,cancelable:true}));assert.equal(document.activeElement.textContent,'b');
+ }finally{f.close();}
+});
+test('a real scroll rerender preserves the PageDown target for subsequent keys',()=>{
+ const f=fixture();try {
+  f.root.querySelector('[data-mode="contents"]').click();const query=f.root.querySelector('[data-query="contents"]');query.value='match';query.dispatchEvent(new f.w.KeyboardEvent('keydown',{key:'Enter',bubbles:true}));
+  const search=f.sent.findLast(x=>x.type==='searchContents');f.explorer.receive('search',{token:'scope',requestIdentifier:search.id,matches:[{path:'/r/b',relativePath:'b',lines:Array.from({length:100},(_,index)=>({lineNumber:index+1,snippet:'match',snippetColumn:0,ranges:[{location:0,length:5}]}))}],isComplete:true});
+  f.root.querySelector('.result-match').focus();document.activeElement.dispatchEvent(new f.w.KeyboardEvent('keydown',{key:'PageDown',bubbles:true,cancelable:true}));
+  assert.ok(f.explorer.viewport.scrollTop>0);f.explorer.viewport.dispatchEvent(new f.w.Event('scroll'));
+  assert.equal(document.activeElement.isConnected,true);assert.equal(document.activeElement.classList.contains('result-match'),true);assert.equal(document.activeElement.querySelector('.line-number').textContent,'11');
+  document.activeElement.dispatchEvent(new f.w.KeyboardEvent('keydown',{key:'ArrowDown',bubbles:true,cancelable:true}));document.activeElement.dispatchEvent(new f.w.KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true}));
+  const opened=f.sent.findLast(x=>x.type==='openFile');assert.equal(opened.payload.path,'/r/b');assert.equal(opened.payload.lineNumber,12);
+ }finally{f.close();}
+});

@@ -5,7 +5,7 @@ export function button(label, action, symbol) { const b=element('button','icon-b
 const parentPath=path=>path.slice(0,path.lastIndexOf('/'))||'/';
 export class Explorer {
   constructor(root, send, translate) {
-    this.root=root;this.send=send;this.t=translate;this.state=new TreeState();this.mode='names';this.collapsed=new Set();this.focused=null;this.rows=[];this.composing=false;this.nameTimer=null;this.scope=null;
+    this.root=root;this.send=send;this.t=translate;this.state=new TreeState();this.mode='names';this.collapsed=new Set();this.focused=null;this.resultFocus=null;this.rows=[];this.composing=false;this.nameTimer=null;this.scope=null;
     this.build();this.focusHandler=()=>this.send('focus',{});this.root.addEventListener('focusin',this.focusHandler);
   }
   build() {
@@ -45,7 +45,7 @@ export class Explorer {
   search(mode) {
     if(!this.scope)return;this.cancelSearch();const value=(mode==='names'?this.names:this.contents).value;
     if(!value){this.state.nameResults=null;this.state.matches.clear();this.render();return;}
-    const id=crypto.randomUUID();this.state.startSearch(id,mode==='names');
+    const id=crypto.randomUUID();this.resultFocus=null;this.state.startSearch(id,mode==='names');
     const globs=input=>input.value.split(',').map(s=>s.trim()).filter(Boolean);
     this.send(mode==='names'?'searchNames':'searchContents',mode==='names'?{query:value}:{query:{text:value,...this.flags,includeGlobs:globs(this.include),excludeGlobs:globs(this.exclude)}},id);this.render();
   }
@@ -61,7 +61,7 @@ export class Explorer {
   toggle(row) {if(!row.isExpandable)return;this.state.toggle(row.path);if(this.state.expanded.has(row.path)&&!this.state.directories.has(row.path))this.list(row.path);this.render();}
   open(row,activation='preview',placement='tab',lineNumber=0,utf16Column=0) { if(row.isDirectory){this.toggle(row);return;}this.send('openFile',{path:row.path,activation,placement,lineNumber,utf16Column}); }
   receive(type,payload) {
-    if(type==='context') {this.cancelSearch();this.scope=payload.rootDirectory?payload:null;this.state.context(this.scope);this.title.textContent=payload.title||this.t('selectProject');this.names.value='';this.contents.value='';if(this.scope)this.list(this.scope.rootDirectory);}
+    if(type==='context') {this.cancelSearch();this.resultFocus=null;this.scope=payload.rootDirectory?payload:null;this.state.context(this.scope);this.title.textContent=payload.title||this.t('selectProject');this.names.value='';this.contents.value='';if(this.scope)this.list(this.scope.rootDirectory);}
     if(type==='listing'&&this.state.listing(payload.token,payload.requestIdentifier,payload.directoryPath,payload.entries,payload.error)&&!payload.error)this.reloadExpanded(payload.entries);
     if(type==='search')this.state.search(payload.token,payload.requestIdentifier,payload);
     if(type==='complete'&&payload.error)this.state.error=payload.error;
@@ -73,7 +73,7 @@ export class Explorer {
   render() {
     this.rows=[];let height=0;
     if(this.mode==='contents') {
-      for(const group of this.state.matches.values()) {this.rows.push({kind:'group',group,top:height,height:28});height+=28;if(!this.collapsed.has(group.path))for(const line of group.lines){this.rows.push({kind:'match',group,line,top:height,height:22});height+=22;}}
+      for(const group of this.state.matches.values()) {this.rows.push({kind:'group',key:JSON.stringify(['group',group.path]),group,top:height,height:28});height+=28;if(!this.collapsed.has(group.path))for(const line of group.lines){this.rows.push({kind:'match',key:JSON.stringify(['match',group.path,line.lineNumber,line.ranges[0]?.location??0]),group,line,top:height,height:22});height+=22;}}
     } else for(const row of this.state.rows()){this.rows.push({kind:'entry',row,top:height,height:26});height+=26;}
     this.canvas.style.height=`${height}px`;
     this.summary.hidden=this.mode!=='contents'||!this.state.matches.size;const matches=[...this.state.matches.values()].reduce((sum,group)=>sum+group.lines.reduce((count,line)=>count+line.ranges.length,0),0);this.summary.replaceChildren(element('span','',this.t('results')),element('strong','',new Intl.NumberFormat().format(matches)),element('span','',this.t('files')),element('strong','',new Intl.NumberFormat().format(this.state.matches.size)));
@@ -81,16 +81,22 @@ export class Explorer {
     if(failedDirectory){const retry=button(this.t('retry'),()=>{s.directories.delete(failedDirectory[0]);this.list(failedDirectory[0]);this.render();});retry.dataset.retry='true';this.status.append(retry);}this.status.hidden=!this.status.textContent;this.renderRows();
   }
   renderRows() {
+    const restoreFocus=this.mode==='contents'&&(this.canvas.contains(document.activeElement)||document.activeElement===this.viewport);
     const min=this.viewport.scrollTop-520,max=this.viewport.scrollTop+(this.viewport.clientHeight||600)+520;
     const children=[];
     for(const [index,item] of this.rows.entries()) {if(item.top+item.height<min||item.top>max)continue;let node;
       if(item.kind==='entry')node=this.entry(item.row);
       else if(item.kind==='group') {node=button(item.group.relativePath,()=>{if(this.collapsed.has(item.group.path))this.collapsed.delete(item.group.path);else this.collapsed.add(item.group.path);this.render();});node.className='result-group';node.prepend(icon(this.collapsed.has(item.group.path)?'chevron-right':'chevron-down'));}
       else {node=element('button','result-match');node.type='button';node.append(element('span','line-number',String(item.line.lineNumber)));for(const part of snippetParts(item.line.snippet,item.line.ranges,item.line.snippetColumn))node.append(element(part.match?'mark':'span','',part.text));node.addEventListener('click',()=>this.open({path:item.group.path},'preview','tab',item.line.lineNumber,(item.line.ranges[0]?.location??0)+1));node.addEventListener('dblclick',()=>this.open({path:item.group.path},'pinned','tab',item.line.lineNumber,(item.line.ranges[0]?.location??0)+1));}
-      if(item.kind!=='entry')node.dataset.resultIndex=String(index);
+      if(item.kind!=='entry'){node.dataset.resultIndex=String(index);node.dataset.resultKey=item.key;node.addEventListener('focus',()=>{this.resultFocus={key:item.key,path:item.group.path};});}
       node.style.top=`${item.top}px`;node.style.height=`${item.height}px`;children.push(node);
     }
     this.canvas.replaceChildren(...children);
+    if(restoreFocus&&this.resultFocus){
+      let key=this.resultFocus.key;if(!this.rows.some(row=>row.key===key))key=JSON.stringify(['group',this.resultFocus.path]);
+      const target=[...this.canvas.querySelectorAll('[data-result-key]')].find(node=>node.dataset.resultKey===key);
+      (target??this.viewport).focus({preventScroll:true});
+    }
   }
   entry(row) {
     const node=element('button','tree-row');node.type='button';node.dataset.path=row.path;node.setAttribute('role','treeitem');node.setAttribute('aria-level',String(row.depth+1));node.setAttribute('aria-selected',String(this.state.selected.has(row.path)));if(row.isExpandable)node.setAttribute('aria-expanded',String(this.state.expanded.has(row.path)));node.style.paddingLeft=`${row.depth*16+8}px`;
@@ -114,8 +120,8 @@ export class Explorer {
     const target=this.state.navigate(event.key,current);if(!target)return;event.preventDefault();if(target.toggle){this.toggle(row);return;}this.focused=target.path;this.state.select(target.path,event.shiftKey?'range':'replace');this.render();const index=this.state.rows().findIndex(r=>r.path===target.path);this.viewport.scrollTop=Math.max(0,index*26-100);
   }
   resultKey(event) {
-    const target=event.target.closest('[data-result-index]');
-    const index=target?Number(target.dataset.resultIndex):-1;const item=this.rows[index];
+    const target=event.target.closest('[data-result-key]');
+    const key=target?.dataset.resultKey??this.resultFocus?.key;const index=this.rows.findIndex(row=>row.key===key);const item=this.rows[index];
     if(event.key==='Delete'||event.key==='Backspace'||((event.metaKey||event.ctrlKey)&&event.key.toLowerCase()==='z')){event.preventDefault();return;}
     if(!item)return;
     if((event.metaKey||event.ctrlKey)&&event.key.toLowerCase()==='c'){event.preventDefault();this.send(event.shiftKey?'copyRelativePaths':'copyAbsolutePaths',{paths:[item.group.path]});return;}

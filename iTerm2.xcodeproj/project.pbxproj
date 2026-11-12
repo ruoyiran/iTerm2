@@ -4885,6 +4885,7 @@
 		E1477B0B8DB5E8D02778B224 /* iTermFileUIStrings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0755EFDC09B660086D6003BD /* iTermFileUIStrings.swift */; };
 		EC5FF890F669A5E2DEA4BF64 /* iTermFileViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 926B4C44D26C47A924C384C6 /* iTermFileViewController.swift */; };
 		F416B930AF9BB58AAD9E6072 /* iTermFilePreviewViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 781D08D8C1A949EC547202A8 /* iTermFilePreviewViewController.swift */; };
+		F5323A214C7408AEE4705371 /* FileWorkspaceUI in Resources */ = {isa = PBXBuildFile; fileRef = C6D2D9F116576C5FE74263C5 /* FileWorkspaceUI */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -9253,6 +9254,7 @@
 		A457B682A6B14DD61A8D0C1C /* iTermFileUIAssetServer.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = iTermFileUIAssetServer.swift; sourceTree = "<group>"; };
 		BE6115B34BA65B57796D14CB /* iTermFileWorkspaceUIRuntime.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = iTermFileWorkspaceUIRuntime.swift; sourceTree = "<group>"; };
 		C758F318461463631E07A4DD /* iTermFileUIContracts.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = iTermFileUIContracts.swift; sourceTree = "<group>"; };
+		C6D2D9F116576C5FE74263C5 /* FileWorkspaceUI */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = folder; name = FileWorkspaceUI; path = Resources/FileWorkspaceUI; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -15461,6 +15463,7 @@
 				9BE205FD000DB64D69331D05 /* iTermFileBrowserService.swift */,
 				ABDEA0B0CD4E66B1972D2350 /* iTermFileBrowserFileSystem.swift */,
 				EC258C56D5A525815C28C80C /* UI */,
+				C6D2D9F116576C5FE74263C5 /* FileWorkspaceUI */,
 			);
 			name = FileWorkspace;
 			path = FileWorkspace;
@@ -17017,6 +17020,7 @@
 			buildPhases = (
 				93BD20450FE16DD50059656D /* Rewrite version number in plist file */,
 				874206480564169600CFC3F1 /* Headers */,
+				90E37E291AE6574A703EBC7F /* Verify File Workspace UI */,
 				8742064A0564169600CFC3F1 /* Resources */,
 				8742064E0564169600CFC3F1 /* Sources */,
 				874206510564169600CFC3F1 /* Frameworks */,
@@ -17028,7 +17032,6 @@
 				A69FF3DC2E14A06D00AFF7A8 /* Make symlink to iTerm */,
 				A6C1FE6E284C1BF200EA8A3B /* Embed Foundation Extensions */,
 				A64BD0CD295FAA67001F3F7E /* CopyFiles */,
-				90E37E291AE6574A703EBC7F /* Copy File Workspace UI */,
 			);
 			buildRules = (
 			);
@@ -18632,6 +18635,7 @@
 				1CFBC8DDC0F47C682E8BA689 /* it2.py in Resources */,
 				72386C923E6555FC1BEE219E /* it2_git_state.py in Resources */,
 				9EC3C7C85EB065688CB08F0C /* it2-remote in Resources */,
+				F5323A214C7408AEE4705371 /* FileWorkspaceUI in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -18784,8 +18788,9 @@
 			shellPath = /bin/sh;
 			shellScript = "#!/bin/bash\nset -euo pipefail\n\nversion_file=\"${SRCROOT}/last-xcode-version\"\ncurrent=\"$(xcodebuild -version)\"\nlast=\"$(< \"$version_file\")\"\nif [[ \"$current\" == \"$last\" ]]; then\n    touch \"${DERIVED_FILE_DIR}/xcode-version-check.stamp\"\n    exit 0\nfi\n\n# versions differ → block\necho 'You must run `make paranoid-deps` before you can build because your xcode version is out of sync with the prebuild dependencies in the repo'\necho \"Your version is:\"\nprintf '%s\\n' \"$current\"\necho \"The last-built-for version is:\"\nprintf '%s\\n' \"$last\"\nexit 1\n";
 		};
-		90E37E291AE6574A703EBC7F /* Copy File Workspace UI */ = {
+		90E37E291AE6574A703EBC7F /* Verify File Workspace UI */ = {
 			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
 			files = (
 			);
@@ -18794,15 +18799,15 @@
 			);
 			inputPaths = (
 			);
-			name = "Copy File Workspace UI";
+			name = "Verify File Workspace UI";
 			outputFileListPaths = (
-				"$(SRCROOT)/tools/file-workspace-ui/outputs.xcfilelist",
 			);
 			outputPaths = (
+				"$(TARGET_TEMP_DIR)/file-workspace-ui.verified",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "exec /usr/bin/env python3 \"${SRCROOT}/tools/copy_file_workspace_ui.py\"";
+			shellScript = "exec /usr/bin/env python3 \"${SRCROOT}/tools/verify_file_workspace_ui.py\" --verify --stamp \"${TARGET_TEMP_DIR}/file-workspace-ui.verified\"";
 		};
 /* End PBXShellScriptBuildPhase section */
 

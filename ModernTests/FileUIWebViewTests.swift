@@ -45,11 +45,35 @@ final class FileUIWebViewTests: XCTestCase, FileUIWebViewDelegate {
  private func flush(_ controller:iTermFileViewController,_ reason:iTermFileFlushReason) {
   let done=expectation(description:"flush fixture");controller.flushEdits(reason:reason){error in XCTAssertNil(error);done.fulfill()};wait(for:[done],timeout:7)
  }
- private func evaluate(_ web:WKWebView,_ expression:String)->Any? {
+ private func evaluate(_ web:WKWebView,_ expression:String,arguments:[String:Any]=[:])->Any? {
   let done=expectation(description:"evaluate bundled UI");var value:Any?
-  web.callAsyncJavaScript(expression,arguments:[:],in:nil,in:.page){result in
+  web.callAsyncJavaScript(expression,arguments:arguments,in:nil,in:.page){result in
    switch result {case .success(let result):value=result;case .failure(let error):XCTFail("Evaluation failed: \(error)")};done.fulfill()
   };wait(for:[done],timeout:7);return value
+ }
+
+ func testReadonlyTextSaveAsFlushesToNativeWhileBarriersStillDisableIt() throws {
+  try withEditor {controller,store,snapshot,runtime,web in
+   try FileManager.default.setAttributes([.posixPermissions:0o444],ofItemAtPath:snapshot.filePath)
+   let changed=expectation(description:"readonly metadata")
+   store.fileDidChange(atPath:snapshot.filePath){value,error in XCTAssertNil(error);XCTAssertTrue(value?.isReadOnly == true);changed.fulfill()};wait(for:[changed],timeout:5)
+   let saveAs=["label":FileUIStrings.labels["saveAs"]!],save=["label":FileUIStrings.labels["save"]!]
+   let disabled="return Array.from(document.querySelectorAll('.editor-toolbar button')).find(button => button.title === label).disabled"
+   let click="Array.from(document.querySelectorAll('.editor-toolbar button')).find(button => button.title === label).click(); return true"
+   XCTAssertTrue(controller.canPerform(.saveAs));XCTAssertFalse(controller.canPerform(.save))
+   XCTAssertEqual(evaluate(web,disabled,arguments:save) as? Bool,true)
+   XCTAssertEqual(evaluate(web,disabled,arguments:saveAs) as? Bool,false)
+   let observer=FileUIViewObserver();controller.delegate=observer;var requests=0
+   let requested=expectation(description:"Save As after acknowledged flush")
+   observer.requested={command in if command == .saveAs {requests += 1;requested.fulfill()}}
+   _=evaluate(web,click,arguments:saveAs);wait(for:[requested],timeout:7)
+   observer.requested={_ in requests += 1}
+   flush(controller,.close);XCTAssertEqual(evaluate(web,disabled,arguments:saveAs) as? Bool,true);XCTAssertFalse(controller.canPerform(.saveAs));_=evaluate(web,click,arguments:saveAs);XCTAssertEqual(requests,1)
+   controller.resumeEditing();XCTAssertEqual(evaluate(web,disabled,arguments:saveAs) as? Bool,false)
+   let quit=expectation(description:"quit barrier");runtime.flushAllEdits(reason:.quit){error in XCTAssertNil(error);quit.fulfill()};wait(for:[quit],timeout:7)
+   XCTAssertEqual(evaluate(web,disabled,arguments:saveAs) as? Bool,true);XCTAssertFalse(controller.canPerform(.saveAs));_=evaluate(web,click,arguments:saveAs);XCTAssertEqual(requests,1)
+   runtime.resumeEditing();observer.requested=nil
+  }
  }
  func testControllerCloseAndSuspendSurviveFocusUntilExplicitResume() throws {
   try withEditor {controller,store,snapshot,_,web in
@@ -280,11 +304,12 @@ final class FileUIWebViewTests: XCTestCase, FileUIWebViewDelegate {
 
 private final class FileUIViewObserver: NSObject, iTermFileViewControllerDelegate {
  var changed: ((iTermFileViewStatus) -> Void)?
+ var requested: ((iTermFileViewCommand) -> Void)?
  func fileViewDidReceiveFocus(_ controller: iTermFileViewController) {}
  func fileView(_ controller: iTermFileViewController, didChangeStatus status: iTermFileViewStatus) { changed?(status) }
  func fileView(_ controller: iTermFileViewController, didChangeViewState state: iTermFileViewState) {}
  func fileViewDidRequestPin(_ controller: iTermFileViewController) {}
- func fileView(_ controller: iTermFileViewController, didRequest command: iTermFileViewCommand) {}
+ func fileView(_ controller: iTermFileViewController, didRequest command: iTermFileViewCommand) { requested?(command) }
 }
 
 private final class FileUIBrowserObserver: NSObject, iTermFileBrowserViewControllerDelegate {

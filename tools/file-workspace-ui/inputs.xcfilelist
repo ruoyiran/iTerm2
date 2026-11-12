@@ -1,4 +1,4 @@
-$(SRCROOT)/tools/copy_file_workspace_ui.py
+$(SRCROOT)/tools/verify_file_workspace_ui.py
 $(SRCROOT)/sources/FileWorkspace/Resources/FileWorkspaceUI/manifest.json
 $(SRCROOT)/sources/FileWorkspace/Resources/css/workspace.css
 $(SRCROOT)/sources/FileWorkspace/Resources/fonts/Geist-Variable.woff2
@@ -40,7 +40,7 @@ $(SRCROOT)/sources/FileWorkspace/Resources/FileWorkspaceUI/chunks/chunk-AHD24BCH
 $(SRCROOT)/sources/FileWorkspace/Resources/FileWorkspaceUI/chunks/chunk-E5KL7K2E.js
 $(SRCROOT)/sources/FileWorkspace/Resources/FileWorkspaceUI/chunks/chunk-I452YSKO.js
 $(SRCROOT)/sources/FileWorkspace/Resources/FileWorkspaceUI/chunks/chunk-M3PYR5EU.js
-$(SRCROOT)/sources/FileWorkspace/Resources/FileWorkspaceUI/chunks/chunk-QGNJUBQQ.js
+$(SRCROOT)/sources/FileWorkspace/Resources/FileWorkspaceUI/chunks/chunk-NQ2Z36HO.js
 $(SRCROOT)/sources/FileWorkspace/Resources/FileWorkspaceUI/chunks/chunk-SENOILCD.js
 $(SRCROOT)/sources/FileWorkspace/Resources/FileWorkspaceUI/chunks/chunk-SENOILCD.js.LEGAL.txt
 $(SRCROOT)/sources/FileWorkspace/Resources/FileWorkspaceUI/chunks/chunk-VC46IEJQ.js
@@ -60,7 +60,7 @@ $(SRCROOT)/sources/FileWorkspace/Resources/FileWorkspaceUI/chunks/cypher-P42G5O6
 $(SRCROOT)/sources/FileWorkspace/Resources/FileWorkspaceUI/chunks/dart-MMDKJOGH.js
 $(SRCROOT)/sources/FileWorkspace/Resources/FileWorkspaceUI/chunks/dockerfile-OUGZO3ZZ.js
 $(SRCROOT)/sources/FileWorkspace/Resources/FileWorkspaceUI/chunks/ecl-DD366YRU.js
-$(SRCROOT)/sources/FileWorkspace/Resources/FileWorkspaceUI/chunks/editor-6TQNYKR5.js
+$(SRCROOT)/sources/FileWorkspace/Resources/FileWorkspaceUI/chunks/editor-MMUQZTMG.js
 $(SRCROOT)/sources/FileWorkspace/Resources/FileWorkspaceUI/chunks/editor-Y4BFK3PW.css
 $(SRCROOT)/sources/FileWorkspace/Resources/FileWorkspaceUI/chunks/elixir-HQALYWIX.js
 $(SRCROOT)/sources/FileWorkspace/Resources/FileWorkspaceUI/chunks/flow9-HG2PDBRJ.js

@@ -33,7 +33,8 @@ export class FileEditor {
  updateWritability(){
   if(!this.editor)return;
   const readOnly=this.readOnly||!this.authorized||!!this.sync.error||(this.sync.suspended&&!(this.allowSuspendedComposition&&this.sync.composing));
-  this.editor.updateOptions({readOnly});for(const command of ['save','saveAs','undo','redo'])this.buttons.get(command).disabled=readOnly;
+  this.editor.updateOptions({readOnly});for(const command of ['save','undo','redo'])this.buttons.get(command).disabled=readOnly;
+  this.buttons.get('saveAs').disabled=!this.sync.documentIdentifier||this.sync.suspended||!!this.sync.error;
  }
  status(){if(!this.sync.raw)return;this.updateWritability();this.send('status',{hasPendingEdits:this.sync.hasPendingEdits,isComposing:this.sync.composing,hasSelection:!this.editor.getSelection()?.isEmpty()});this.footer.textContent=this.sync.error?this.t('syncError'):this.readOnly?this.t('readOnly'):this.sync.hasPendingEdits?this.t('savingEdits'):this.t('ready');}
  viewState(){const selection=this.editor.getSelection();if(!selection)return;this.send('viewState',{schemaVersion:1,selectionStartLine:selection.selectionStartLineNumber,selectionStartColumn:selection.selectionStartColumn,selectionEndLine:selection.positionLineNumber,selectionEndColumn:selection.positionColumn,scrollTop:this.editor.getScrollTop(),scrollLeft:this.editor.getScrollLeft()});}
