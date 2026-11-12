@@ -532,6 +532,33 @@ func fileDocumentError(_ code: Int) -> NSError {
         }
     }
 
+    func allSnapshots(completion: @escaping ([iTermFileDocumentSnapshot]) -> Void) {
+        state.async {
+            let values = self.documents.values.map(iTermFileDocumentSnapshot.init)
+            DispatchQueue.main.async { completion(values) }
+        }
+    }
+    /// Committed filesystem mappings are authoritative even if a later backend step failed.
+    /// Expand directory mappings here, across live and recovered documents, before publishing completion.
+    func applyPathMappings(_ mappings: [iTermFilePathMapping], completion: @escaping () -> Void) {
+        state.async {
+            for mapping in mappings {
+                guard let old = mapping.oldPath else { continue }
+                for document in self.documents.values {
+                    let matches: (String) -> Bool = { $0 == old || (mapping.isDirectory && $0.hasPrefix(old + "/")) }
+                    guard let path = [document.path, document.canonicalPath].first(where: matches) else { continue }
+                    if let new = mapping.newPath {
+                        document.path = new + path.dropFirst(old.count)
+                        document.canonicalPath = document.path
+                    } else { document.conflict = true }
+                    self.changed(document)
+                    self.scheduleDraft(document.identifier)
+                }
+            }
+            DispatchQueue.main.async(execute: completion)
+        }
+    }
+
     /// An explicit watcher move preserves the opaque identity and the unsaved document buffer.
     func fileDidMove(fromPath: String, toPath: String,
                      completion: @escaping (iTermFileDocumentSnapshot?, NSError?) -> Void) {

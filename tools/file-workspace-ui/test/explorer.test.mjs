@@ -87,3 +87,13 @@ test('a real scroll rerender preserves the PageDown target for subsequent keys',
   const opened=f.sent.findLast(x=>x.type==='openFile');assert.equal(opened.payload.path,'/r/b');assert.equal(opened.payload.lineNumber,12);
  }finally{f.close();}
 });
+test('recent owner contexts retain queries and expansions with bounded RAM cache',()=>{
+ const w=new Window();globalThis.document=w.document;globalThis.window=w;globalThis.requestAnimationFrame=fn=>fn();const root=document.createElement('div');document.body.append(root);const sent=[];
+ const e=new Explorer(root,(type,payload,id)=>{sent.push({type,payload,id});return id;},key=>key);
+ e.receive('context',{token:'a',rootDirectory:'/a',projectIdentifier:'p',worktreeIdentifier:'w'});e.names.value='needle';e.state.expanded.add('/a/dir');
+ e.receive('context',{token:'b',rootDirectory:'/b',projectIdentifier:'p',worktreeIdentifier:'w'});
+ e.receive('context',{token:'c',rootDirectory:'/a',projectIdentifier:'p',worktreeIdentifier:'w'});
+ assert.equal(e.names.value,'needle');assert.ok(e.state.expanded.has('/a/dir'));assert.equal(e.state.scope.token,'c');
+ for(let i=0;i<8;i++)e.receive('context',{token:String(i),rootDirectory:'/root'+i,projectIdentifier:'p',worktreeIdentifier:'w'});
+ assert.ok(e.recentContexts.size<=4);e.dispose();w.happyDOM.abort();
+});

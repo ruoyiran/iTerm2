@@ -108,6 +108,8 @@ import Darwin
     private var capturedRoot: FileBrowserRoot?
     private var history = [String: FileBrowserHistory]()
 
+    func deactivate() { lock.lock(); active = nil; requests.removeAll(); lock.unlock() }
+
     func activate(_ context: iTermFileBrowserContext) {
         lock.lock(); active = context; requests.removeAll(); lock.unlock()
     }
@@ -314,6 +316,14 @@ import Darwin
                                              isTruncated: truncated, skippedFileCount: skipped, error: error), callback: batch)
         }
         return id
+    }
+
+    func operationState(_ context: iTermFileBrowserContext, completion: @escaping (Bool, Bool) -> Void) {
+        worker.async { [weak self] in
+            guard let self else { return }
+            let journal = self.history[self.historyKey(context)]
+            DispatchQueue.main.async { completion(journal?.undo.isEmpty == false, journal?.redo.isEmpty == false) }
+        }
     }
 
     @nonobjc private func historyKey(_ context: iTermFileBrowserContext) -> String {

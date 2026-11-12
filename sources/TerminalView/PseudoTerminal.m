@@ -305,6 +305,7 @@ typedef NS_ENUM(int, iTermShouldHaveTitleSeparator) {
 
 @implementation PseudoTerminal {
     iTermProjectWindowController *_projectController;
+    iTermFileOpenCoordinator *_fileOpenCoordinator;
     NSString *_projectForNewTab;
     NSUInteger _projectSessionPlacementDepth;
 
@@ -1125,6 +1126,7 @@ ITERM_WEAKLY_REFERENCEABLE
 - (void)dealloc {
     _deallocing = YES;
     _projectController.delegate = nil;
+    [_fileOpenCoordinator release];
     [_projectController release];
     _projectController = nil;
     [_projectForNewTab release];
@@ -5216,11 +5218,123 @@ hidingToolbeltShouldResizeWindow:(BOOL)hidingToolbeltShouldResizeWindow
     if (![_contentView.toolbelt.projectRootDirectory isEqualToString:rootDirectory]) {
         _contentView.toolbelt.projectRootDirectory = rootDirectory;
     }
+    iTermFileBrowserContext *oldContext = _contentView.toolbelt.fileBrowserContext;
+    NSString *project = _projectController.selectedProjectIdentifier ?: @"";
+    NSString *worktree = _projectController.selectedWorktreeIdentifier ?: @"";
+    if (![oldContext.rootDirectory isEqualToString:rootDirectory] ||
+        ![oldContext.projectIdentifier isEqualToString:project] ||
+        ![oldContext.worktreeIdentifier isEqualToString:worktree]) {
+        _contentView.toolbelt.fileBrowserContext = rootDirectory ? [[[iTermFileBrowserContext alloc]
+            initWithRootDirectory:rootDirectory projectIdentifier:project worktreeIdentifier:worktree
+            generation:_projectController.selectionGeneration showsHiddenFiles:NO showsGitIgnoredFiles:NO] autorelease] : nil;
+    }
     __weak __typeof(self) weakSelf = self;
     _contentView.toolbelt.projectOpenTerminal = ^(NSString *directory, iTermOpenStyle style) {
         [[weakSelf projectController] openTerminalInDirectory:directory style:style];
     };
     _contentView.toolbelt.projectCanOpenTerminal = ^BOOL(iTermOpenStyle style) { return [weakSelf projectCanLaunchWithStyle:style]; };
+    _contentView.toolbelt.fileBrowserRequest = ^(iTermFileBrowserRequest *request) { [weakSelf performFileBrowserRequest:request]; };
+}
+
+- (void)performFileBrowserRequest:(iTermFileBrowserRequest *)request {
+    if (_closing || _deallocing) { return; }
+    switch (request.kind) {
+        case iTermFileBrowserRequestKindOpenFile: [self openWorkspaceFile:request.openRequest]; break;
+        case iTermFileBrowserRequestKindOpenTerminal:
+            [[self projectController] openTerminalInDirectory:request.directoryPath style:request.terminalPlacement]; break;
+        case iTermFileBrowserRequestKindAddFolderAsProject:
+            [[self projectController] addDirectoryAtPath:request.directoryPath completion:^(iTermProjectDirectory *project, NSError *error) {
+                if (error) { [iTermFileSessionCoordinator.installed.delegate fileSessionCoordinator:iTermFileSessionCoordinator.installed didFail:error]; }
+            }]; break;
+        case iTermFileBrowserRequestKindRevealInFinder: {
+            NSMutableArray *urls = [NSMutableArray array];
+            for (NSString *path in request.paths) { [urls addObject:[NSURL fileURLWithPath:path]]; }
+            [[NSWorkspace sharedWorkspace] activateFileViewerSelectingURLs:urls]; break;
+        }
+        case iTermFileBrowserRequestKindOpenExternally:
+            for (NSString *path in request.paths) {
+                [[NSWorkspace sharedWorkspace] openURL:[NSURL fileURLWithPath:path] configuration:[NSWorkspaceOpenConfiguration configuration]
+                    completionHandler:^(NSRunningApplication *app, NSError *error) {
+                        if (error) { dispatch_async(dispatch_get_main_queue(), ^{
+                            [iTermFileSessionCoordinator.installed.delegate fileSessionCoordinator:iTermFileSessionCoordinator.installed didFail:error];
+                        }); }
+                    }];
+            } break;
+        case iTermFileBrowserRequestKindCopyFiles: {
+            NSMutableArray *urls = [NSMutableArray array];
+            for (NSString *path in request.paths) { [urls addObject:[NSURL fileURLWithPath:path]]; }
+            [[NSPasteboard generalPasteboard] clearContents]; [[NSPasteboard generalPasteboard] writeObjects:urls]; break;
+        }
+        case iTermFileBrowserRequestKindCopyAbsolutePaths:
+        case iTermFileBrowserRequestKindCopyRelativePaths: {
+            NSMutableArray *paths = [NSMutableArray array];
+            for (NSString *path in request.paths) {
+                NSString *root = request.context.rootDirectory;
+                [paths addObject:request.kind == iTermFileBrowserRequestKindCopyAbsolutePaths ? path :
+                    ([path isEqualToString:root] ? @"." : [path substringFromIndex:root.length + ([root isEqualToString:@"/"] ? 0 : 1)])];
+            }
+            [[NSPasteboard generalPasteboard] clearContents];
+            [[NSPasteboard generalPasteboard] setString:[paths componentsJoinedByString:@"\n"] forType:NSPasteboardTypeString]; break;
+        }
+        default: break;
+    }
+}
+
+- (void)openWorkspaceFile:(iTermFileOpenRequest *)request {
+    if (!_fileOpenCoordinator) { _fileOpenCoordinator = [[iTermFileOpenCoordinator alloc] initWithCoordinator:[iTermFileWorkspaceService bootstrap].coordinator]; }
+    PTYSession *source = self.currentSession;
+    PTYTab *sourceTab = self.currentTab;
+    NSWindow *originKeyWindow = NSApp.keyWindow;
+    const BOOL originAppActive = NSApp.isActive;
+    uint64_t generation = _projectController.selectionGeneration;
+    iTermFileBrowserContext *base = _contentView.toolbelt.fileBrowserContext;
+    NSMutableArray<iTermFileSessionPane *> *candidates = [NSMutableArray array];
+    NSMutableDictionary<NSString *, PTYSession *> *sessions = [NSMutableDictionary dictionary];
+    for (PTYSession *session in self.allSessions) {
+        iTermFileSessionPane *pane = session.fileSessionPane;
+        PTYTab *tab = [self tabForSession:session];
+        if (!pane || ![pane.descriptor.projectIdentifier isEqualToString:request.context.projectIdentifier] ||
+            ![pane.descriptor.worktreeIdentifier isEqualToString:request.context.worktreeIdentifier]) { continue; }
+        if (sourceTab.sessions.count > 1 ? tab != sourceTab : tab.sessions.count != 1) { continue; }
+        [candidates addObject:pane]; sessions[pane.viewIdentifier] = session;
+    }
+    __weak __typeof(self) weakSelf = self;
+    BOOL (^current)(void) = ^BOOL {
+        PseudoTerminal *term = weakSelf;
+        return term && !term->_closing && !term->_deallocing &&
+            NSApp.keyWindow == originKeyWindow && NSApp.isActive == originAppActive && term.currentSession == source && term.currentTab == sourceTab &&
+            (!source || (!source.exited && [term.allSessions containsObject:source])) &&
+            term->_projectController.selectionGeneration == generation && term->_contentView.toolbelt.fileBrowserContext == base &&
+            term->_contentView.toolbelt.fileTreeView.activeBrowserContext == request.context;
+    };
+    [_fileOpenCoordinator open:request candidates:candidates isCurrent:current
+        install:^(iTermFileSessionPane *pane, void (^done)(BOOL)) {
+            PseudoTerminal *term = weakSelf;
+            if (!current()) { done(NO); return; }
+            if (request.placement == iTermOpenStyleWindow) {
+                [PseudoTerminal openWindowForFilePane:pane profile:source.profile shouldOpen:current completion:^(PTYSession *session) {
+                    if (session) { sessions[pane.viewIdentifier] = session; }
+                    done(session != nil);
+                }];
+            } else {
+                PTYSession *session = [term installFilePane:pane style:request.placement targetSession:source];
+                if (session) { sessions[pane.viewIdentifier] = session; }
+                done(session != nil);
+            }
+        } activate:^(iTermFileSessionPane *pane) {
+            PTYSession *session = sessions[pane.viewIdentifier];
+            PseudoTerminal *term = (PseudoTerminal *)session.delegate.realParentWindow;
+            if (request.placement == iTermOpenStyleWindow && !current()) {
+                [pane.controller cancelPendingFocus];
+                return;
+            }
+            if (![term activateFileSession:session lineNumber:request.lineNumber utf16Column:request.utf16Column]) { return; }
+            if (request.placement == iTermOpenStyleWindow) {
+                [term.window makeKeyAndOrderFront:term];
+                [[iTermController sharedInstance] setCurrentTerminal:term];
+                [term.window makeFirstResponder:session.mainResponder];
+            }
+        } completion:^(BOOL opened) {}];
 }
 
 - (void)projectWorkingDirectoryWithCompletion:(void (^)(NSString *))completion {

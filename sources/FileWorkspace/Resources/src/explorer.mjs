@@ -20,7 +20,7 @@ export class Explorer {
     this.nameRow=this.names.parentElement;this.contentRow=this.contents.parentElement;this.contentRow.hidden=true;
     this.flags={caseSensitive:false,wholeWord:false,regularExpression:false};
     for(const [key,symbol] of [['caseSensitive','case-sensitive'],['wholeWord','whole-word'],['regularExpression','regex']]) {
-      const b=button(t(key),()=>{this.flags[key]=!this.flags[key];b.setAttribute('aria-pressed',String(this.flags[key]));},symbol);b.setAttribute('aria-pressed','false');this.contentRow.append(b);
+      const b=button(t(key),()=>{this.flags[key]=!this.flags[key];b.setAttribute('aria-pressed',String(this.flags[key]));},symbol);b.dataset.flag=key;b.setAttribute('aria-pressed','false');this.contentRow.append(b);
     }
     this.filters=element('details','filters');const summary=element('summary','',t('searchDetails'));this.include=element('input');this.exclude=element('input');
     for(const [input,label] of [[this.include,'include'],[this.exclude,'exclude']]) {input.placeholder=t(label);input.setAttribute('aria-label',t(label));}
@@ -51,7 +51,7 @@ export class Explorer {
   }
   list(path) { const id=crypto.randomUUID();this.state.begin(id,path);this.send('listDirectory',{directoryPath:path},id); }
   refresh() {
-    if(!this.scope)return;this.cancelSearch();this.state.pending.clear();this.state.directories.clear();this.state.nameResults=null;this.state.error=null;
+    if(!this.scope)return;this.cancelSearch();this.state.pending.clear();this.state.error=null;this.refreshing=true;
     this.send('refresh',{directoryPath:this.scope.rootDirectory});this.list(this.scope.rootDirectory);
     if((this.mode==='names'?this.names:this.contents).value)this.search(this.mode);this.render();
   }
@@ -60,11 +60,30 @@ export class Explorer {
   }
   toggle(row) {if(!row.isExpandable)return;this.state.toggle(row.path);if(this.state.expanded.has(row.path)&&!this.state.directories.has(row.path))this.list(row.path);this.render();}
   open(row,activation='preview',placement='tab',lineNumber=0,utf16Column=0) { if(row.isDirectory){this.toggle(row);return;}this.send('openFile',{path:row.path,activation,placement,lineNumber,utf16Column}); }
+  contextKey(scope) {return scope?.rootDirectory?JSON.stringify([scope.projectIdentifier,scope.worktreeIdentifier,scope.rootDirectory]):null;}
+  rememberContext() {
+    this.recentContexts??=new Map();const key=this.contextKey(this.scope);if(!key)return;
+    this.recentContexts.delete(key);
+    const rows=[...this.state.directories.values()].reduce((n,d)=>n+d.entries.length,0);
+    if(rows<=10000&&this.state.expanded.size<=10000)this.recentContexts.set(key,{state:this.state,names:this.names.value,contents:this.contents.value,include:this.include.value,exclude:this.exclude.value,flags:{...this.flags},mode:this.mode});
+    while(this.recentContexts.size>4)this.recentContexts.delete(this.recentContexts.keys().next().value);
+  }
+  changeContext(payload) {
+    this.cancelSearch();this.rememberContext();this.resultFocus=null;this.scope=payload.rootDirectory?payload:null;
+    const saved=this.recentContexts.get(this.contextKey(this.scope));this.recentContexts.delete(this.contextKey(this.scope));
+    this.state=saved?.state??new TreeState();this.state.scope=this.scope;this.state.pending.clear();
+    this.title.textContent=payload.title||this.t('selectProject');this.names.value=saved?.names??'';this.contents.value=saved?.contents??'';
+    this.include.value=saved?.include??'';this.exclude.value=saved?.exclude??'';this.flags=saved?.flags??{caseSensitive:false,wholeWord:false,regularExpression:false};
+    for(const b of this.contentRow.querySelectorAll('[data-flag]'))b.setAttribute('aria-pressed',String(this.flags[b.dataset.flag]));
+    this.setMode(saved?.mode??'names');if(this.scope)this.refresh();
+  }
   receive(type,payload) {
-    if(type==='context') {this.cancelSearch();this.resultFocus=null;this.scope=payload.rootDirectory?payload:null;this.state.context(this.scope);this.title.textContent=payload.title||this.t('selectProject');this.names.value='';this.contents.value='';if(this.scope)this.list(this.scope.rootDirectory);}
+    if(type==='context') this.changeContext(payload);
+    if(type==='refresh') this.refresh();
+    if(type==='listing'&&this.refreshing&&payload.token===this.scope?.token&&payload.directoryPath===this.scope.rootDirectory&&this.state.pending.get(payload.requestIdentifier)===payload.directoryPath){this.state.directories.clear();this.refreshing=false;}
     if(type==='listing'&&this.state.listing(payload.token,payload.requestIdentifier,payload.directoryPath,payload.entries,payload.error)&&!payload.error)this.reloadExpanded(payload.entries);
     if(type==='search')this.state.search(payload.token,payload.requestIdentifier,payload);
-    if(type==='complete'&&payload.error)this.state.error=payload.error;
+    if(type==='complete'){if(payload.error)this.state.error=payload.error;if(payload.requestIdentifier===this.formRequest){this.formRequest=null;if(!payload.error){this.form?.remove();this.form=null;}}}
     if(type==='operationState')this.operations=payload;
     if(type==='reveal') {this.focused=payload.path;this.state.select(payload.path,'replace');const root=this.scope?.rootDirectory;let path=parentPath(payload.path);while(root&&path.startsWith(root)&&path!==root){this.state.expanded.add(path);if(!this.state.directories.has(path))this.list(path);path=parentPath(path);}}
     if(type==='focusQuery'){const mode=payload.contents?'contents':'names';if(this.mode!==mode)this.setMode(mode);(payload.contents?this.contents:this.names).focus();}
@@ -154,7 +173,7 @@ export class Explorer {
   closeMenu(){if(this.menuCloser)document.removeEventListener('pointerdown',this.menuCloser);this.menuNode?.remove();this.menuNode=null;}
   inline(kind,row) {
     this.closeMenu();this.form?.remove();const form=element('form','inline-input');const input=element('input');input.setAttribute('aria-label',this.t(kind==='rename'?'rename':'name'));input.value=kind==='rename'?row.name:'';form.append(icon(kind==='createFolder'?'folder-plus':'file-plus'),input,button(this.t('cancel'),()=>form.remove(),'x'));this.viewport.before(form);this.form=form;
-    form.addEventListener('submit',event=>{event.preventDefault();if(this.composing||!input.value)return;const directoryPath=row?.isDirectory?row.path:row?parentPath(row.path):this.scope?.rootDirectory;this.send(kind,{paths:row?[row.path]:[],directoryPath,name:input.value});form.remove();});input.addEventListener('compositionstart',()=>this.composing=true);input.addEventListener('compositionend',()=>this.composing=false);input.addEventListener('keydown',event=>{if(event.key==='Escape')form.remove();});input.focus();input.select();
+    form.addEventListener('submit',event=>{event.preventDefault();if(this.composing||!input.value)return;const directoryPath=row?.isDirectory?row.path:row?parentPath(row.path):this.scope?.rootDirectory;this.formRequest=this.send(kind,{paths:row?[row.path]:[],directoryPath,name:input.value});});input.addEventListener('compositionstart',()=>this.composing=true);input.addEventListener('compositionend',()=>this.composing=false);input.addEventListener('keydown',event=>{if(event.key==='Escape')form.remove();});input.focus();input.select();
   }
   dispose() {this.root.removeEventListener('focusin',this.focusHandler);clearTimeout(this.nameTimer);this.cancelSearch();this.closeMenu();this.root.replaceChildren();}
 }

@@ -7,6 +7,8 @@
 
 @protocol PTYSplitViewDelegate;
 @class iTermToolFileTree;
+@class iTermFileBrowserContext;
+@class iTermFileBrowserRequest;
 @class ToolCapturedOutputView;
 @class ToolCommandHistoryView;
 @class ToolDirectoriesView;
@@ -36,6 +38,8 @@ extern NSString *const kToolbeltShouldHide;
 
 @property(nonatomic, assign) id<iTermToolbeltViewDelegate> delegate;
 @property(nonatomic, copy) NSString *projectRootDirectory;
+@property(nonatomic, retain) iTermFileBrowserContext *fileBrowserContext;
+@property(nonatomic, copy) void (^fileBrowserRequest)(iTermFileBrowserRequest *request);
 @property(nonatomic, copy) void (^projectOpenTerminal)(NSString *directory, iTermOpenStyle style);
 @property(nonatomic, copy) BOOL (^projectCanOpenTerminal)(iTermOpenStyle style);
 @property(nonatomic, readonly) iTermToolFileTree *fileTreeView;

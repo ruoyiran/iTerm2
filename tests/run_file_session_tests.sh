@@ -30,6 +30,8 @@ xcrun swiftc -swift-version 5 -warnings-as-errors \
  "$file_ui_repo"/sources/FileWorkspace/*.swift "$file_ui_repo"/sources/FileWorkspace/UI/*.swift \
  "$file_ui_repo"/sources/FileWorkspace/Native/iTermFileSessionDescriptor.swift \
  "$file_ui_repo"/sources/FileWorkspace/Native/iTermFileSessionCoordinator.swift \
+ "$file_ui_repo"/sources/FileWorkspace/Native/iTermFileOpenCoordinator.swift \
+ "$file_ui_repo"/sources/FileWorkspace/Native/iTermFileBrowserCoordinator.swift \
  "$file_ui_repo"/sources/FileWorkspace/Native/iTermSessionRevivalMap.swift \
  "$file_ui_repo"/sources/FileWorkspace/Native/iTermFileMenuActions.swift \
  "$file_ui_tmp/HostDeclarations.swift" "$file_ui_tmp/Tests.swift" "$file_ui_tmp/main.swift" -o "$file_ui_tmp/tests"

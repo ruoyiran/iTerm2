@@ -154,7 +154,7 @@ func fileUIInteger(_ value: Any?, minimum: Int = 0, maximum: Int = Int.max) -> I
 extension Int32 { fileprivate var intValue: Int { Int(self) } }
 extension iTermFileBrowserContext {
     func fileUIDictionary(token: String, title: String) -> [String: Any] {
-        ["token": token, "rootDirectory": rootDirectory, "title": title, "showsHiddenFiles": showsHiddenFiles,
+        ["token": token, "rootDirectory": rootDirectory, "projectIdentifier": projectIdentifier, "worktreeIdentifier": worktreeIdentifier, "title": title, "showsHiddenFiles": showsHiddenFiles,
          "showsGitIgnoredFiles": showsGitIgnoredFiles]
     }
 }

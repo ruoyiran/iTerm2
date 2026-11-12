@@ -5,6 +5,185 @@ import XCTest
 @testable import iTerm2SharedARC
 
 final class FileSessionTests: XCTestCase {
+    func testWorkspaceBrowserBackendRoundTripAndPausedSurfacePreserveQuery() throws {
+        let f = try Fixture(); defer { f.cleanup() }
+        let browser = iTermFileBrowserCoordinator(native: f.coordinator); defer { browser.shutdown() }
+        let other = iTermFileBrowserCoordinator(native: f.coordinator); defer { other.shutdown() }
+        let context = iTermFileBrowserContext(rootDirectory: f.root.path, projectIdentifier: "project", worktreeIdentifier: "", generation: 1)
+        var warm: FileUIAcquisition?
+        f.wait { done in warm = f.runtime.acquire(owner: f) { _, error in XCTAssertNil(error); done() } }; warm?.cancel()
+        browser.applyContext(context); browser.controller.view.frame = NSRect(x: 0, y: 0, width: 480, height: 600); browser.setVisible(true)
+        let web = try XCTUnwrap(browser.controller.preferredFirstResponder as? iTermFileWorkspaceWebView)
+        let ready = expectation(description: "explorer receiver ready")
+        let gate = BrowserGate(original: browser.controller, ready: { ready.fulfill() }); web.fileDelegate = gate
+        wait(for: [ready], timeout: 20)
+        func evaluate(_ script: String, arguments: [String: Any] = [:]) throws -> Any? {
+            var result: Result<Any, Error>?
+            f.wait { done in web.callAsyncJavaScript(script, arguments: arguments, in: nil, in: .page) { result = $0; done() } }
+            return try result?.get()
+        }
+        let rows = "return new Promise(resolve => { const check = () => { const row = [...document.querySelectorAll('[data-path]')].find(r => r.dataset.path === path); if (row) { observer.disconnect(); resolve(row.textContent); } }; const observer = new MutationObserver(check); observer.observe(document.body, {childList:true,subtree:true}); check(); });"
+        XCTAssertNotNil(try evaluate(rows, arguments: ["path": f.file.path]))
+        let pane = f.open("shared")
+        // A second explorer activation must not reset the first backend's context.
+        other.applyContext(iTermFileBrowserContext(rootDirectory: f.root.path, projectIdentifier: "other", worktreeIdentifier: "", generation: 2))
+        _ = try evaluate("const q=document.querySelector('[data-query=names]'); q.value='file'; q.dispatchEvent(new Event('input',{bubbles:true})); return true;")
+        browser.setVisible(false); browser.setVisible(true)
+        XCTAssertTrue(web === browser.controller.preferredFirstResponder)
+        XCTAssertEqual(try evaluate("return document.querySelector('[data-query=names]').value;") as? String, "file")
+        let request = try XCTUnwrap(iTermFileBrowserRequest(identifier: "rename", context: context, type: "rename", payload: ["paths": [f.file.path], "name": "file-renamed.txt"]))
+        browser.fileBrowser(browser.controller, didRequest: request)
+        let target = f.root.appendingPathComponent("file-renamed.txt")
+        XCTAssertNotNil(try evaluate(rows, arguments: ["path": target.path]))
+        XCTAssertEqual(try String(contentsOf: target, encoding: .utf8), "original")
+        XCTAssertEqual(pane.descriptor.filePath, target.path)
+        XCTAssertFalse(f.coordinator.operationInProgress)
+        f.edit(pane, "unsaved buffer"); f.coordinator.delegate = f; f.decision = .cancel
+        let duplicate = try XCTUnwrap(iTermFileBrowserRequest(identifier: "duplicate", context: context, type: "duplicateFile", payload: ["paths": [target.path], "name": "file-copy.txt"]))
+        browser.fileBrowser(browser.controller, didRequest: duplicate)
+        XCTAssertNotNil(try evaluate(rows, arguments: ["path": f.root.appendingPathComponent("file-copy.txt").path]))
+        XCTAssertEqual(f.prompts, 0); XCTAssertEqual(f.snapshot(pane)?.text, "unsaved buffer")
+        let visibility = try XCTUnwrap(iTermFileBrowserRequest(identifier: "visibility", context: context, type: "setVisibility", payload: ["showsHiddenFiles": true, "showsGitIgnoredFiles": true]))
+        browser.fileBrowser(browser.controller, didRequest: visibility)
+        XCTAssertEqual(browser.context?.showsHiddenFiles, true)
+        let alternate = iTermFileBrowserContext(rootDirectory: f.root.path, projectIdentifier: "alternate", worktreeIdentifier: "", generation: 4)
+        browser.applyContext(alternate)
+        XCTAssertEqual(browser.context?.showsHiddenFiles, true); XCTAssertEqual(browser.context?.showsGitIgnoredFiles, true)
+        _ = try evaluate("window.task5UndoReady=new Promise(resolve => { const original=window.fileWorkspace.receive; window.fileWorkspace.receive=async function(message) { await original.call(this,message); if(message.type==='operationState' && message.payload.canUndo) { window.fileWorkspace.receive=original; resolve(true); } }; }); return true;")
+        browser.applyContext(context)
+        XCTAssertEqual(browser.context?.projectIdentifier, "project"); XCTAssertEqual(browser.context?.showsHiddenFiles, true)
+        // The actual page receives this root's journal state after the renderer's new context is ready.
+        XCTAssertEqual(try evaluate("return window.task5UndoReady;") as? Bool, true)
+        browser.shutdown()
+        other.applyContext(context); other.setVisible(true)
+        let reused = try XCTUnwrap(other.controller.preferredFirstResponder as? iTermFileWorkspaceWebView)
+        XCTAssertTrue(reused === web)
+        let newOwnerReady = expectation(description: "new explorer lease ready")
+        let otherGate = BrowserGate(original: other.controller, ready: { newOwnerReady.fulfill() }); reused.fileDelegate = otherGate
+        wait(for: [newOwnerReady], timeout: 20)
+        XCTAssertEqual(try evaluate("return document.querySelector('[data-query=names]').value;") as? String, "")
+    }
+
+    func testWorkspaceOpenCoalescesPinReusesDefaultAndExplicitSplitSharesDocument() throws {
+        let f = try Fixture(); defer { f.cleanup() }
+        let policy = iTermFileOpenCoordinator(coordinator: f.coordinator)
+        let context = iTermFileBrowserContext(rootDirectory: f.root.path, projectIdentifier: "project", worktreeIdentifier: "", generation: 1)
+        func request(_ style: iTermOpenStyle, _ activation: iTermFileActivation) -> iTermFileOpenRequest {
+            iTermFileOpenRequest(context: context, path: f.file.path, placement: style, activation: activation)
+        }
+        var installed = [iTermFileSessionPane](), activated = [String]()
+        let install: (iTermFileSessionPane, @escaping (Bool) -> Void) -> Void = { pane, done in installed.append(pane); f.panes.append(pane); done(true) }
+        let activate: (iTermFileSessionPane) -> Void = { activated.append($0.viewIdentifier) }
+        f.wait { done in
+            policy.open(request(.tab, .preview), candidates: [], isCurrent: { true }, install: install, activate: activate) { success in XCTAssertTrue(success); done() }
+            policy.open(request(.tab, .pinned), candidates: [], isCurrent: { true }, install: install, activate: activate) { success in XCTAssertTrue(success) }
+        }
+        XCTAssertEqual(installed.count, 1)
+        let first = try XCTUnwrap(installed.first)
+        XCTAssertFalse(first.controller.status.isPreview)
+        f.wait { done in policy.open(request(.tab, .preview), candidates: installed, isCurrent: { true }, install: install, activate: activate) { _ in done() } }
+        XCTAssertEqual(installed.count, 1); XCTAssertEqual(activated.count, 2)
+        for style in [iTermOpenStyle.verticalSplit, .horizontalSplit, .window] {
+            let count = installed.count
+            f.wait { done in policy.open(request(style, .pinned), candidates: installed, isCurrent: { true }, install: install, activate: activate) { _ in done() } }
+            XCTAssertEqual(installed.count, count + 1)
+            XCTAssertEqual(first.documentIdentifier, installed.last?.documentIdentifier)
+            XCTAssertNotEqual(first.viewIdentifier, installed.last?.viewIdentifier)
+        }
+    }
+
+    func testWorkspacePendingPreviewEditPinsBeforeReplacement() throws {
+        let f = try Fixture(); defer { f.cleanup() }
+        let first = f.open("preview"); first.controller.setPreview(true)
+        let web = try makeVisible(first, fixture: f)
+        let edited = expectation(description: "renderer edit queued")
+        web.callAsyncJavaScript("monaco.editor.getEditors()[0].executeEdits('typing', [{ range: new monaco.Range(1,1,1,1), text:'pending-' }]); return true;", arguments: [:], in: nil, in: .page) { _ in edited.fulfill() }
+        wait(for: [edited], timeout: 10)
+        let next = f.root.appendingPathComponent("next.txt"); try "next".write(to: next, atomically: true, encoding: .utf8)
+        let request = iTermFileOpenRequest(context: first.descriptor.context, path: next.path, placement: .tab, activation: .preview)
+        let policy = iTermFileOpenCoordinator(coordinator: f.coordinator)
+        var replacement: iTermFileSessionPane?
+        f.wait { done in policy.open(request, candidates: [first], isCurrent: { true }, install: { pane, installed in replacement = pane; f.panes.append(pane); installed(true) }, activate: { _ in }) { success in XCTAssertTrue(success); done() } }
+        XCTAssertNotNil(replacement); XCTAssertFalse(first.controller.status.isPreview)
+        XCTAssertEqual(first.descriptor.filePath, f.file.path); XCTAssertEqual(f.snapshot(first)?.text, "pending-original")
+    }
+
+    func testWorkspaceDirectoryMoveUpdatesFailedPaneMetadataWithoutCreatingAFile() throws {
+        let f = try Fixture(); defer { f.cleanup() }
+        let directory = f.root.appendingPathComponent("old")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let missing = directory.appendingPathComponent("missing.txt")
+        let context = iTermFileBrowserContext(rootDirectory: f.root.path, projectIdentifier: "project", worktreeIdentifier: "tree", generation: 1)
+        var pane: iTermFileSessionPane?
+        f.wait { done in f.coordinator.openFile(atPath: missing.path, context: context, viewIdentifier: "failed", preview: false) { result, error in
+            XCTAssertNotNil(error); pane = result; done()
+        } }
+        let failed = try XCTUnwrap(pane); f.panes.append(failed)
+        let backend = iTermFileBrowserService(); backend.activate(context)
+        f.wait { done in backend.rename(directory.path, newName: "new", context: context) { result in
+            XCTAssertNil(result.error)
+            f.coordinator.applyCommittedPathMappings(result.mappings) { done() }
+        } }
+        XCTAssertEqual(failed.viewIdentifier, "failed")
+        XCTAssertEqual(failed.descriptor.filePath, f.root.appendingPathComponent("new/missing.txt").path)
+        XCTAssertNotNil(failed.controller.status.error)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: failed.descriptor.filePath))
+    }
+
+    func testWorkspaceStaleOpenNeverInstallsOrFocuses() throws {
+        let f = try Fixture(); defer { f.cleanup() }
+        let policy = iTermFileOpenCoordinator(coordinator: f.coordinator)
+        let context = iTermFileBrowserContext(rootDirectory: f.root.path, projectIdentifier: "p", worktreeIdentifier: "w", generation: 1)
+        let request = iTermFileOpenRequest(context: context, path: f.file.path, placement: .tab, activation: .preview)
+        var current = true
+        f.wait { done in
+            policy.open(request, candidates: [], isCurrent: { current }, install: { _, _ in XCTFail("stale insertion") }, activate: { _ in XCTFail("stale focus") }) { success in
+                XCTAssertFalse(success); done()
+            }
+            current = false
+        }
+        XCTAssertTrue(f.coordinator.panes.isEmpty)
+    }
+
+    func testWorkspaceDirtyCancelAndCommittedDirectoryMovePreserveSharedIdentityAndDraftPath() throws {
+        let f = try Fixture(); defer { f.cleanup() }
+        let first = f.open("first"), second = f.open("second"); f.edit(first, "unsaved")
+        f.coordinator.delegate = f; f.decision = .cancel
+        f.wait { done in f.coordinator.prepareFileMutation(paths: [f.file.path], isCurrent: { true }) { allowed in XCTAssertFalse(allowed); done() } }
+        XCTAssertEqual(try String(contentsOf: f.file, encoding: .utf8), "original"); XCTAssertEqual(f.snapshot(second)?.text, "unsaved")
+        let moved = f.root.appendingPathComponent("moved"); try FileManager.default.createDirectory(at: moved, withIntermediateDirectories: true)
+        let target = moved.appendingPathComponent("file.txt"); try FileManager.default.moveItem(at: f.file, to: target)
+        f.wait { done in f.store.applyPathMappings([iTermFilePathMapping(oldPath: f.file.path, newPath: target.path, isDirectory: false)]) { done() } }
+        f.wait { done in f.store.flushDrafts { error in XCTAssertNil(error); done() } }
+        XCTAssertEqual(first.descriptor.filePath, target.path); XCTAssertEqual(second.descriptor.filePath, target.path)
+        XCTAssertEqual(f.snapshot(first)?.text, "unsaved"); XCTAssertEqual(first.documentIdentifier, second.documentIdentifier)
+        let recovery = iTermFileDocumentStore(storageDirectory: f.drafts)
+        f.wait { done in recovery.recoverDrafts { values, error in XCTAssertNil(error); XCTAssertEqual(values.first?.filePath, target.path); done() } }
+    }
+
+    func testPreviewRebindPinsDirtyBufferAndRejectsStaleOrigin() throws {
+        let fixture = try Fixture(); defer { fixture.cleanup() }
+        let pane = fixture.open("preview"); pane.controller.setPreview(true)
+        fixture.edit(pane, "unsaved")
+        let next = fixture.file.deletingLastPathComponent().appendingPathComponent("next.txt")
+        try "next".write(to: next, atomically: true, encoding: .utf8)
+        let request = iTermFileOpenRequest(context: pane.descriptor.context, path: next.path, placement: .tab, activation: .preview)
+        fixture.wait { done in
+            fixture.coordinator.replacePreview(pane, request: request, isCurrent: { true }) { replaced, error in
+                XCTAssertFalse(replaced); XCTAssertNil(error); done()
+            }
+        }
+        XCTAssertFalse(pane.controller.status.isPreview)
+        XCTAssertEqual(fixture.snapshot(pane)?.text, "unsaved")
+        pane.controller.setPreview(true)
+        fixture.wait { done in
+            fixture.coordinator.replacePreview(pane, request: request, isCurrent: { false }) { replaced, _ in
+                XCTAssertFalse(replaced); done()
+            }
+        }
+        XCTAssertEqual(pane.descriptor.filePath, fixture.file.path)
+    }
+
     func testDescriptorRejectsMalformedFileIdentityAndNeverContainsContent() throws {
         XCTAssertNil(iTermFileSessionDescriptor(dictionary: ["version": 99, "filePath": "/tmp/a"]))
         XCTAssertNil(iTermFileSessionDescriptor(dictionary: ["version": 1, "filePath": "relative", "rootDirectory": "/tmp"]))
@@ -528,6 +707,15 @@ final class FileSessionTests: XCTestCase {
         XCTAssertEqual(target.attribute(forName: "customClass")?.stringValue, "iTermApplicationDelegate")
         let item = NSMenuItem(title: node.attribute(forName: "title")?.stringValue ?? "", action: NSSelectorFromString(try XCTUnwrap(connection.attribute(forName: "selector")?.stringValue)), keyEquivalent: node.attribute(forName: "keyEquivalent")?.stringValue ?? "")
         return item
+    }
+
+    private final class BrowserGate: FileUIWebViewDelegate {
+        let original: FileUIWebViewDelegate
+        var ready: (() -> Void)?
+        init(original: FileUIWebViewDelegate, ready: @escaping () -> Void) { self.original = original; self.ready = ready }
+        func fileUIWebViewReady(_ web: iTermFileWorkspaceWebView) { original.fileUIWebViewReady(web); let callback = ready; ready = nil; callback?() }
+        func fileUIWebView(_ web: iTermFileWorkspaceWebView, received type: String, payload: [String: Any], identifier: String) { original.fileUIWebView(web, received: type, payload: payload, identifier: identifier) }
+        func fileUIWebView(_ web: iTermFileWorkspaceWebView, failed error: NSError) { XCTFail("Explorer renderer failed: \(error)"); original.fileUIWebView(web, failed: error) }
     }
 
     private final class EditGate: FileUIWebViewDelegate {

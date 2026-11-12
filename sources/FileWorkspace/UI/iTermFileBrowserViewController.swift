@@ -16,6 +16,7 @@ import AppKit
     private var acquiring = false
     private var acquisition: FileUIAcquisition?
     private var surfaceReady = false
+    private var operationState: [String: Any] = ["canUndo": false, "canRedo": false]
     private var pendingQueryFocus: Bool?
     private var stopped = false
     private var requests = [String: iTermFileBrowserRequestKind]()
@@ -27,12 +28,13 @@ import AppKit
     override func viewDidLayout() { super.viewDidLayout(); renderer?.frame = view.bounds; errorLabel.frame = view.bounds.insetBy(dx: 12, dy: 12) }
     var preferredFirstResponder: NSResponder { renderer ?? view }
     func applyContext(_ context: iTermFileBrowserContext?, title: String) {
-        cancelSearches(); surfaceReady = false; self.context = context; titleText = title; token = UUID().uuidString; requests.removeAll()
+        cancelSearches(); surfaceReady = false; operationState = ["canUndo": false, "canRedo": false]; self.context = context; titleText = title; token = UUID().uuidString; requests.removeAll()
         renderer?.bind(viewIdentifier: viewIdentifier, context: context, token: token, purpose: "explorer")
     }
     func setVisible(_ visible: Bool) {
         self.visible = visible
-        if !visible { surfaceReady = false; pendingQueryFocus = nil; cancelSearches(); acquisition?.cancel(); acquisition = nil; acquiring = false; renderer = nil; return }
+        if !visible { pendingQueryFocus = nil; cancelSearches(); return }
+        if renderer != nil { refresh(); return }
         guard !stopped, renderer == nil, !acquiring else { return }; acquiring = true
         acquisition = runtime.acquire(owner: self) { [weak self, weak runtime = self.runtime] renderer, error in
             guard let self = self else { if let renderer = renderer { runtime?.release(renderer) }; return }; self.acquiring = false
@@ -76,7 +78,8 @@ import AppKit
         if error != nil { payload["error"] = FileUIStrings.labels["previewError"] }; renderer?.send("complete", payload: payload)
     }
     func applyOperationState(canUndo: Bool, canRedo: Bool, context: iTermFileBrowserContext) {
-        guard context === self.context else { return }; renderer?.send("operationState", payload: ["canUndo": canUndo, "canRedo": canRedo])
+        guard context === self.context else { return }; operationState = ["canUndo": canUndo, "canRedo": canRedo]
+        if surfaceReady { renderer?.send("operationState", payload: operationState) }
     }
     func revealPath(_ path: String, context: iTermFileBrowserContext) { guard context === self.context else { return }; renderer?.send("reveal", payload: ["path": path]) }
     func focusQuery(contents: Bool) { pendingQueryFocus = contents; deliverQueryFocus() }
@@ -84,14 +87,16 @@ import AppKit
         guard surfaceReady, let renderer = renderer, let contents = pendingQueryFocus else { return }
         pendingQueryFocus = nil; renderer.send("focusQuery", payload: ["contents": contents])
     }
-    func shutdown() { guard !stopped else { return }; stopped = true; setVisible(false); requests.removeAll(); delegate = nil }
+    func refresh() { if surfaceReady && visible { renderer?.send("refresh") } }
+    func shutdown() { guard !stopped else { return }; stopped = true; setVisible(false); acquisition?.cancel(); acquisition = nil; renderer = nil; requests.removeAll(); delegate = nil }
     @nonobjc func fileUIWebViewReady(_ webView: iTermFileWorkspaceWebView) {
         guard renderer === webView else { return }; surfaceReady = true; errorLabel.isHidden = true
         webView.send("context", payload: context?.fileUIDictionary(token: token, title: titleText) ?? ["token": token, "title": titleText])
+        webView.send("operationState", payload: operationState)
         deliverQueryFocus()
     }
     @nonobjc func fileUIWebView(_ webView: iTermFileWorkspaceWebView, received type: String, payload: [String: Any], identifier: String) {
-        guard renderer === webView else { return }
+        guard renderer === webView, visible else { return }
         if type == "focus" { delegate?.fileBrowserDidReceiveFocus(self); return }
         guard let context = context, let request = iTermFileBrowserRequest(identifier: identifier, context: context, type: type, payload: payload), requests.count < 1024 else { return }
         if request.kind == .refresh { requests = requests.filter { $0.value != .listDirectory } }

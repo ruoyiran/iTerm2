@@ -51,6 +51,20 @@ import AppKit
         controller.restoreViewState(descriptor.viewState); controller.setPreview(descriptor.preview)
         notifyChange()
     }
+    fileprivate func applyCommittedMappings(_ mappings: [iTermFilePathMapping]) {
+        for mapping in mappings {
+            guard let old = mapping.oldPath, let new = mapping.newPath else { continue }
+            let path = descriptor.filePath
+            guard path == old || (mapping.isDirectory && path.hasPrefix(old + "/")) else { continue }
+            // Live documents were already updated by the store notification. This covers metadata-only
+            // failed/restored panes, which still need their saved path and title to follow directory moves.
+            let updated = iTermFileSessionDescriptor(filePath: new + path.dropFirst(old.count), documentIdentifier: documentIdentifier,
+                rootDirectory: original.rootDirectory, projectIdentifier: original.projectIdentifier,
+                worktreeIdentifier: original.worktreeIdentifier, preview: controller.status.isPreview,
+                viewState: controller.cachedViewState, kind: kind)
+            rebind(descriptor: updated, context: updated.context, snapshot: nil, error: controller.status.error)
+        }
+    }
     private func notifyChange() {
         delegate?.fileSessionPaneDidChange(self)
         NotificationCenter.default.post(name: NSNotification.Name(Self.didChangeNotification), object: self)
@@ -183,6 +197,67 @@ import AppKit
                 if let oldIdentifier, oldIdentifier != pane.documentIdentifier { cleanup.insert(oldIdentifier) }
                 completeClose(quitting: false)
                 completion(error)
+            }
+        }
+    }
+    /// Preview replacement drains the actual writer before deciding whether this slot is reusable.
+    func replacePreview(_ pane: iTermFileSessionPane, request: iTermFileOpenRequest,
+                        isCurrent: @escaping () -> Bool, completion: @escaping (Bool, NSError?) -> Void) {
+        guard isCurrent(), !pane.closed, pane.controller.status.isPreview else { completion(false, nil); return }
+        beginOperation { [self] error in
+            guard error == nil else { completion(false, error); return }
+            guard isCurrent(), !pane.closed else { cancelOperation(); completion(false, Self.error(1)); return }
+            if pane.controller.status.isDirty || !pane.controller.status.isPreview {
+                pane.pin(); cancelOperation(); completion(false, nil); return
+            }
+            let generation = operationGeneration
+            let old = pane.documentIdentifier
+            documentStore.openFile(atPath: request.path) { [self] snapshot, error in
+                guard operation, generation == operationGeneration else { completion(false, Self.error(1)); return }
+                guard isCurrent(), !pane.closed else {
+                    if let id = snapshot?.documentIdentifier { cleanup.insert(id) }
+                    cancelOperation(); completion(false, Self.error(1)); return
+                }
+                let descriptor = iTermFileSessionDescriptor(filePath: request.path, documentIdentifier: snapshot?.documentIdentifier,
+                    rootDirectory: request.context.rootDirectory, projectIdentifier: request.context.projectIdentifier,
+                    worktreeIdentifier: request.context.worktreeIdentifier, preview: request.activation == .preview, viewState: iTermFileViewState())
+                pane.rebind(descriptor: descriptor, context: request.context, snapshot: snapshot, error: error)
+                if let old, old != pane.documentIdentifier { cleanup.insert(old) }
+                cancelOperation(); completion(true, error)
+            }
+        }
+    }
+    func applyCommittedPathMappings(_ mappings: [iTermFilePathMapping], completion: @escaping () -> Void) {
+        documentStore.applyPathMappings(mappings) { [self] in
+            documentStore.allSnapshots { [self] snapshots in
+                let live = Set(snapshots.map(\.documentIdentifier))
+                for pane in panes where pane.documentIdentifier.map({ !live.contains($0) }) ?? true {
+                    pane.applyCommittedMappings(mappings)
+                }
+                completion()
+            }
+        }
+    }
+    /// Filesystem transactions include every affected document, even when another pane also owns it.
+    func prepareFileMutation(paths: [String], isCurrent: @escaping () -> Bool, completion: @escaping (Bool) -> Void) {
+        beginOperation { [self] error in
+            guard error == nil else { completion(false); return }
+            let generation = operationGeneration
+            documentStore.allSnapshots { [self] values in
+                guard operation, generation == operationGeneration else { completion(false); return }
+                let dirty = values.filter { value in value.isDirty && paths.contains { value.filePath == $0 || value.filePath.hasPrefix($0 + "/") } }
+                let decide: (iTermFileCloseDecision) -> Void = { [self] decision in
+                    guard operation, generation == operationGeneration else { completion(false); return }
+                    guard isCurrent(), decision == .save || decision == .discard else { cancelOperation(); completion(false); return }
+                    persist(dirty, decision: decision, generation: generation) { [self] error in
+                        guard operation, generation == operationGeneration else { completion(false); return }
+                        guard error == nil else { fail(error!, completion: completion); return }
+                        completion(true)
+                    }
+                }
+                if dirty.isEmpty { decide(.save) }
+                else if let delegate { delegate.fileSessionCoordinator(self, decideFor: dirty, quitting: false, completion: decide) }
+                else { decide(.cancel) }
             }
         }
     }

@@ -79,6 +79,7 @@
 - (CGFloat)minimumHeight;
 
 @optional
+@property(nonatomic, readonly) BOOL ownsToolHeader;
 + (BOOL)isDynamic;
 - (NSDictionary *)restorableState;
 - (void)restoreFromState:(NSDictionary *)state;

@@ -9,8 +9,8 @@
     },
     {
       "path": "app.js",
-      "bytes": 2017,
-      "sha256": "3d87989dabb3579e4a6b81657b7fdfff7d77d9e8dbfbe1a7685821d506363200",
+      "bytes": 2128,
+      "sha256": "64ef7b2cacb5c962b24387ed6afaa241c77ccc82b6934693febb8e6b4ee8f2da",
       "mime": "text/javascript; charset=utf-8"
     },
     {
@@ -92,12 +92,6 @@
       "mime": "text/javascript; charset=utf-8"
     },
     {
-      "path": "chunks/chunk-NQ2Z36HO.js",
-      "bytes": 20991,
-      "sha256": "03b624584d9658286f048b2c9ad6a9c71746ee6a3dedddddb1930dea7c8f0651",
-      "mime": "text/javascript; charset=utf-8"
-    },
-    {
       "path": "chunks/chunk-SENOILCD.js",
       "bytes": 3323021,
       "sha256": "d9012cba75f4eca7d6d0968b904c3e02fa8304592512c1a8898b1ba709d669aa",
@@ -108,6 +102,12 @@
       "bytes": 278,
       "sha256": "500520d9d47c2d50feb0216c6950b602104a9e513c1a45a34d9a0314f2d0ea51",
       "mime": "text/plain; charset=utf-8"
+    },
+    {
+      "path": "chunks/chunk-UWUJ3QIP.js",
+      "bytes": 22506,
+      "sha256": "32c0286583a40ae24f4850a866c5f60adfa4b53f99c4ec933b2ed05c38c4a135",
+      "mime": "text/javascript; charset=utf-8"
     },
     {
       "path": "chunks/chunk-VC46IEJQ.js",
@@ -212,9 +212,9 @@
       "mime": "text/javascript; charset=utf-8"
     },
     {
-      "path": "chunks/editor-MMUQZTMG.js",
+      "path": "chunks/editor-BMJSNUDR.js",
       "bytes": 62465,
-      "sha256": "8985d3b6a5fb33a0c0ac606aa3f259ad36adbe481223ebc13fad8e501fe08256",
+      "sha256": "d846f0599094e5f05ad5e1dbdd91b6c231baf22fb3ddaf557ceeaeae848aa37b",
       "mime": "text/javascript; charset=utf-8"
     },
     {
@@ -885,7 +885,7 @@
     },
     {
       "path": "sources/FileWorkspace/Resources/src/bootstrap.mjs",
-      "sha256": "405b606af661e380a07183019c7a1c08da5a05d72b5a1a5d70eba676474c169c"
+      "sha256": "09276932ae1e92c0e8df085f2492390e51232423969de0f3dfc0088a165202d6"
     },
     {
       "path": "sources/FileWorkspace/Resources/src/bridge.mjs",
@@ -901,7 +901,7 @@
     },
     {
       "path": "sources/FileWorkspace/Resources/src/explorer.mjs",
-      "sha256": "2a2ce447945aeeb601dcbc4af3e7226f29e22912835185b3ece7d783a1d834ca"
+      "sha256": "4cc50bbc205e226e954c91fedb42a09990765fd88e2ab1b28eedb9b39529d338"
     },
     {
       "path": "sources/FileWorkspace/Resources/src/tree-state.mjs",

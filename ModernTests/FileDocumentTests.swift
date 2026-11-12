@@ -46,6 +46,47 @@ final class FileDocumentTests: XCTestCase {
         return result
     }
 
+    func testCommittedDirectoryMappingUpdatesEveryRecoveredDraftAndUndoPath() throws {
+        let directory = root.appendingPathComponent("folder")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        for name in ["a.txt", "b.txt"] {
+            let path = directory.appendingPathComponent(name).path
+            try Data("disk".utf8).write(to: URL(fileURLWithPath: path))
+            let changed = try XCTUnwrap(replace(try XCTUnwrap(open(path)), "draft-" + name))
+            persist(changed.documentIdentifier)
+        }
+        store = iTermFileDocumentStore(storageDirectory: root.appendingPathComponent("drafts"))
+        let before = recover(); XCTAssertEqual(before.count, 2)
+        let backend = iTermFileBrowserService()
+        let context = iTermFileBrowserContext(rootDirectory: root.path, projectIdentifier: "project", worktreeIdentifier: "tree", generation: 1)
+        backend.activate(context)
+        let moved = expectation(description: "real directory rename mappings")
+        backend.rename(directory.path, newName: "renamed", context: context) { result in
+            XCTAssertNil(result.error); XCTAssertEqual(result.mappings.count, 1); XCTAssertTrue(result.mappings[0].isDirectory)
+            // Display context changes after commit cannot erase mappings for documents with no native pane.
+            backend.activate(iTermFileBrowserContext(rootDirectory: self.root.path, projectIdentifier: "other", worktreeIdentifier: "", generation: 2))
+            self.store.applyPathMappings(result.mappings) { moved.fulfill() }
+        }
+        wait(for: [moved], timeout: 10)
+        let history = expectation(description: "root history survives context changes")
+        backend.operationState(context) { undo, redo in XCTAssertTrue(undo); XCTAssertFalse(redo); history.fulfill() }
+        wait(for: [history], timeout: 10)
+        let saved = expectation(description: "new draft paths durable")
+        store.flushDrafts { error in XCTAssertNil(error); saved.fulfill() }; wait(for: [saved], timeout: 10)
+        store = iTermFileDocumentStore(storageDirectory: root.appendingPathComponent("drafts"))
+        let after = recover()
+        XCTAssertEqual(Set(after.map(\.documentIdentifier)), Set(before.map(\.documentIdentifier)))
+        XCTAssertTrue(after.allSatisfy { $0.filePath.hasPrefix(root.appendingPathComponent("renamed").path + "/") })
+        XCTAssertEqual(Set(after.compactMap(\.text)), ["draft-a.txt", "draft-b.txt"])
+        backend.activate(context)
+        let undone = expectation(description: "undo real move")
+        backend.undo(context) { result in XCTAssertNil(result.error); self.store.applyPathMappings(result.mappings) { undone.fulfill() } }
+        wait(for: [undone], timeout: 10)
+        let snapshots = expectation(description: "all undo paths")
+        store.allSnapshots { values in XCTAssertTrue(values.allSatisfy { $0.filePath.hasPrefix(directory.path + "/") }); snapshots.fulfill() }
+        wait(for: [snapshots], timeout: 10)
+    }
+
     func testDiscardRecoveredMissingDocumentRemovesDraftWithoutRecreatingSource() throws {
         let path = try fixture("missing.txt", Data("original".utf8))
         let initial = try XCTUnwrap(open(path))

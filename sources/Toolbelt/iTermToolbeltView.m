@@ -468,6 +468,8 @@ static NSString *const kDynamicToolURL = @"URL";
         [self addToolWithName:theName];
     }
     self.fileTreeView.rootDirectory = self.projectRootDirectory;
+    self.fileTreeView.browserContext = self.fileBrowserContext;
+    self.fileTreeView.nativeRequest = self.fileBrowserRequest;
     self.fileTreeView.openTerminal = self.projectOpenTerminal;
     self.fileTreeView.canOpenTerminal = self.projectCanOpenTerminal;
     [self forceSplitterSubviewsToRespectSizeConstraints];
@@ -639,6 +641,17 @@ static NSString *const kDynamicToolURL = @"URL";
     return (iTermToolFileTree *)[self toolWithName:kFileTreeToolName];
 }
 
+- (void)setFileBrowserContext:(iTermFileBrowserContext *)context {
+    if (_fileBrowserContext == context) { return; }
+    _fileBrowserContext = context;
+    self.fileTreeView.browserContext = context;
+}
+
+- (void)setFileBrowserRequest:(void (^)(iTermFileBrowserRequest *))callback {
+    _fileBrowserRequest = [callback copy];
+    self.fileTreeView.nativeRequest = callback;
+}
+
 - (void)setProjectRootDirectory:(NSString *)directory {
     if (_projectRootDirectory == directory || [_projectRootDirectory isEqualToString:directory]) { return; }
     _projectRootDirectory = [directory copy];
@@ -665,6 +678,8 @@ static NSString *const kDynamicToolURL = @"URL";
     [[self namedMarksView] setNamedMarks:[self.delegate toolbeltNamedMarks]];
     [self updateForProfileType];
     self.fileTreeView.rootDirectory = self.projectRootDirectory;
+    self.fileTreeView.browserContext = self.fileBrowserContext;
+    self.fileTreeView.nativeRequest = self.fileBrowserRequest;
     self.fileTreeView.openTerminal = self.projectOpenTerminal;
     self.fileTreeView.canOpenTerminal = self.projectCanOpenTerminal;
 }
@@ -688,6 +703,8 @@ static NSString *const kDynamicToolURL = @"URL";
 
 - (void)relayoutAllTools {
     self.fileTreeView.rootDirectory = self.projectRootDirectory;
+    self.fileTreeView.browserContext = self.fileBrowserContext;
+    self.fileTreeView.nativeRequest = self.fileBrowserRequest;
     self.fileTreeView.openTerminal = self.projectOpenTerminal;
     self.fileTreeView.canOpenTerminal = self.projectCanOpenTerminal;
     const NSRect desiredFrame = NSMakeRect(0, 0, self.frame.size.width, self.frame.size.height);
