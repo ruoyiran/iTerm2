@@ -381,30 +381,36 @@ func fileDocumentError(_ code: Int) -> NSError {
             }
         }
     }
+    @nonobjc private func persistCurrentDraft(_ id: String, clearScheduled: Bool = false) throws {
+        // Every persistence entry point captures on the same serial IO executor. An absent cache
+        // entry may have been released with a retained dirty draft; it is not a clean document.
+        let captured: (identifier: String, draft: FileDocumentDraft?)? = state.sync {
+            if clearScheduled { self.draftScheduled.remove(id) }
+            guard let document = self.documents[id] else { return nil }
+            return (id, FileDocumentDraft(document))
+        }
+        guard let captured = captured else { return }
+        let storage = FileDraftStorage(directory: storageDirectory)
+        if let draft = captured.draft { try storage.write(draft) }
+        else { try storage.remove(captured.identifier) }
+    }
+
     @nonobjc private func scheduleDraft(_ id: String) {
         guard draftScheduled.insert(id).inserted else { return }
         io.async {
-            let draft: FileDocumentDraft? = self.state.sync {
-                self.draftScheduled.remove(id)
-                return self.documents[id].flatMap(FileDocumentDraft.init)
-            }
             // Automatic persistence is best effort; explicit flush returns any storage error.
-            if let draft = draft { try? FileDraftStorage(directory: self.storageDirectory).write(draft) }
-            else { try? FileDraftStorage(directory: self.storageDirectory).remove(id) }
+            try? self.persistCurrentDraft(id, clearScheduled: true)
         }
     }
 
     func persistDraft(documentIdentifier: String, completion: @escaping (NSError?) -> Void) {
         state.async {
-            guard let document = self.documents[documentIdentifier] else {
+            guard self.documents[documentIdentifier] != nil else {
                 DispatchQueue.main.async { completion(fileDocumentError(6)) }; return
             }
-            let draft = FileDocumentDraft(document)
             self.io.async {
                 do {
-                    let storage = FileDraftStorage(directory: self.storageDirectory)
-                    if let draft = draft { try storage.write(draft) }
-                    else { try storage.remove(documentIdentifier) }
+                    try self.persistCurrentDraft(documentIdentifier)
                     DispatchQueue.main.async { completion(nil) }
                 } catch { DispatchQueue.main.async { completion(error as NSError) } }
             }
@@ -456,14 +462,12 @@ func fileDocumentError(_ code: Int) -> NSError {
     /// Flush all cached documents before exit. Completion waits for earlier queued draft IO.
     func flushDrafts(completion: @escaping (NSError?) -> Void) {
         state.async {
-            let captured = self.documents.values.map { ($0.identifier, FileDocumentDraft($0)) }
             self.io.async {
+                let identifiers = self.state.sync { Array(self.documents.keys) }
                 var issue: NSError?
-                let storage = FileDraftStorage(directory: self.storageDirectory)
-                for (id, draft) in captured {
-                    do {
-                        if let draft = draft { try storage.write(draft) } else { try storage.remove(id) }
-                    } catch { issue = error as NSError }
+                for id in identifiers {
+                    do { try self.persistCurrentDraft(id) }
+                    catch { issue = error as NSError }
                 }
                 let error = issue
                 DispatchQueue.main.async { completion(error) }
@@ -482,16 +486,16 @@ func fileDocumentError(_ code: Int) -> NSError {
                 }) else { DispatchQueue.main.async { completion(nil, nil) }; return }
                 if document.saving { self.complete(document, completion: completion); return }
                 if let loaded = loaded {
+                    // Access permissions are not part of the content/identity baseline.
+                    document.readOnly = loaded.readOnly
                     if document.isDirty {
                         document.conflict = loaded.baseline != document.baseline || loaded.canonicalPath != document.canonicalPath
-                        document.readOnly = loaded.readOnly
                     } else if loaded.baseline != document.baseline {
                         document.text = loaded.text
                         document.format = loaded.format
                         document.kind = loaded.kind
                         document.canonicalPath = loaded.canonicalPath
                         document.baseline = loaded.baseline
-                        document.readOnly = loaded.readOnly
                         document.tooLarge = loaded.tooLarge
                         document.conflict = false
                         document.undo.removeAll(); document.redo.removeAll()
@@ -518,10 +522,13 @@ func fileDocumentError(_ code: Int) -> NSError {
         state.async {
             guard let document = self.documents.values.first(where: { $0.path == fromPath || $0.canonicalPath == fromPath }),
                   !document.saving else { DispatchQueue.main.async { completion(nil, fileDocumentError(6)) }; return }
+            let generation = document.lifecycleGeneration
             self.io.async {
                 let result = Result { try Self.read(toPath) }
                 self.state.async {
                     do {
+                        guard self.documents[document.identifier] === document,
+                              document.lifecycleGeneration == generation else { throw fileDocumentError(7) }
                         let loaded = try result.get()
                         guard !self.documents.values.contains(where: { $0.identifier != document.identifier && $0.canonicalPath == loaded.canonicalPath }) else { throw Self.saveError(.conflict) }
                         document.path = loaded.path
@@ -555,13 +562,21 @@ func fileDocumentError(_ code: Int) -> NSError {
             }
             guard !document.saving else { DispatchQueue.main.async { completion(fileDocumentError(7)) }; return }
             let revision = document.revision
-            let draft = FileDocumentDraft(document)
+            let generation = document.lifecycleGeneration
             self.io.async {
                 do {
+                    let draft: FileDocumentDraft? = try self.state.sync {
+                        guard self.documents[documentIdentifier] === document,
+                              document.revision == revision, document.lifecycleGeneration == generation,
+                              !document.saving else { throw fileDocumentError(7) }
+                        return FileDocumentDraft(document)
+                    }
                     let storage = FileDraftStorage(directory: self.storageDirectory)
                     if let draft = draft { try storage.write(draft) } else { try storage.remove(documentIdentifier) }
                     self.state.async {
-                        guard document.revision == revision, !document.saving else {
+                        guard self.documents[documentIdentifier] === document,
+                              document.revision == revision, document.lifecycleGeneration == generation,
+                              !document.saving else {
                             DispatchQueue.main.async { completion(fileDocumentError(7)) }; return
                         }
                         self.documents.removeValue(forKey: documentIdentifier)

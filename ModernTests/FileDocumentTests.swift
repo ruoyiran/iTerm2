@@ -457,4 +457,185 @@ final class FileDocumentTests: XCTestCase {
         XCTAssertEqual(fetch(maximum.documentIdentifier)?.revision, maximum.revision)
     }
 
+    // The coordinated read blocks the production IO queue while state-queue edits continue.
+    private func holdIO() throws -> (DispatchSemaphore, XCTestExpectation, XCTestExpectation) {
+        let path = try fixture("io-gate", Data("gate".utf8))
+        let acquired = expectation(description: "acquire IO gate")
+        let released = expectation(description: "release IO gate")
+        let opened = expectation(description: "gated read completes")
+        let gate = DispatchSemaphore(value: 0)
+        DispatchQueue.global().async {
+            var error: NSError?
+            NSFileCoordinator().coordinate(writingItemAt: URL(fileURLWithPath: path), options: [], error: &error) { _ in
+                acquired.fulfill()
+                _ = gate.wait(timeout: .now() + 10)
+            }
+            XCTAssertNil(error)
+            released.fulfill()
+        }
+        wait(for: [acquired], timeout: 10)
+        store.openFile(atPath: path) { value, error in XCTAssertNotNil(value); XCTAssertNil(error); opened.fulfill() }
+        return (gate, released, opened)
+    }
+
+    private func explicitPersistenceKeepsLatestDraft(flush: Bool) throws {
+        let path = try fixture("persist-race", Data("baseline".utf8))
+        let initial = try XCTUnwrap(open(path))
+        let (gate, released, opened) = try holdIO()
+        defer { gate.signal() }
+        let first = try XCTUnwrap(replace(initial, "A"))
+        let persisted = expectation(description: "explicit persistence")
+        let completion: (NSError?) -> Void = { error in XCTAssertNil(error); persisted.fulfill() }
+        if flush { store.flushDrafts(completion: completion) }
+        else { store.persistDraft(documentIdentifier: first.documentIdentifier, completion: completion) }
+        _ = try XCTUnwrap(replace(first, "B"))
+        gate.signal()
+        wait(for: [released, opened, persisted], timeout: 10)
+        store = iTermFileDocumentStore(storageDirectory: root.appendingPathComponent("drafts"))
+        let recovered = try XCTUnwrap(recover().first)
+        XCTAssertEqual(recovered.text, "B")
+        XCTAssertEqual(recovered.documentIdentifier, initial.documentIdentifier)
+    }
+
+    func testPersistCapturesLatestAfterQueuedAutomaticPersistence() throws {
+        try explicitPersistenceKeepsLatestDraft(flush: false)
+    }
+
+    func testFlushCapturesLatestAfterQueuedAutomaticPersistence() throws {
+        try explicitPersistenceKeepsLatestDraft(flush: true)
+    }
+
+    func testMoveDuringReleaseRetainsDirtyDraftAtNewPath() throws {
+        let path = try fixture("move-release", Data("disk".utf8))
+        let initial = try XCTUnwrap(replace(try XCTUnwrap(open(path)), "dirty"))
+        persist(initial.documentIdentifier)
+        let destination = root.appendingPathComponent("move-release-destination").path
+        try FileManager.default.moveItem(atPath: path, toPath: destination)
+        let acquired = expectation(description: "hold destination read")
+        let released = expectation(description: "destination gate released")
+        let gate = DispatchSemaphore(value: 0)
+        defer { gate.signal() }
+        DispatchQueue.global().async {
+            var error: NSError?
+            NSFileCoordinator().coordinate(writingItemAt: URL(fileURLWithPath: destination), options: [], error: &error) { _ in
+                acquired.fulfill(); _ = gate.wait(timeout: .now() + 10)
+            }
+            XCTAssertNil(error); released.fulfill()
+        }
+        wait(for: [acquired], timeout: 10)
+        let moved = expectation(description: "move completed")
+        store.fileDidMove(fromPath: path, toPath: destination) { value, error in
+            XCTAssertNil(error); XCTAssertEqual(value?.filePath, destination); moved.fulfill()
+        }
+        let releaseCompleted = expectation(description: "release becomes stale after metadata change")
+        store.releaseDocument(documentIdentifier: initial.documentIdentifier) { error in
+            XCTAssertEqual(error?.domain, "iTermFileDocumentError")
+            XCTAssertEqual(error?.code, 7)
+            releaseCompleted.fulfill()
+        }
+        // State FIFO ensures move and release have both been scheduled while the read is held.
+        XCTAssertEqual(fetch(initial.documentIdentifier)?.filePath, path)
+        gate.signal()
+        wait(for: [moved, released, releaseCompleted], timeout: 10)
+        // An ordinary open is a deterministic IO barrier behind the move’s automatic draft job.
+        _ = try XCTUnwrap(open(destination))
+        store = iTermFileDocumentStore(storageDirectory: root.appendingPathComponent("drafts"))
+        let recovered = try XCTUnwrap(recover().first)
+        XCTAssertEqual(recovered.documentIdentifier, initial.documentIdentifier)
+        XCTAssertEqual(recovered.filePath, destination)
+        XCTAssertEqual(recovered.text, "dirty")
+    }
+
+    func testPermissionOnlyWatcherEventsRefreshAccessWithoutChangingRevisionOrHistory() throws {
+        let path = try fixture("chmod", Data("text".utf8))
+        try FileManager.default.setAttributes([.posixPermissions: 0o444], ofItemAtPath: path)
+        let initial = try XCTUnwrap(open(path))
+        XCTAssertTrue(initial.isReadOnly)
+        for mode in [0o644, 0o444, 0o644] {
+            try FileManager.default.setAttributes([.posixPermissions: mode], ofItemAtPath: path)
+            let done = expectation(description: "chmod watcher")
+            store.fileDidChange(atPath: path) { value, error in
+                XCTAssertNil(error); XCTAssertEqual(value?.isReadOnly, mode == 0o444)
+                XCTAssertEqual(value?.revision, initial.revision)
+                XCTAssertEqual(value?.text, "text"); done.fulfill()
+            }
+            wait(for: [done], timeout: 10)
+        }
+        let changed = try XCTUnwrap(replace(try XCTUnwrap(fetch(initial.documentIdentifier)), "edited"))
+        XCTAssertEqual(save(changed.documentIdentifier), .saved)
+        try FileManager.default.setAttributes([.posixPermissions: 0o444], ofItemAtPath: path)
+        let locked = expectation(description: "saved clean document locks")
+        store.fileDidChange(atPath: path) { value, error in
+            XCTAssertNil(error); XCTAssertTrue(value!.isReadOnly)
+            XCTAssertEqual(value?.revision, changed.revision); locked.fulfill()
+        }
+        wait(for: [locked], timeout: 10)
+        try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: path)
+        let unlocked = expectation(description: "saved clean document unlocks")
+        store.fileDidChange(atPath: path) { value, error in XCTAssertNil(error); XCTAssertFalse(value!.isReadOnly); unlocked.fulfill() }
+        wait(for: [unlocked], timeout: 10)
+        XCTAssertEqual(history(changed.documentIdentifier)?.text, "text")
+    }
+
+    func testOrphanDraftCleanupValidatesNamesTypesAndAccountsRemainingOwnedFiles() throws {
+        let directory = root.appendingPathComponent("drafts")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let orphan = directory.appendingPathComponent(".draft-" + UUID().uuidString)
+        XCTAssertTrue(FileManager.default.createFile(atPath: orphan.path, contents: Data("partial".utf8), attributes: [.posixPermissions: 0o600]))
+        let hugeOrphan = directory.appendingPathComponent(".draft-" + UUID().uuidString)
+        XCTAssertTrue(FileManager.default.createFile(atPath: hugeOrphan.path, contents: nil, attributes: [.posixPermissions: 0o600]))
+        let handle = try FileHandle(forWritingTo: hugeOrphan)
+        try handle.truncate(atOffset: 140 * 1024 * 1024)
+        try handle.close()
+        let unrelated = directory.appendingPathComponent(".draft-not-a-uuid")
+        try Data("leave alone".utf8).write(to: unrelated)
+        let privateFixture = try fixture("orphan-link-target", Data("keep".utf8))
+        let symlink = directory.appendingPathComponent(".draft-" + UUID().uuidString)
+        try FileManager.default.createSymbolicLink(atPath: symlink.path, withDestinationPath: privateFixture)
+        let protectedDirectory = directory.appendingPathComponent(".draft-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: protectedDirectory, withIntermediateDirectories: false)
+        XCTAssertTrue(recover().isEmpty)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: orphan.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: hugeOrphan.path))
+        XCTAssertEqual(try String(contentsOf: unrelated, encoding: .utf8), "leave alone")
+        XCTAssertEqual(try String(contentsOfFile: privateFixture, encoding: .utf8), "keep")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: symlink.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: protectedDirectory.path))
+        let initial = try XCTUnwrap(replace(try XCTUnwrap(open(try fixture("budget", Data("disk".utf8)))), "draft"))
+        persist(initial.documentIdentifier)
+        // Unremovable owned-name directories still count toward the file budget.
+        for _ in 0..<100 {
+            try FileManager.default.createDirectory(at: directory.appendingPathComponent(".draft-" + UUID().uuidString), withIntermediateDirectories: false)
+        }
+        let denied = expectation(description: "owned file budget enforced")
+        store.persistDraft(documentIdentifier: initial.documentIdentifier) { error in
+            XCTAssertEqual(error?.domain, "iTermFileDocumentError"); XCTAssertEqual(error?.code, 4); denied.fulfill()
+        }
+        wait(for: [denied], timeout: 10)
+    }
+
+    func testRetainedUnsafeOrphanBytesAreReportedAndBlockFurtherWrites() throws {
+        let initial = try XCTUnwrap(replace(try XCTUnwrap(open(try fixture("byte-budget", Data("disk".utf8)))), "draft"))
+        persist(initial.documentIdentifier)
+        let directory = root.appendingPathComponent("drafts")
+        let protected = directory.appendingPathComponent(".draft-" + UUID().uuidString)
+        XCTAssertTrue(FileManager.default.createFile(atPath: protected.path, contents: nil, attributes: [.posixPermissions: 0o644]))
+        let handle = try FileHandle(forWritingTo: protected)
+        try handle.truncate(atOffset: 128 * 1024 * 1024 + 1)
+        try handle.close()
+        let privatePath = try fixture("hardlink-private", Data("do not remove".utf8))
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: privatePath)
+        let hardlink = directory.appendingPathComponent(".draft-" + UUID().uuidString)
+        try FileManager.default.linkItem(atPath: privatePath, toPath: hardlink.path)
+        XCTAssertEqual(recover(expectError: true).first?.text, "draft")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: protected.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: hardlink.path))
+        XCTAssertEqual(try String(contentsOfFile: privatePath, encoding: .utf8), "do not remove")
+        let done = expectation(description: "byte budget rejects write")
+        store.persistDraft(documentIdentifier: initial.documentIdentifier) { error in
+            XCTAssertEqual(error?.domain, "iTermFileDocumentError"); XCTAssertEqual(error?.code, 4); done.fulfill()
+        }
+        wait(for: [done], timeout: 10)
+    }
+
 }

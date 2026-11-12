@@ -107,8 +107,8 @@ struct FileEditTransaction {
 // All mutations occur on the owning store’s state queue.
 final class FileDocument {
     let identifier: String
-    var path: String
-    var canonicalPath: String
+    var path: String { didSet { if path != oldValue { lifecycleGeneration += 1 } } }
+    var canonicalPath: String { didSet { if canonicalPath != oldValue { lifecycleGeneration += 1 } } }
     var kind: iTermFileDocumentKind
     var text: String? { didSet { updateContentMetadata() } }
     var format: FileTextFormat? { didSet { updateContentMetadata() } }
@@ -116,6 +116,7 @@ final class FileDocument {
     private var contentByteCount: UInt64 = 0
     var baseline: FileSignature
     var revision: UInt64 = 0
+    var lifecycleGeneration: UInt64 = 0
     var readOnly: Bool
     var conflict = false
     var tooLarge: Bool
