@@ -2,6 +2,7 @@ import Foundation
 
 enum FileUIStrings {
     static var labels: [String: String] { [
+        "tooLarge": String(localized: "FileWorkspace.tooLarge", defaultValue: "This file is too large to display.", comment: "Information shown for a file above the supported editor size limit"),
         "results": String(localized: "FileWorkspace.results", defaultValue: "Results", comment: "Label next to the numeric search match count"),
         "retry": String(localized: "FileWorkspace.retry", defaultValue: "Retry", comment: "Retry a failed directory listing"),
         "files": String(localized: "FileWorkspace.files", defaultValue: "Files", comment: "File workspace control or status: files"),

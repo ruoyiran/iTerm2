@@ -41,6 +41,7 @@ final class iTermFilePreviewViewController: NSViewController, NSTextViewDelegate
         work?.cancel(); generation &+= 1; let generation = generation
         if let observer = selectionObserver { NotificationCenter.default.removeObserver(observer) }; selectionObserver = nil
         if snapshot.kind != .markdown { markdownTextView = nil; sourceButton?.removeFromSuperview(); sourceButton = nil }
+        if snapshot.isTooLarge { showError(tooLarge: true); return }
         if snapshot.kind == .markdown, let text = snapshot.text {
             if sourceButton == nil { let button = NSButton(title: String(localized: "FileWorkspace.ShowSource", defaultValue: "Show Source", comment: "Switch Markdown preview to editable source"), target: self, action: #selector(showSource)); sourceButton = button; view.addSubview(button) }
 
@@ -96,7 +97,7 @@ final class iTermFilePreviewViewController: NSViewController, NSTextViewDelegate
         return result
     }
     private func install(_ content: NSView) { self.content?.removeFromSuperview(); self.content = content; content.frame = contentFrame; content.autoresizingMask = [.width, .height]; view.addSubview(content); label.isHidden = true; view.needsLayout = true }
-    private func showError(unsupported: Bool = false) { content?.removeFromSuperview(); content = nil; label.stringValue = FileUIStrings.labels[unsupported ? "unsupported" : "previewError"] ?? ""; label.isHidden = false }
+    private func showError(unsupported: Bool = false, tooLarge: Bool = false) { content?.removeFromSuperview(); content = nil; label.stringValue = FileUIStrings.labels[tooLarge ? "tooLarge" : unsupported ? "unsupported" : "previewError"] ?? ""; label.isHidden = false }
     func textView(_ textView: NSTextView, clickedOnLink link: Any, at charIndex: Int) -> Bool {
         guard let url = (link as? URL) ?? (link as? String).flatMap(URL.init(string:)), ["https", "http", "mailto"].contains(url.scheme?.lowercased() ?? "") else { return true }
         NSWorkspace.shared.open(url); return true

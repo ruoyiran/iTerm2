@@ -13,6 +13,29 @@ final class FileUIWebViewTests: XCTestCase, FileUIWebViewDelegate {
  private let pastedText="X\nY\rZ"+String(repeating:"😀",count:100000)
 
 
+
+ func testOversizedTextUsesInformationViewInsteadOfEmptyEditor() throws {
+  let dir=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+  try FileManager.default.createDirectory(at:dir,withIntermediateDirectories:true)
+  defer {try? FileManager.default.removeItem(at:dir)}
+  let path=dir.appendingPathComponent("large.txt");try Data().write(to:path)
+  let file=try FileHandle(forWritingTo:path);try file.truncate(atOffset:10*1024*1024+1);try file.close()
+  let store=iTermFileDocumentStore(storageDirectory:dir.appendingPathComponent("drafts"))
+  var snapshot:iTermFileDocumentSnapshot?;let opened=expectation(description:"oversize snapshot")
+  store.openFile(atPath:path.path){value,error in XCTAssertNil(error);snapshot=value;opened.fulfill()};wait(for:[opened],timeout:5)
+  let resource=ProcessInfo.processInfo.environment["FILE_UI_RESOURCE_DIR"].map { URL(fileURLWithPath:$0) } ?? Bundle.main.resourceURL!.appendingPathComponent("FileWorkspaceUI")
+  let runtime=iTermFileWorkspaceUIRuntime(documentStore:store,resourceDirectory:resource)
+  let controller=iTermFileViewController(runtime:runtime,viewIdentifier:"large")
+  defer {controller.shutdown();runtime.shutdown()}
+  controller.applyContext(iTermFileBrowserContext(rootDirectory:dir.path,projectIdentifier:"p",worktreeIdentifier:"w",generation:1))
+  controller.applyDocumentChanges(try XCTUnwrap(snapshot),edits:nil)
+  let observer=FileUIViewObserver();controller.delegate=observer;let ready=expectation(description:"information ready")
+  observer.changed={status in if status.isReady {observer.changed=nil;ready.fulfill()}}
+  controller.setVisible(true);wait(for:[ready],timeout:20)
+  XCTAssertTrue(controller.status.isReadOnly)
+  XCTAssertFalse(controller.canPerform(.find))
+  XCTAssertFalse(controller.canPerform(.saveAs))
+ }
  func testNativePreviewReaderRejectsSpecialFilesLinksAndOversize() throws {
   let dir=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).resolvingSymlinksInPath()
   try FileManager.default.createDirectory(at:dir,withIntermediateDirectories:true)

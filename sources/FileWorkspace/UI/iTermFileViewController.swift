@@ -34,6 +34,11 @@ import AppKit
     private let errorLabel = NSTextField(wrappingLabelWithString: "")
     private(set) var cachedViewState = iTermFileViewState()
     var documentIdentifier: String? { snapshot?.documentIdentifier ?? recoveredIdentifier }
+    private var usesNativePreview: Bool {
+        guard let snapshot = snapshot else { return false }
+        return snapshot.isTooLarge || (snapshot.kind != .text && snapshot.kind != .markdown) ||
+            (snapshot.kind == .markdown && cachedViewState.showsMarkdownPreview)
+    }
     var minimumContentSize: NSSize { NSSize(width: 240, height: 150) }
     var preferredFirstResponder: NSResponder { previewController?.preferredFirstResponder ?? renderer ?? view }
     var status: iTermFileViewStatus {
@@ -68,7 +73,7 @@ import AppKit
             var payload: [String: Any] = ["snapshot": snapshot.fileUIDictionary(includeText: edits == nil)]
             if let edits = edits { payload["edits"] = edits.map(\.fileUIDictionary) }; renderer?.send("document", payload: payload)
         }
-        if snapshot.kind == .text || snapshot.kind == .markdown && !cachedViewState.showsMarkdownPreview {
+        if !usesNativePreview {
             if previewController != nil { previewController?.shutdown(); previewController?.view.removeFromSuperview(); previewController?.removeFromParent(); previewController = nil; renderer?.isHidden = false }
         } else if visible { showPreview() }
         if changedDocument && ready && focusRequested { runtime.requestAuthority(self) }
@@ -82,7 +87,7 @@ import AppKit
         previewController?.shutdown(); previewController?.view.removeFromSuperview(); previewController?.removeFromParent(); previewController = nil
         snapshot = nil; self.path = path; recoveredIdentifier = documentIdentifier; fail(error)
     }
-    func restoreViewState(_ state: iTermFileViewState) { cachedViewState = state; renderer?.send("restoreViewState", payload: state.dictionary); if state.showsMarkdownPreview { showPreview() } }
+    func restoreViewState(_ state: iTermFileViewState) { cachedViewState = state; renderer?.send("restoreViewState", payload: state.dictionary); if usesNativePreview { showPreview() } }
     func setPreview(_ preview: Bool) { self.preview = preview; renderer?.send("viewFlags", payload: ["preview": preview]); publish() }
     func setVisible(_ visible: Bool) {
         self.visible = visible
@@ -94,7 +99,7 @@ import AppKit
                 if let renderer = self.renderer { self.runtime.release(renderer) }; self.renderer = nil; self.ready = false
             }; return
         }
-        if let snapshot = snapshot, snapshot.kind != .text && snapshot.kind != .markdown || cachedViewState.showsMarkdownPreview { showPreview(); return }
+        if usesNativePreview { showPreview(); return }
         guard !stopped, previewController == nil, renderer == nil, !acquiring, let snapshot = snapshot,
               snapshot.kind == .text || snapshot.kind == .markdown else { return }; acquiring = true
         runtime.acquire { [weak self] renderer, error in
@@ -115,7 +120,7 @@ import AppKit
         case .save, .undo, .redo, .cut, .paste: return ready && !status.isReadOnly && !composing
         case .copy: return previewController?.hasSelection ?? selection
         case .find, .findNext, .findPrevious, .selectAll: return ready && previewController == nil
-        case .toggleMarkdownPreview: return snapshot?.kind == .markdown
+        case .toggleMarkdownPreview: return snapshot?.kind == .markdown && snapshot?.text != nil
         case .saveAs: return snapshot?.text != nil
         case .pin: return preview
         }
@@ -202,7 +207,7 @@ import AppKit
     private func showPreview() {
         guard let snapshot = snapshot else { return }
         if previewController == nil { let controller = iTermFilePreviewViewController(); previewController = controller; controller.onShowSource = { [weak self] in self?.perform(.toggleMarkdownPreview) }; controller.onFocus = { [weak self] in guard let self = self else { return }; self.delegate?.fileViewDidReceiveFocus(self) }; controller.onSelection = { [weak self] value in self?.selection = value; self?.publish() }; addChild(controller); controller.view.frame = view.bounds; controller.view.autoresizingMask = [.width, .height]; view.addSubview(controller.view) }
-        renderer?.isHidden = true; previewController?.apply(snapshot); ready = true
+        renderer?.isHidden = true; previewController?.apply(snapshot); ready = true; publish()
     }
     private func showEditorMenu() {
         let menu = NSMenu(); menu.autoenablesItems = false
