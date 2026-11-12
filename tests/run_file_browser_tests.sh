@@ -12,7 +12,7 @@ let suite = FileBrowserServiceTests.defaultTestSuite
 suite.run()
 exit(suite.testRun!.hasSucceeded ? 0 : 1)
 SWIFT
-xcrun swiftc -swift-version 5 -warnings-as-errors \
+xcrun swiftc -swift-version 5 -warnings-as-errors -D FILE_BROWSER_TESTING \
     -I "$file_browser_developer/usr/lib" -L "$file_browser_developer/usr/lib" \
     -F "$file_browser_developer/Library/Frameworks" \
     -Xlinker -rpath -Xlinker "$file_browser_developer/Library/Frameworks" \

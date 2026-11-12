@@ -154,86 +154,173 @@ func fileBrowserReadText(_ path: String, root: FileBrowserRoot, maximumBytes: In
     }
 }
 
-/// No shell, standard Git ignore machinery (tracked files remain visible). Input/output are NUL-delimited.
-func fileBrowserGit(_ arguments: [String], root: String, input: Data? = nil) throws -> (Int32, Data) {
+/// Bounded, cancellable owned child. Pipes are drained without blocking and every exit is reaped.
+func fileBrowserGit(_ arguments: [String], root: String, input: Data? = nil,
+                    isCancelled: @escaping () -> Bool = { false }, timeout: TimeInterval = 2) throws -> (Int32, Data) {
+    guard !isCancelled() else { throw fileBrowserError(1) }
     let process = Process()
     process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+#if FILE_BROWSER_TESTING
+    process.executableURL = FileBrowserFaultGate.gitExecutable ?? process.executableURL
+#endif
     process.arguments = ["-c", "core.fsmonitor=false", "-C", root] + arguments
     var environment = ProcessInfo.processInfo.environment
     environment["GIT_OPTIONAL_LOCKS"] = "0"
-    process.environment = environment
-    process.standardError = FileHandle.nullDevice
-    let output = Pipe(); process.standardOutput = output
-    let stdin = Pipe()
-    process.standardInput = input == nil ? FileHandle.nullDevice : stdin
+    process.environment = environment; process.standardError = FileHandle.nullDevice
+    let output = Pipe(); let stdin = Pipe()
+    process.standardOutput = output; process.standardInput = stdin
     try process.run()
-    if let input {
-        DispatchQueue.global(qos: .utility).async {
-            try? stdin.fileHandleForWriting.write(contentsOf: input)
-            try? stdin.fileHandleForWriting.close()
+    defer {
+        if process.isRunning { kill(process.processIdentifier, SIGKILL) }
+        process.waitUntilExit()
+        try? output.fileHandleForReading.close(); try? stdin.fileHandleForWriting.close()
+    }
+    try? output.fileHandleForWriting.close(); try? stdin.fileHandleForReading.close()
+    let readFD = output.fileHandleForReading.fileDescriptor
+    let writeFD = stdin.fileHandleForWriting.fileDescriptor
+    guard fcntl(readFD, F_SETFL, O_NONBLOCK) != -1, fcntl(writeFD, F_SETFL, O_NONBLOCK) != -1,
+          fcntl(writeFD, F_SETNOSIGPIPE, 1) != -1 else { throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno)) }
+#if FILE_BROWSER_TESTING
+    FileBrowserFaultGate.gitStarted?(process)
+#endif
+    let deadline = DispatchTime.now().uptimeNanoseconds + UInt64(max(0, timeout) * 1_000_000_000)
+    let input = input ?? Data()
+    var position = 0; var inputClosed = false; var eof = false; var result = Data()
+    var buffer = [UInt8](repeating: 0, count: 65536)
+    while true {
+        guard !isCancelled() else { throw fileBrowserError(1) }
+        guard DispatchTime.now().uptimeNanoseconds < deadline else { throw fileBrowserError(11) }
+        if !inputClosed {
+            if position < input.count {
+                let count = input.withUnsafeBytes { bytes in
+                    write(writeFD, bytes.baseAddress!.advanced(by: position), min(65536, input.count - position))
+                }
+                if count > 0 { position += count }
+                else if count < 0 && errno != EAGAIN && errno != EINTR { position = input.count }
+            }
+            if position == input.count { try? stdin.fileHandleForWriting.close(); inputClosed = true }
         }
+        while !eof {
+            guard !isCancelled() else { throw fileBrowserError(1) }
+            guard DispatchTime.now().uptimeNanoseconds < deadline else { throw fileBrowserError(11) }
+            let count = read(readFD, &buffer, buffer.count)
+            if count > 0 {
+                result.append(contentsOf: buffer.prefix(count))
+                guard result.count <= 32 * 1024 * 1024 else { throw fileBrowserError(8) }
+            } else if count == 0 { eof = true }
+            else if errno == EINTR { continue }
+            else if errno == EAGAIN { break }
+            else { throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno)) }
+        }
+        if !process.isRunning && eof { return (process.terminationStatus, result) }
+        var descriptors = [pollfd(fd: eof ? -1 : readFD, events: Int16(POLLIN), revents: 0),
+                           pollfd(fd: inputClosed ? -1 : writeFD, events: Int16(POLLOUT), revents: 0)]
+        _ = poll(&descriptors, nfds_t(descriptors.count), 20)
     }
-    let data = output.fileHandleForReading.readDataToEndOfFile()
-    process.waitUntilExit()
-    return (process.terminationStatus, data)
 }
 
-func fileBrowserGlob(_ pattern: String) throws -> NSRegularExpression {
-    guard pattern.utf8.count <= 2048 else { throw fileBrowserError(6) }
-    var result = "^"; let chars = Array(pattern); var index = 0
-    while index < chars.count {
-        let char = chars[index]
-        if char == "*" {
-            if index + 1 < chars.count && chars[index + 1] == "*" {
-                index += 1
-                if index + 1 < chars.count && chars[index + 1] == "/" { result += "(?:.*/)?"; index += 1 }
-                else { result += ".*" }
-            } else { result += "[^/]*" }
-        } else if char == "?" { result += "[^/]" }
-        else { result += NSRegularExpression.escapedPattern(for: String(char)) }
-        index += 1
+/// Glob matching uses dynamic programming with a finite work budget, never regex backtracking.
+struct FileBrowserGlob {
+    enum Token { case literal(Character), one, star, recursive, directory }
+    let tokens: [Token]
+    init(_ pattern: String) throws {
+        guard pattern.utf8.count <= 2048 else { throw fileBrowserError(6) }
+        let chars = Array(pattern); var index = 0; var tokens = [Token]()
+        while index < chars.count {
+            if chars[index] == "*" {
+                if index + 1 < chars.count && chars[index + 1] == "*" {
+                    index += 1
+                    if index + 1 < chars.count && chars[index + 1] == "/" { tokens.append(.directory); index += 1 }
+                    else { tokens.append(.recursive) }
+                } else { tokens.append(.star) }
+            } else if chars[index] == "?" { tokens.append(.one) }
+            else { tokens.append(.literal(chars[index])) }
+            index += 1
+        }
+        self.tokens = tokens
     }
-    return try NSRegularExpression(pattern: result + "$")
+    func matches(_ path: String, isCancelled: () -> Bool, remainingWork: inout Int) throws -> Bool {
+        guard path.utf8.count <= 32768 else { throw fileBrowserError(6) }
+        let chars = Array(path)
+        var previous = [Bool](repeating: false, count: chars.count + 1); previous[0] = true
+        for token in tokens {
+            guard !isCancelled() else { throw fileBrowserError(1) }
+            guard remainingWork >= chars.count + 1 else { throw fileBrowserError(6) }
+            remainingWork -= chars.count + 1
+            var next = [Bool](repeating: false, count: previous.count)
+            var reachable = false
+            for offset in 0...chars.count {
+                if offset & 255 == 0, isCancelled() { throw fileBrowserError(1) }
+                switch token {
+                case .literal(let char): if offset > 0 { next[offset] = previous[offset - 1] && chars[offset - 1] == char }
+                case .one: if offset > 0 { next[offset] = previous[offset - 1] && chars[offset - 1] != "/" }
+                case .star: next[offset] = previous[offset] || (offset > 0 && next[offset - 1] && chars[offset - 1] != "/")
+                case .recursive: next[offset] = previous[offset] || (offset > 0 && next[offset - 1])
+                case .directory:
+                    if offset > 0 { reachable = reachable || previous[offset - 1] }
+                    next[offset] = previous[offset] || (offset > 0 && chars[offset - 1] == "/" && reachable)
+                }
+            }
+            previous = next
+        }
+        return previous[chars.count]
+    }
+}
+func fileBrowserGlob(_ pattern: String) throws -> FileBrowserGlob { try FileBrowserGlob(pattern) }
+
+struct FileBrowserTrashReceipt {
+    let path: String?
+    let error: NSError?
 }
 
-/// Isolate the captured item in a private, unpredictable directory before invoking path-based macOS Trash.
-/// An unrelated parent replacement then yields a missing staging path instead of an outside target.
-func fileBrowserTrash(_ path: String, root: FileBrowserRoot, expected: FileBrowserIdentity) throws -> String {
+/// Keep native NSURL file-reference identity through the Objective-C Foundation boundary.
+/// Swift URL bridging resolves these references to paths, reopening a directory-link race.
+func fileBrowserTrash(_ path: String, root: FileBrowserRoot, expected: FileBrowserIdentity) throws -> FileBrowserTrashReceipt {
     try root.withParent(path) { parent, name in
-        let staging = ".file-browser-trash-" + UUID().uuidString
-        guard mkdirat(parent, staging, 0o700) == 0 else { throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno)) }
-        defer { unlinkat(parent, staging, AT_REMOVEDIR) } // Only the empty service-owned directory.
-        let stagingFD = openat(parent, staging, O_RDONLY | O_DIRECTORY | O_NOFOLLOW)
-        guard stagingFD >= 0 else { throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno)) }
-        defer { close(stagingFD) }
         var info = stat()
         guard fstatat(parent, name, &info, AT_SYMLINK_NOFOLLOW) == 0,
               UInt64(info.st_dev) == expected.device, UInt64(info.st_ino) == expected.inode else { throw fileBrowserError(9) }
-        guard renameatx_np(parent, name, stagingFD, name, UInt32(RENAME_EXCL)) == 0 else {
-            throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
+        var buffer = [CChar](repeating: 0, count: Int(MAXPATHLEN))
+        guard fcntl(parent, F_GETPATH, &buffer) == 0 else { throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno)) }
+        let parentPath = String(cString: buffer)
+        let original = NSURL(fileURLWithPath: (parentPath as NSString).appendingPathComponent(name))
+        guard let reference = original.perform(NSSelectorFromString("fileReferenceURL"))?.takeUnretainedValue() as? NSURL,
+              reference.isFileReferenceURL(),
+              let fileURL = reference.perform(NSSelectorFromString("filePathURL"))?.takeUnretainedValue() as? NSURL,
+              let referencePath = fileURL.path, expected.sameItem(try FileBrowserIdentity.read(referencePath)) else {
+            throw fileBrowserError(9)
         }
-        do {
-            var buffer = [CChar](repeating: 0, count: Int(MAXPATHLEN))
-            guard fcntl(stagingFD, F_GETPATH, &buffer) == 0 else { throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno)) }
-            let stagingPath = String(cString: buffer)
-            let stagedURL = URL(fileURLWithPath: stagingPath).appendingPathComponent(name)
-            let actual = try FileBrowserIdentity.read(stagedURL.path)
-            guard expected.sameItem(actual) else { throw fileBrowserError(9) }
-            var resulting: NSURL?
-            try FileManager.default.trashItem(at: stagedURL, resultingItemURL: &resulting)
-            guard let restoredPath = resulting?.path else { throw fileBrowserError(10) }
-            return restoredPath
-        } catch {
-            // Restore the exact isolated item on a normal native Trash error, never overwrite a new file.
-            if renameatx_np(stagingFD, name, parent, name, UInt32(RENAME_EXCL)) != 0 {
-                var buffer = [CChar](repeating: 0, count: Int(MAXPATHLEN))
-                if fcntl(stagingFD, F_GETPATH, &buffer) == 0 {
-                    let retainedPath = (String(cString: buffer) as NSString).appendingPathComponent(name)
-                    throw NSError(domain: "iTermFileBrowser", code: 10,
-                                  userInfo: ["retainedPath": retainedPath, NSUnderlyingErrorKey: error])
-                }
-            }
-            throw error
-        }
+#if FILE_BROWSER_TESTING
+        FileBrowserFaultGate.trashInput?(reference)
+#endif
+        let manager = FileManager.default
+        let selector = NSSelectorFromString("trashItemAtURL:resultingItemURL:error:")
+        typealias Trash = @convention(c) (AnyObject, Selector, NSURL, AutoreleasingUnsafeMutablePointer<NSURL?>?,
+                                         AutoreleasingUnsafeMutablePointer<NSError?>?) -> Bool
+        let trash = unsafeBitCast(manager.method(for: selector), to: Trash.self)
+        var resulting: NSURL?; var error: NSError?
+        guard trash(manager, selector, reference, &resulting, &error) else { throw error ?? fileBrowserError(10) }
+        // From this point deletion committed. No throwing receipt/identity lookup can erase its mapping.
+        var receiptPath = resulting?.path
+#if FILE_BROWSER_TESTING
+        if FileBrowserFaultGate.receiptPathUnavailable { receiptPath = nil }
+#endif
+        var receiptError: NSError? = receiptPath == nil ? fileBrowserError(10) : nil
+#if FILE_BROWSER_TESTING
+        do { try FileBrowserFaultGate.trashReceipt?(resulting) } catch { receiptError = error as NSError }
+#endif
+        return FileBrowserTrashReceipt(path: receiptPath, error: receiptError)
     }
 }
+
+#if FILE_BROWSER_TESTING
+// Fault gates are compiled only into the standalone real-filesystem regression runner.
+enum FileBrowserFaultGate {
+    static var committed: ((String, String?, String?) throws -> Void)?
+    static var trashInput: ((NSURL) -> Void)?
+    static var trashReceipt: ((NSURL?) throws -> Void)?
+    static var receiptPathUnavailable = false
+    static var gitExecutable: URL?
+    static var gitStarted: ((Process) -> Void)?
+}
+#endif

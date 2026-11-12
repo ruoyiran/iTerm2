@@ -79,8 +79,9 @@ import Darwin
     let oldPath: String?
     let newPath: String?
     let isDirectory: Bool
-    init(oldPath: String?, newPath: String?, isDirectory: Bool) {
-        self.oldPath = oldPath; self.newPath = newPath; self.isDirectory = isDirectory
+    let trashPath: String?
+    init(oldPath: String?, newPath: String?, isDirectory: Bool, trashPath: String? = nil) {
+        self.oldPath = oldPath; self.newPath = newPath; self.isDirectory = isDirectory; self.trashPath = trashPath
     }
 }
 @objcMembers final class iTermFileOperationResult: NSObject {
@@ -135,9 +136,9 @@ import Darwin
             }
         }
     }
-    @nonobjc private func entries(_ path: String, root: FileBrowserRoot, context: iTermFileBrowserContext) throws -> [iTermFileBrowserEntry] {
+    @nonobjc private func entries(_ path: String, root: FileBrowserRoot, context: iTermFileBrowserContext, request: String? = nil) throws -> [iTermFileBrowserEntry] {
         if let value = cache[path] { return value }
-        let directory = try root.checked(path, directory: true)
+        _ = try root.checked(path, directory: true)
         var entries = [iTermFileBrowserEntry]()
         for (name, identity, hidden) in try root.children(path) {
             let child = (path as NSString).appendingPathComponent(name)
@@ -147,11 +148,11 @@ import Darwin
                                                 isDirectory: identity.directory, isSymbolicLink: identity.symlink))
         }
         if !context.showsGitIgnoredFiles && !entries.isEmpty {
-            if gitRepository == nil { gitRepository = try fileBrowserGit(["rev-parse", "--is-inside-work-tree"], root: directory).0 == 0 }
+            if gitRepository == nil { gitRepository = try fileBrowserGit(["rev-parse", "--is-inside-work-tree"], root: root.canonical, isCancelled: { !self.isCurrent(context, request: request) }).0 == 0 }
             if gitRepository == true {
                 var input = Data()
                 for entry in entries { input.append(contentsOf: entry.relativePath.utf8); input.append(0) }
-                let (status, output) = try fileBrowserGit(["check-ignore", "--stdin", "-z"], root: root.canonical, input: input)
+                let (status, output) = try fileBrowserGit(["check-ignore", "--stdin", "-z"], root: root.canonical, input: input, isCancelled: { !self.isCurrent(context, request: request) })
                 guard status == 0 || status == 1 else { throw fileBrowserError(8) }
                 let ignored = Set(output.split(separator: 0).compactMap { String(data: Data($0), encoding: .utf8) })
                 entries.removeAll { ignored.contains($0.relativePath) }
@@ -200,7 +201,7 @@ import Darwin
         while let directory = pending.popLast() {
             guard isCurrent(context, request: id) else { throw fileBrowserError(1) }
             let children: [iTermFileBrowserEntry]
-            do { children = try entries(directory, root: root, context: context) }
+            do { children = try entries(directory, root: root, context: context, request: id) }
             catch { if directory == root.display { throw error }; continue }
             for child in children {
                 guard isCurrent(context, request: id) else { throw fileBrowserError(1) }
@@ -252,9 +253,16 @@ import Darwin
                 try self.walk(root, context: context, id: id) { entry in
                     if entry.isDirectory { return true }
                     if entry.isSymbolicLink { skipped += 1; return true }
-                    let pathRange = NSRange(location: 0, length: entry.relativePath.utf16.count)
-                    let included = includes.isEmpty || includes.contains { $0.firstMatch(in: entry.relativePath, range: pathRange) != nil }
-                    let excluded = excludes.contains { $0.firstMatch(in: entry.relativePath, range: pathRange) != nil }
+                    var remainingWork = 4_000_000
+                    let cancelled = { !self.isCurrent(context, request: id) }
+                    var included = includes.isEmpty
+                    for glob in includes {
+                        if try glob.matches(entry.relativePath, isCancelled: cancelled, remainingWork: &remainingWork) { included = true; break }
+                    }
+                    var excluded = false
+                    for glob in excludes {
+                        if try glob.matches(entry.relativePath, isCancelled: cancelled, remainingWork: &remainingWork) { excluded = true; break }
+                    }
                     if !included || excluded { return true }
                     let text: String
                     do { text = try fileBrowserReadText(entry.path, root: root, maximumBytes: Self.maximumFileBytes) }
@@ -334,29 +342,29 @@ import Darwin
                 for step in steps {
                     do {
                         let result = try self.execute(step, root: root)
-                        inverse.insert(result.0, at: 0); mappings.append(result.1); completedSteps += 1
+                        if let undo = result.0 { inverse.insert(undo, at: 0) }; mappings.append(result.1); completedSteps += 1
                     } catch let partial as FileBrowserPartialMutation {
-                        inverse.insert(partial.inverse, at: 0); mappings.append(partial.mapping); completedSteps += 1
+                        if let undo = partial.inverse { inverse.insert(undo, at: 0) }; mappings.append(partial.mapping); completedSteps += 1
                         throw partial.underlying
                     }
                 }
-                if historyDirection < 0 { journal.undo.removeLast(); journal.redo.append(inverse) }
-                else if historyDirection > 0 { journal.redo.removeLast(); journal.undo.append(inverse) }
-                else if !inverse.isEmpty { journal.undo.append(inverse); journal.redo.removeAll() }
+                if historyDirection < 0 { journal.undo.removeLast(); if !inverse.isEmpty { journal.redo.append(inverse) } }
+                else if historyDirection > 0 { journal.redo.removeLast(); if !inverse.isEmpty { journal.undo.append(inverse) } }
+                else if !mappings.isEmpty { if !inverse.isEmpty { journal.undo.append(inverse) }; journal.redo.removeAll() }
             } catch let failure {
                 error = failure as NSError
                 // Keep only unexecuted suffixes in the original history; successful prefixes remain reversible.
-                if !inverse.isEmpty {
+                if !mappings.isEmpty {
                     let remaining = Array(plannedSteps.dropFirst(completedSteps))
                     if historyDirection < 0 {
                         journal.undo.removeLast()
                         if !remaining.isEmpty { journal.undo.append(remaining) }
-                        journal.redo.append(inverse)
+                        if !inverse.isEmpty { journal.redo.append(inverse) }
                     } else if historyDirection > 0 {
                         journal.redo.removeLast()
                         if !remaining.isEmpty { journal.redo.append(remaining) }
-                        journal.undo.append(inverse)
-                    } else { journal.undo.append(inverse); journal.redo.removeAll() }
+                        if !inverse.isEmpty { journal.undo.append(inverse) }
+                    } else { if !inverse.isEmpty { journal.undo.append(inverse) }; journal.redo.removeAll() }
                 }
             }
             self.history[key] = journal
@@ -390,19 +398,38 @@ import Darwin
             }
         }
     }
-    @nonobjc private func execute(_ step: FileBrowserStep, root: FileBrowserRoot) throws -> (FileBrowserStep, iTermFilePathMapping) {
+    @nonobjc private func committed(_ result: (FileBrowserStep?, iTermFilePathMapping), root: FileBrowserRoot,
+                                   expected: FileBrowserIdentity, error: NSError? = nil) throws -> (FileBrowserStep?, iTermFilePathMapping) {
+        do {
+#if FILE_BROWSER_TESTING
+            try FileBrowserFaultGate.committed?(result.1.oldPath == nil ? "create" : "move", result.1.oldPath, result.1.newPath)
+#endif
+            if let error { throw error }
+            if let path = result.1.newPath {
+                guard expected.sameItem(try FileBrowserIdentity.read(root.checked(path))) else { throw fileBrowserError(9) }
+            }
+        } catch {
+            throw FileBrowserPartialMutation(inverse: result.0, mapping: result.1, underlying: error as NSError)
+        }
+        return result
+    }
+    @nonobjc private func execute(_ step: FileBrowserStep, root: FileBrowserRoot) throws -> (FileBrowserStep?, iTermFilePathMapping) {
         try preflight([step], root: root)
         switch step.kind {
         case .createFile, .createFolder, .copy:
             let display = step.destination!
-            let path = try root.checked(display, writableParent: true)
-            try root.withParent(display) { parent, name in
-                if step.kind == .createFolder {
-                    guard mkdirat(parent, name, 0o755) == 0 else { throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno)) }
-                } else if step.kind == .createFile {
-                    let fd = openat(parent, name, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0o644)
-                    guard fd >= 0 else { throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno)) }; close(fd)
-                } else {
+            _ = try root.checked(display, writableParent: true)
+            let identity: FileBrowserIdentity = try root.withParent(display) { parent, name in
+                let staging = ".file-browser-create-" + UUID().uuidString
+                let directory = step.kind == .createFolder
+                let output: Int32
+                if directory {
+                    guard mkdirat(parent, staging, 0o755) == 0 else { throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno)) }
+                    output = openat(parent, staging, O_RDONLY | O_DIRECTORY | O_NOFOLLOW)
+                } else { output = openat(parent, staging, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, step.kind == .copy ? 0o600 : 0o644) }
+                defer { if output >= 0 { close(output) }; unlinkat(parent, staging, directory ? AT_REMOVEDIR : 0) }
+                guard output >= 0 else { throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno)) }
+                if step.kind == .copy {
                     try root.withParent(step.source!) { sourceParent, sourceName in
                         let source = openat(sourceParent, sourceName, O_RDONLY | O_NOFOLLOW | O_NONBLOCK)
                         guard source >= 0 else { throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno)) }
@@ -411,69 +438,53 @@ import Darwin
                         guard fstat(source, &info) == 0, info.st_mode & S_IFMT == S_IFREG,
                               UInt64(info.st_dev) == step.identity!.device, UInt64(info.st_ino) == step.identity!.inode,
                               info.st_mode & 0o444 != 0 else { throw fileBrowserError(9) }
-                        // Only an owned staging file can be unlinked on failure. Publish with exclusive rename.
-                        let staging = ".file-browser-copy-" + UUID().uuidString
-                        let output = openat(parent, staging, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0o600)
-                        guard output >= 0 else { throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno)) }
-                        defer { close(output); unlinkat(parent, staging, 0) }
                         guard fcopyfile(source, output, nil, copyfile_flags_t(COPYFILE_ALL)) == 0 else {
-                            throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
-                        }
-                        guard renameatx_np(parent, staging, parent, name, UInt32(RENAME_EXCL)) == 0 else {
                             throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
                         }
                     }
                 }
+                // Bind history before publishing. Any failure here affects only the owned staging object.
+                var info = stat()
+                guard fstat(output, &info) == 0 else { throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno)) }
+                let identity = FileBrowserIdentity(device: UInt64(info.st_dev), inode: UInt64(info.st_ino), mode: info.st_mode, size: info.st_size)
+                guard renameatx_np(parent, staging, parent, name, UInt32(RENAME_EXCL)) == 0 else {
+                    throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
+                }
+                return identity
             }
-            let identity = try FileBrowserIdentity.read(path)
-            return (FileBrowserStep(kind: .trash, source: display, identity: identity),
-                    iTermFilePathMapping(oldPath: nil, newPath: display, isDirectory: identity.directory))
+            return try committed((FileBrowserStep(kind: .trash, source: display, identity: identity),
+                                  iTermFilePathMapping(oldPath: nil, newPath: display, isDirectory: identity.directory)),
+                                 root: root, expected: identity)
         case .move:
-            let source = step.source!, destination = step.destination!
+            let source = step.source!, destination = step.destination!, expected = step.identity!
             let from = step.trashSource ? source : try root.checked(source, writableParent: true)
-            let to = try root.checked(destination, writableParent: true)
-            // Stable parent descriptors plus exclusive rename prevent directory-link swaps and overwrites.
+            _ = try root.checked(destination, writableParent: true)
             try root.withParent(destination) { toParent, toName in
                 let relocate: (Int32, String) throws -> Void = { fromParent, fromName in
                     var info = stat()
                     guard fstatat(fromParent, fromName, &info, AT_SYMLINK_NOFOLLOW) == 0,
-                          UInt64(info.st_dev) == step.identity!.device, UInt64(info.st_ino) == step.identity!.inode else {
-                        throw fileBrowserError(9)
-                    }
+                          UInt64(info.st_dev) == expected.device, UInt64(info.st_ino) == expected.inode else { throw fileBrowserError(9) }
                     guard renameatx_np(fromParent, fromName, toParent, toName, UInt32(RENAME_EXCL)) == 0 else {
                         throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
                     }
                 }
                 if step.trashSource {
-                    // macOS can deny directory-open on Trash while permitting restoration of an exact URL.
-                    // Keep the destination descriptor-safe and validate only our captured source identity.
+                    guard expected.sameItem(try FileBrowserIdentity.read(from)) else { throw fileBrowserError(9) }
                     guard renameatx_np(AT_FDCWD, from, toParent, toName, UInt32(RENAME_EXCL)) == 0 else {
                         throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
                     }
                 } else { try root.withParent(source, relocate) }
             }
-            let identity = try FileBrowserIdentity.read(to)
-            let inverse: FileBrowserStep
-            if step.trashSource { inverse = FileBrowserStep(kind: .trash, source: destination, identity: identity) }
-            else { inverse = FileBrowserStep(kind: .move, source: destination, destination: source, identity: identity) }
-            return (inverse, iTermFilePathMapping(oldPath: step.trashSource ? nil : source, newPath: destination, isDirectory: identity.directory))
+            let inverse = step.trashSource ? FileBrowserStep(kind: .trash, source: destination, identity: expected) :
+                FileBrowserStep(kind: .move, source: destination, destination: source, identity: expected)
+            return try committed((inverse, iTermFilePathMapping(oldPath: step.trashSource ? nil : source, newPath: destination,
+                                                               isDirectory: expected.directory)), root: root, expected: expected)
         case .trash:
-            let display = step.source!
-            let trashPath: String
-            do { trashPath = try fileBrowserTrash(display, root: root, expected: step.identity!) }
-            catch let failure as NSError {
-                if let retained = failure.userInfo["retainedPath"] as? String,
-                   let identity = try? FileBrowserIdentity.read(retained) {
-                    let retainedDisplay = retained.hasPrefix(root.canonical + "/") ? root.display + retained.dropFirst(root.canonical.count) : retained
-                    throw FileBrowserPartialMutation(
-                        inverse: FileBrowserStep(kind: .move, source: retainedDisplay, destination: display, identity: identity),
-                        mapping: iTermFilePathMapping(oldPath: display, newPath: retainedDisplay, isDirectory: identity.directory), underlying: failure)
-                }
-                throw failure
-            }
-            let identity = try FileBrowserIdentity.read(trashPath)
-            return (FileBrowserStep(kind: .move, source: trashPath, destination: display, identity: identity, trashSource: true),
-                    iTermFilePathMapping(oldPath: display, newPath: nil, isDirectory: identity.directory))
+            let display = step.source!, expected = step.identity!
+            let receipt = try fileBrowserTrash(display, root: root, expected: expected)
+            let inverse = receipt.path.map { FileBrowserStep(kind: .move, source: $0, destination: display, identity: expected, trashSource: true) }
+            let mapping = iTermFilePathMapping(oldPath: display, newPath: nil, isDirectory: expected.directory, trashPath: receipt.path)
+            return try committed((inverse, mapping), root: root, expected: expected, error: receipt.error)
         }
     }
     func createFile(inDirectory path: String, name: String, context: iTermFileBrowserContext,
@@ -542,7 +553,7 @@ private struct FileBrowserHistory {
 }
 
 private struct FileBrowserPartialMutation: Error {
-    let inverse: FileBrowserStep
+    let inverse: FileBrowserStep?
     let mapping: iTermFilePathMapping
     let underlying: NSError
 }
