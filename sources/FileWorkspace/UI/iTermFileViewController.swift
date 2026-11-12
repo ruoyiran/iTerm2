@@ -25,9 +25,13 @@ import AppKit
     private var ready = false
     private var visible = false
     private var acquiring = false
+    private var acquisition: FileUIAcquisition?
     private var focusRequested = false
     private var pendingReveal: (Int, Int)?
     private var stopped = false
+    private var explicitlySuspended = false
+    private var transferSuspended = false
+    @nonobjc var blocksEditAuthority: Bool { explicitlySuspended || error != nil || stopped }
     private var error: NSError?
     private var flushes = [String: (NSError?) -> Void]()
     private var previewController: iTermFilePreviewViewController?
@@ -48,7 +52,7 @@ import AppKit
     init(runtime: iTermFileWorkspaceUIRuntime, viewIdentifier: String) {
         self.runtime = runtime; self.viewIdentifier = viewIdentifier; super.init(nibName: nil, bundle: nil); runtime.register(self)
     }
-    deinit { if let renderer = renderer { runtime.release(renderer) } }
+    deinit { acquisition?.cancel() }
     required init?(coder: NSCoder) { it_fatalError("init(coder:) has not been implemented") }
     override func loadView() { view = NSView(); errorLabel.isHidden = true; view.addSubview(errorLabel) }
     override func viewDidLayout() { super.viewDidLayout(); renderer?.frame = view.bounds; previewController?.view.frame = view.bounds; errorLabel.frame = view.bounds.insetBy(dx: 12, dy: 12) }
@@ -83,7 +87,7 @@ import AppKit
     func showOpenFailure(path: String, documentIdentifier: String?, error: NSError) {
         guard !status.hasPendingEdits, !composing else { fail(fileUIError(3)); return }
         runtime.unregister(self); runtime.register(self)
-        if let renderer = renderer { runtime.release(renderer) }; renderer = nil; editSession = nil; ready = false
+        acquisition?.cancel(); acquisition = nil; acquiring = false; renderer = nil; editSession = nil; ready = false
         previewController?.shutdown(); previewController?.view.removeFromSuperview(); previewController?.removeFromParent(); previewController = nil
         snapshot = nil; self.path = path; recoveredIdentifier = documentIdentifier; fail(error)
     }
@@ -92,18 +96,19 @@ import AppKit
     func setVisible(_ visible: Bool) {
         self.visible = visible
         if !visible {
+            if renderer == nil { acquisition?.cancel(); acquisition = nil; acquiring = false }
             focusRequested = false
             previewController?.shutdown(); previewController?.view.removeFromSuperview(); previewController?.removeFromParent(); previewController = nil
             flushEdits(reason: .suspend) { [weak self] error in
                 guard let self = self, !self.visible, error == nil else { return }
-                if let renderer = self.renderer { self.runtime.release(renderer) }; self.renderer = nil; self.ready = false
+                self.acquisition?.cancel(); self.acquisition = nil; self.renderer = nil; self.ready = false
             }; return
         }
         if usesNativePreview { showPreview(); return }
         guard !stopped, previewController == nil, renderer == nil, !acquiring, let snapshot = snapshot,
               snapshot.kind == .text || snapshot.kind == .markdown else { return }; acquiring = true
-        runtime.acquire { [weak self] renderer, error in
-            guard let self = self else { renderer?.shutdown(); return }; self.acquiring = false
+        acquisition = runtime.acquire(owner: self) { [weak self, weak runtime = self.runtime] renderer, error in
+            guard let self = self else { if let renderer = renderer { runtime?.release(renderer) }; return }; self.acquiring = false
             guard self.visible, !self.stopped, let renderer = renderer else {
                 if let renderer = renderer { self.runtime.release(renderer) }; if let error = error { self.fail(error) }; return
             }
@@ -116,7 +121,7 @@ import AppKit
     func reveal(lineNumber: Int, utf16Column: Int) { pendingReveal = (lineNumber, utf16Column); renderer?.send("reveal", payload: ["lineNumber": lineNumber, "utf16Column": utf16Column]) }
     func canPerform(_ command: iTermFileViewCommand) -> Bool {
         guard !stopped, snapshot != nil else { return false }
-        if runtime.interactionSuspended && [.save, .saveAs, .undo, .redo, .cut, .paste].contains(command) { return false }
+        if (runtime.interactionSuspended || blocksEditAuthority) && [.save, .saveAs, .undo, .redo, .cut, .paste].contains(command) { return false }
         switch command {
         case .save, .undo, .redo, .cut, .paste: return ready && !status.isReadOnly && !composing
         case .copy: return previewController?.hasSelection ?? selection
@@ -147,6 +152,8 @@ import AppKit
         }
     }
     func flushEdits(reason: iTermFileFlushReason, completion: @escaping (NSError?) -> Void) {
+        if reason == .focusTransfer { transferSuspended = true }
+        else if reason != .save { explicitlySuspended = true }
         if let error = error { completion(error); return }
         guard let renderer = renderer, ready else { completion(status.hasPendingEdits ? fileUIError(3) : nil); return }
         let id = UUID().uuidString, document = documentIdentifier, epoch = renderer.fence.epoch
@@ -155,17 +162,24 @@ import AppKit
                   self.documentIdentifier == document, renderer.fence.epoch == epoch else { completion(fileUIError(3)); return }
             completion(error)
         }
-        renderer.send("flush", payload: ["suspend": reason != .save], identifier: id)
+        renderer.send("flush", payload: ["suspend": reason != .save || explicitlySuspended || transferSuspended || runtime.interactionSuspended], identifier: id)
         DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
             guard let self = self, let callback = self.flushes.removeValue(forKey: id) else { return }; callback(fileUIError(6))
         }
     }
-    func resumeEditing() { renderer?.send("resume") }
-    @nonobjc func setEditAuthority(_ granted: Bool) { renderer?.send("editAuthority", payload: ["granted": granted]) }
+    func resumeEditing() {
+        guard !runtime.interactionSuspended else { return }
+        explicitlySuspended = false; transferSuspended = false; renderer?.send("resume")
+    }
+    @nonobjc func setEditAuthority(_ granted: Bool) {
+        let permitted = granted && !blocksEditAuthority && !runtime.interactionSuspended
+        if permitted && transferSuspended { transferSuspended = false; renderer?.send("resume") }
+        renderer?.send("editAuthority", payload: ["granted": permitted])
+    }
     func shutdown() {
         guard !stopped else { return }; stopped = true; runtime.unregister(self)
         let callbacks = flushes.values; flushes.removeAll(); callbacks.forEach { $0(fileUIError(2)) }
-        if let renderer = renderer { runtime.release(renderer) }; renderer = nil; previewController?.shutdown(); previewController = nil; delegate = nil
+        acquisition?.cancel(); acquisition = nil; acquiring = false; renderer = nil; previewController?.shutdown(); previewController = nil; delegate = nil
     }
     @nonobjc func fileUIWebViewReady(_ webView: iTermFileWorkspaceWebView) {
         guard renderer === webView, let snapshot = snapshot else { return }; ready = true; errorLabel.isHidden = true
@@ -174,6 +188,7 @@ import AppKit
         webView.send("restoreViewState", payload: cachedViewState.dictionary)
         webView.send("viewFlags", payload: ["preview": preview])
         if let reveal = pendingReveal { webView.send("reveal", payload: ["lineNumber": reveal.0, "utf16Column": reveal.1]) }
+        if explicitlySuspended || transferSuspended || runtime.interactionSuspended { webView.send("flush", payload: ["suspend": true]) }
         if focusRequested { runtime.requestAuthority(self); webView.send("focus") }; publish()
     }
     @nonobjc func fileUIWebView(_ webView: iTermFileWorkspaceWebView, received type: String, payload: [String: Any], identifier: String) {

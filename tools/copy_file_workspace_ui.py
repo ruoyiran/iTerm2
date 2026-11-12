@@ -42,6 +42,12 @@ def verify():
 
 try:
     manifest = verify()
+except (OSError, ValueError, KeyError) as error:
+    print('error: File workspace UI verification: ' + str(error), file=sys.stderr)
+    print('Rebuild with: npm --prefix tools/file-workspace-ui ci && npm --prefix tools/file-workspace-ui run build', file=sys.stderr)
+    sys.exit(1)
+
+try:
     if '--verify' not in sys.argv:
         destination = Path(os.environ['TARGET_BUILD_DIR']) / os.environ['UNLOCALIZED_RESOURCES_FOLDER_PATH'] / 'FileWorkspaceUI'
         destination.parent.mkdir(parents=True, exist_ok=True)
@@ -50,6 +56,6 @@ try:
         shutil.copytree(SOURCE, destination)
     print(f"Verified {len(manifest['files'])} file UI resources")
 except (OSError, ValueError, KeyError) as error:
-    print('error: File workspace UI packaging: ' + str(error), file=sys.stderr)
-    print('Rebuild with: npm --prefix tools/file-workspace-ui ci && npm --prefix tools/file-workspace-ui run build', file=sys.stderr)
+    print('error: File workspace UI copy: ' + str(error), file=sys.stderr)
+    print('The Copy File Workspace UI phase must declare its owned FileWorkspaceUI output directory, including directory cleanup.', file=sys.stderr)
     sys.exit(1)

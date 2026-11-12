@@ -14,6 +14,149 @@ final class FileUIWebViewTests: XCTestCase, FileUIWebViewDelegate {
 
 
 
+
+ private func withEditor(_ body: (iTermFileViewController, iTermFileDocumentStore, iTermFileDocumentSnapshot, iTermFileWorkspaceUIRuntime, iTermFileWorkspaceWebView) throws -> Void) throws {
+  let dir=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+  try FileManager.default.createDirectory(at:dir,withIntermediateDirectories:true)
+  defer {try? FileManager.default.removeItem(at:dir)}
+  let path=dir.appendingPathComponent("barrier.txt");try Data("base".utf8).write(to:path)
+  let store=iTermFileDocumentStore(storageDirectory:dir.appendingPathComponent("drafts"))
+  let opened=expectation(description:"open fixture");var snapshot:iTermFileDocumentSnapshot?
+  store.openFile(atPath:path.path){value,error in XCTAssertNil(error);snapshot=value;opened.fulfill()};wait(for:[opened],timeout:5)
+  let resource=ProcessInfo.processInfo.environment["FILE_UI_RESOURCE_DIR"].map { URL(fileURLWithPath:$0) } ?? Bundle.main.resourceURL!.appendingPathComponent("FileWorkspaceUI")
+  let runtime=iTermFileWorkspaceUIRuntime(documentStore:store,resourceDirectory:resource,makeRenderer:{dataStore in
+   let web=iTermFileWorkspaceWebView(dataStore:dataStore)
+   web.configuration.userContentController.addUserScript(WKUserScript(source:"globalThis.MonacoEnvironment = { globalAPI: true };",injectionTime:.atDocumentStart,forMainFrameOnly:true))
+   return web
+  })
+  let controller=iTermFileViewController(runtime:runtime,viewIdentifier:UUID().uuidString), observer=FileUIViewObserver()
+  defer {
+   observer.changed=nil;controller.shutdown();runtime.shutdown()
+   let flushed=expectation(description:"fixture drafts");store.flushDrafts{_ in flushed.fulfill()};wait(for:[flushed],timeout:5)
+  }
+  controller.delegate=observer;controller.applyContext(iTermFileBrowserContext(rootDirectory:dir.path,projectIdentifier:"p",worktreeIdentifier:"w",generation:1));controller.applyDocumentChanges(try XCTUnwrap(snapshot),edits:nil)
+  controller.view.frame=NSRect(x:0,y:0,width:480,height:600)
+  let ready=expectation(description:"fixture ready");observer.changed={status in if status.isReady {observer.changed=nil;ready.fulfill()}}
+  controller.setVisible(true);controller.focusEditor();wait(for:[ready],timeout:20)
+  let web=try XCTUnwrap(controller.view.subviews.compactMap{$0 as? iTermFileWorkspaceWebView}.first)
+  flush(controller,.save)
+  try body(controller,store,try XCTUnwrap(snapshot),runtime,web)
+ }
+ private func flush(_ controller:iTermFileViewController,_ reason:iTermFileFlushReason) {
+  let done=expectation(description:"flush fixture");controller.flushEdits(reason:reason){error in XCTAssertNil(error);done.fulfill()};wait(for:[done],timeout:7)
+ }
+ private func evaluate(_ web:WKWebView,_ expression:String)->Any? {
+  let done=expectation(description:"evaluate bundled UI");var value:Any?
+  web.callAsyncJavaScript(expression,arguments:[:],in:nil,in:.page){result in
+   switch result {case .success(let result):value=result;case .failure(let error):XCTFail("Evaluation failed: \(error)")};done.fulfill()
+  };wait(for:[done],timeout:7);return value
+ }
+ func testControllerCloseAndSuspendSurviveFocusUntilExplicitResume() throws {
+  try withEditor {controller,store,snapshot,_,web in
+   for reason in [iTermFileFlushReason.close,.suspend] {
+    flush(controller,reason);controller.focusEditor()
+    XCTAssertFalse(controller.canPerform(.paste));web.send("paste",payload:["text":"blocked"]);flush(controller,.save)
+    let unchanged=expectation(description:"barrier retained")
+    store.snapshot(documentIdentifier:snapshot.documentIdentifier){value in XCTAssertEqual(value?.text,"base");unchanged.fulfill()};wait(for:[unchanged],timeout:5)
+    controller.resumeEditing();controller.focusEditor();XCTAssertTrue(controller.canPerform(.paste))
+   }
+   web.send("paste",payload:["text":"accepted"]);flush(controller,.save)
+   let accepted=expectation(description:"resume permits edit")
+   store.snapshot(documentIdentifier:snapshot.documentIdentifier){value in XCTAssertEqual(value?.text,"acceptedbase");accepted.fulfill()};wait(for:[accepted],timeout:5)
+  }
+ }
+ func testDocumentNotificationsCannotReopenSuspendedOrFailedMonaco() throws {
+  try withEditor {controller,store,snapshot,_,web in
+   let readOnly="return monaco.editor.getEditors()[0].getOption(monaco.editor.EditorOption.readOnly)"
+   XCTAssertEqual(evaluate(web,readOnly) as? Bool,false)
+   flush(controller,.close);XCTAssertEqual(evaluate(web,readOnly) as? Bool,true)
+   controller.applyDocumentChanges(snapshot,edits:nil)
+   XCTAssertEqual(evaluate(web,readOnly) as? Bool,true)
+   let changed=expectation(description:"later document revision")
+   var later:iTermFileDocumentSnapshot?
+   store.applyEdits([iTermFileTextEdit(range:NSRange(location:0,length:1),replacement:"B")],documentIdentifier:snapshot.documentIdentifier,expectedRevision:snapshot.revision){value,error in XCTAssertNil(error);later=value;changed.fulfill()};wait(for:[changed],timeout:5)
+   XCTAssertEqual(evaluate(web,readOnly) as? Bool,true)
+   controller.resumeEditing();controller.focusEditor();XCTAssertEqual(evaluate(web,readOnly) as? Bool,false)
+   web.send("ack",payload:["sequence":"999","revision":"999"])
+   XCTAssertEqual(evaluate(web,readOnly) as? Bool,true)
+   controller.applyDocumentChanges(try XCTUnwrap(later),edits:nil)
+   XCTAssertEqual(evaluate(web,readOnly) as? Bool,true)
+   web.send("editAuthority",payload:["granted":true]);web.send("resume")
+   XCTAssertEqual(evaluate(web,readOnly) as? Bool,true)
+  }
+ }
+
+
+ func testCompletedAuthorityTransferCanReturnToPreviousPane() throws {
+  try withEditor {first,store,snapshot,runtime,firstWeb in
+   let second=iTermFileViewController(runtime:runtime,viewIdentifier:UUID().uuidString), observer=FileUIViewObserver()
+   defer {observer.changed=nil;second.shutdown()}
+   second.delegate=observer;second.applyContext(iTermFileBrowserContext(rootDirectory:(snapshot.filePath as NSString).deletingLastPathComponent,projectIdentifier:"p",worktreeIdentifier:"w",generation:1));second.applyDocumentChanges(snapshot,edits:nil)
+   let ready=expectation(description:"second pane ready");observer.changed={status in if status.isReady {observer.changed=nil;ready.fulfill()}}
+   second.setVisible(true);wait(for:[ready],timeout:20)
+   let secondWeb=try XCTUnwrap(second.view.subviews.compactMap{$0 as? iTermFileWorkspaceWebView}.first)
+   let writable="return new Promise(resolve => { const editor = monaco.editor.getEditors()[0], key = monaco.editor.EditorOption.readOnly; if (!editor.getOption(key)) { resolve(true); return; } const subscription = editor.onDidChangeConfiguration(() => { if (!editor.getOption(key)) { subscription.dispose(); resolve(true); } }); })"
+   second.focusEditor();XCTAssertEqual(evaluate(secondWeb,writable) as? Bool,true)
+   XCTAssertEqual(evaluate(firstWeb,"return monaco.editor.getEditors()[0].getOption(monaco.editor.EditorOption.readOnly)") as? Bool,true)
+   secondWeb.send("paste",payload:["text":"b"]);flush(second,.save)
+   first.focusEditor();XCTAssertEqual(evaluate(firstWeb,writable) as? Bool,true)
+   XCTAssertEqual(evaluate(secondWeb,"return monaco.editor.getEditors()[0].getOption(monaco.editor.EditorOption.readOnly)") as? Bool,true)
+   firstWeb.send("paste",payload:["text":"a"]);flush(first,.save)
+   let checked=expectation(description:"both edits kept")
+   store.snapshot(documentIdentifier:snapshot.documentIdentifier){value in XCTAssertEqual(value?.text,"abbase");checked.fulfill()};wait(for:[checked],timeout:5)
+  }
+ }
+ func testBrowserQueryFocusSurvivesInitialReadinessAndContextReconfiguration() throws {
+  let dir=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+  defer {try? FileManager.default.removeItem(at:dir)}
+  let store=iTermFileDocumentStore(storageDirectory:dir)
+  let resource=ProcessInfo.processInfo.environment["FILE_UI_RESOURCE_DIR"].map { URL(fileURLWithPath:$0) } ?? Bundle.main.resourceURL!.appendingPathComponent("FileWorkspaceUI")
+  let runtime=iTermFileWorkspaceUIRuntime(documentStore:store,resourceDirectory:resource),controller=iTermFileBrowserViewController(runtime:runtime),observer=FileUIBrowserObserver()
+  defer {observer.listed=nil;controller.shutdown();runtime.shutdown()}
+  controller.delegate=observer;controller.view.frame=NSRect(x:0,y:0,width:320,height:600)
+  controller.applyContext(iTermFileBrowserContext(rootDirectory:"/r",projectIdentifier:"p",worktreeIdentifier:"w",generation:1),title:"Root")
+  controller.focusQuery(contents:true)
+  let first=expectation(description:"first surface");observer.listed={observer.listed=nil;first.fulfill()};controller.setVisible(true);wait(for:[first],timeout:20)
+  let web=try XCTUnwrap(controller.view.subviews.compactMap{$0 as? iTermFileWorkspaceWebView}.first)
+  XCTAssertEqual(evaluate(web,"return document.activeElement.dataset.query") as? String,"contents")
+  let second=expectation(description:"replacement surface");observer.listed={observer.listed=nil;second.fulfill()}
+  controller.applyContext(iTermFileBrowserContext(rootDirectory:"/r/sub",projectIdentifier:"p",worktreeIdentifier:"w",generation:2),title:"Subtree")
+  controller.focusQuery(contents:false);wait(for:[second],timeout:20)
+  XCTAssertEqual(evaluate(web,"return document.activeElement.dataset.query") as? String,"names")
+ }
+ func testAbandonedControllersDoNotRetainRendererLeasesOrLoadAssets() throws {
+  let dir=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+  try FileManager.default.createDirectory(at:dir,withIntermediateDirectories:true);defer {try? FileManager.default.removeItem(at:dir)}
+  let path=dir.appendingPathComponent("file.txt");try Data("text".utf8).write(to:path)
+  let store=iTermFileDocumentStore(storageDirectory:dir.appendingPathComponent("drafts"));let opened=expectation(description:"file");var snapshot:iTermFileDocumentSnapshot?
+  store.openFile(atPath:path.path){value,_ in snapshot=value;opened.fulfill()};wait(for:[opened],timeout:5)
+  let resource=ProcessInfo.processInfo.environment["FILE_UI_RESOURCE_DIR"].map { URL(fileURLWithPath:$0) } ?? Bundle.main.resourceURL!.appendingPathComponent("FileWorkspaceUI")
+  var created=[WeakFileUIWebView]()
+  let runtime=iTermFileWorkspaceUIRuntime(documentStore:store,resourceDirectory:resource,makeRenderer:{dataStore in let web=iTermFileWorkspaceWebView(dataStore:dataStore);created.append(WeakFileUIWebView(web));return web})
+  defer {runtime.shutdown()}
+  weak var abandonedBrowser:iTermFileBrowserViewController?
+  weak var abandonedFile:iTermFileViewController?
+  autoreleasepool {
+   for _ in 0..<4 {
+    let browser=iTermFileBrowserViewController(runtime:runtime);abandonedBrowser=browser;browser.setVisible(true)
+    let file=iTermFileViewController(runtime:runtime,viewIdentifier:UUID().uuidString);abandonedFile=file;file.applyDocumentChanges(snapshot!,edits:nil);file.setVisible(true)
+   }
+  }
+  XCTAssertNil(abandonedBrowser);XCTAssertNil(abandonedFile)
+  let settled=expectation(description:"startup settled");var probe:iTermFileWorkspaceWebView?
+  let probeOwner=NSObject()
+  runtime.acquire(owner:probeOwner) {web,error in XCTAssertNil(error);probe=web;settled.fulfill()};withExtendedLifetime(probeOwner) {wait(for:[settled],timeout:20)}
+  let owned=try XCTUnwrap(probe)
+  for item in created where item.value !== owned {XCTAssertNil(item.value,"Abandoned acquisition retained a renderer")}
+  runtime.release(owned)
+  let cancellationOwner=NSObject()
+  runtime.acquire(owner:cancellationOwner) {web,error in
+   XCTAssertNil(error);XCTAssertTrue(web === owned)
+   web?.bind(viewIdentifier:"cancelled",context:nil,token:"cancelled",purpose:"explorer")
+   if let web=web {runtime.release(web)}
+  }
+  XCTAssertFalse(owned.isLoading);XCTAssertNil(owned.url)
+ }
  func testOversizedTextUsesInformationViewInsteadOfEmptyEditor() throws {
   let dir=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
   try FileManager.default.createDirectory(at:dir,withIntermediateDirectories:true)
@@ -143,3 +286,12 @@ private final class FileUIViewObserver: NSObject, iTermFileViewControllerDelegat
  func fileViewDidRequestPin(_ controller: iTermFileViewController) {}
  func fileView(_ controller: iTermFileViewController, didRequest command: iTermFileViewCommand) {}
 }
+
+private final class FileUIBrowserObserver: NSObject, iTermFileBrowserViewControllerDelegate {
+ var listed: (() -> Void)?
+ func fileBrowser(_ controller: iTermFileBrowserViewController, didRequest request: iTermFileBrowserRequest) {
+  if request.kind == .listDirectory { controller.applyListing([],directoryPath:request.directoryPath!,requestIdentifier:request.identifier,context:request.context,error:nil);listed?() }
+ }
+ func fileBrowserDidReceiveFocus(_ controller: iTermFileBrowserViewController) {}
+}
+private final class WeakFileUIWebView { weak var value:iTermFileWorkspaceWebView?; init(_ value:iTermFileWorkspaceWebView) {self.value=value} }

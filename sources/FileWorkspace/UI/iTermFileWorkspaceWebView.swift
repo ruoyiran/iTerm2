@@ -35,7 +35,7 @@ final class iTermFileWorkspaceWebView: WKWebView, WKNavigationDelegate, WKUIDele
         if pageReady { configure() }
     }
     func loadAssets(_ url: URL) {
-        guard assetURL == nil else { return }; assetURL = url; load(URLRequest(url: url))
+        guard bound, assetURL == nil else { return }; assetURL = url; load(URLRequest(url: url))
     }
     private func configure() {
         var message = fence.dictionary; message["type"] = "configure"; message["requestIdentifier"] = UUID().uuidString

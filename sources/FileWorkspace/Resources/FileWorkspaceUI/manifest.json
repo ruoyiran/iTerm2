@@ -10,7 +10,7 @@
     {
       "path": "app.js",
       "bytes": 2017,
-      "sha256": "9232f0dcfcc9c5bb3bef8e6f2de07c00c02f4eafc6646d1f15382837fb349c90",
+      "sha256": "a4b026e71e9b7d7b854087a21e4280aeb9614e1c0c5798bdf9b8275ca8147bfb",
       "mime": "text/javascript; charset=utf-8"
     },
     {
@@ -92,6 +92,12 @@
       "mime": "text/javascript; charset=utf-8"
     },
     {
+      "path": "chunks/chunk-QGNJUBQQ.js",
+      "bytes": 20284,
+      "sha256": "ba7307dd7d27b04adb3bee4330896de865a243aaefcf2573a0a254bf14b6a4be",
+      "mime": "text/javascript; charset=utf-8"
+    },
+    {
       "path": "chunks/chunk-SENOILCD.js",
       "bytes": 3323021,
       "sha256": "d9012cba75f4eca7d6d0968b904c3e02fa8304592512c1a8898b1ba709d669aa",
@@ -102,12 +108,6 @@
       "bytes": 278,
       "sha256": "500520d9d47c2d50feb0216c6950b602104a9e513c1a45a34d9a0314f2d0ea51",
       "mime": "text/plain; charset=utf-8"
-    },
-    {
-      "path": "chunks/chunk-TOJBETA4.js",
-      "bytes": 18494,
-      "sha256": "7c82e81c82cf09db0822dda7136d74090fe26373ffa31500b4b653793ecadc3f",
-      "mime": "text/javascript; charset=utf-8"
     },
     {
       "path": "chunks/chunk-VC46IEJQ.js",
@@ -212,9 +212,9 @@
       "mime": "text/javascript; charset=utf-8"
     },
     {
-      "path": "chunks/editor-GOA57IX3.js",
-      "bytes": 62210,
-      "sha256": "ac900c781601e9009e7482860a8ce540cbf1e67936324108268e339be0cd1898",
+      "path": "chunks/editor-6TQNYKR5.js",
+      "bytes": 62368,
+      "sha256": "aead60f49f5babc88e70a5ebad00f6e8d7fa86244a4467c4c949a65006e353d5",
       "mime": "text/javascript; charset=utf-8"
     },
     {
@@ -897,11 +897,11 @@
     },
     {
       "path": "sources/FileWorkspace/Resources/src/editor.mjs",
-      "sha256": "900e8921838e52585932fa8905c5d6a419929ed5f0a812e3050e14369e699b8e"
+      "sha256": "e52d7286bd18b2426bf10fbd4dd56c153e057eb242109351fd2d3c4993bc0a66"
     },
     {
       "path": "sources/FileWorkspace/Resources/src/explorer.mjs",
-      "sha256": "2dc1b4257c14570ef3a965e3a6068b3234258fdcbf7bc60e9dcff8625f785343"
+      "sha256": "efa321e8d2bb2b094191223b98e4940b7b3a29f4baaa158a796338b3f588bdc0"
     },
     {
       "path": "sources/FileWorkspace/Resources/src/tree-state.mjs",
@@ -909,7 +909,7 @@
     },
     {
       "path": "tools/file-workspace-ui/build.mjs",
-      "sha256": "28cf8700d6ec58187ff96b5faab34f89b74fe138cd5c6f7c841d097665cf7127"
+      "sha256": "1718c91df0edb28efafe1a87df631184c5ad4c1c0d54a83101f577eb18515176"
     },
     {
       "path": "tools/file-workspace-ui/package-lock.json",
