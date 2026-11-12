@@ -87,11 +87,12 @@ struct FileDraftStorage {
         }
     }
 
-    private func ownedUsage() throws -> (bytes: UInt64, count: Int) {
+    private func ownedUsage(excluding replacedFile: URL? = nil) throws -> (bytes: UInt64, count: Int) {
         var total: UInt64 = 0
         var count = 0
         for entry in try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
-            where entry.pathExtension == "json" || isTemporaryName(entry.lastPathComponent) {
+            where (entry.pathExtension == "json" || isTemporaryName(entry.lastPathComponent)) &&
+                  entry.lastPathComponent != replacedFile?.lastPathComponent {
             var info = stat()
             guard lstat(entry.path, &info) == 0, info.st_size >= 0 else { throw fileDocumentError(11) }
             let size = UInt64(info.st_size)
@@ -108,8 +109,9 @@ struct FileDraftStorage {
             let file = try url(draft.identifier)
             let data = try JSONEncoder().encode(draft)
             guard data.count <= Self.maximumDraftBytes else { throw fileDocumentError(4) }
-            // Count physical peak usage: the existing record remains until atomic rename.
-            let usage = try ownedUsage()
+            // Check final steady usage, excluding the record this write replaces. The directory
+            // lock permits only one staging file, separately bounded by maximumDraftBytes above.
+            let usage = try ownedUsage(excluding: file)
             guard UInt64(data.count) <= Self.maximumTotalBytes - usage.bytes,
                   usage.count < Self.maximumDraftCount else { throw fileDocumentError(4) }
             let temp = directory.appendingPathComponent(".draft-" + UUID().uuidString)

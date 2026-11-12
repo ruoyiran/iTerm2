@@ -638,4 +638,87 @@ final class FileDocumentTests: XCTestCase {
         wait(for: [done], timeout: 10)
     }
 
+    private func draftFiles() throws -> [URL] {
+        try FileManager.default.contentsOfDirectory(at: root.appendingPathComponent("drafts"), includingPropertiesForKeys: nil)
+            .filter { $0.pathExtension == "json" }
+    }
+
+    private func draftByteCount() throws -> UInt64 {
+        try draftFiles().reduce(0) { total, file in
+            total + (try FileManager.default.attributesOfItem(atPath: file.path)[.size] as! NSNumber).uint64Value
+        }
+    }
+
+    private func expectPersistenceBound(_ id: String) {
+        let done = expectation(description: "steady draft quota rejects new record")
+        store.persistDraft(documentIdentifier: id) { error in
+            XCTAssertEqual(error?.domain, "iTermFileDocumentError"); XCTAssertEqual(error?.code, 4); done.fulfill()
+        }
+        wait(for: [done], timeout: 10)
+    }
+
+    func testHundredCommittedDraftsRemainUpdateableAndRejectNewAdmission() throws {
+        var first: iTermFileDocumentSnapshot?
+        for index in 0..<100 {
+            let path = try fixture("count-\(index)", Data("disk".utf8))
+            let changed = try XCTUnwrap(replace(try XCTUnwrap(open(path)), "draft-\(index)"))
+            persist(changed.documentIdentifier)
+            if index == 0 { first = changed }
+        }
+        XCTAssertEqual(try draftFiles().count, 100)
+        let changed = try XCTUnwrap(replace(try XCTUnwrap(first), "newest at capacity"))
+        persist(changed.documentIdentifier)
+        let extra = try XCTUnwrap(replace(try XCTUnwrap(open(try fixture("count-extra", Data("disk".utf8)))), "denied"))
+        expectPersistenceBound(extra.documentIdentifier)
+        XCTAssertEqual(try draftFiles().count, 100)
+        store = iTermFileDocumentStore(storageDirectory: root.appendingPathComponent("drafts"))
+        let snapshots = recover()
+        XCTAssertEqual(snapshots.count, 100)
+        XCTAssertEqual(snapshots.first { $0.documentIdentifier == changed.documentIdentifier }?.text, "newest at capacity")
+        XCTAssertNil(snapshots.first { $0.documentIdentifier == extra.documentIdentifier })
+    }
+
+    func testSteadyByteCapacityAllowsReplacementAndShrinkWhileRejectingNewAdmission() throws {
+        // Six real JSON-escaped text drafts occupy just over 120 MiB; each source text is
+        // within 10 MiB. The final ASCII draft fills the actual on-disk envelope sum exactly.
+        let escaped = String(repeating: "\"", count: 10 * 1024 * 1024)
+        for index in 0..<6 {
+            let path = try fixture("bytes-\(index)", Data("disk".utf8))
+            let changed = try XCTUnwrap(replace(try XCTUnwrap(open(path)), escaped))
+            persist(changed.documentIdentifier)
+        }
+        let path = try fixture("bytes-fill", Data("disk".utf8))
+        let initial = try XCTUnwrap(replace(try XCTUnwrap(open(path)), "A"))
+        persist(initial.documentIdentifier)
+        let capacity: UInt64 = 128 * 1024 * 1024
+        let currentBytes = try draftByteCount()
+        XCTAssertLessThan(currentBytes, capacity)
+        let fillCount = Int(capacity - currentBytes) + 1
+        XCTAssertLessThan(fillCount, 10 * 1024 * 1024)
+        let filled = try XCTUnwrap(replace(initial, String(repeating: "A", count: fillCount)))
+        persist(filled.documentIdentifier)
+        let actualBytes = try draftByteCount()
+        XCTAssertEqual(actualBytes, capacity)
+        guard actualBytes == capacity else { return }
+        let updated = try XCTUnwrap(replace(filled, String(repeating: "B", count: fillCount)))
+        persist(updated.documentIdentifier)
+        XCTAssertEqual(try draftByteCount(), capacity)
+        let extra = try XCTUnwrap(replace(try XCTUnwrap(open(try fixture("bytes-extra", Data("disk".utf8)))), "new"))
+        expectPersistenceBound(extra.documentIdentifier)
+        XCTAssertEqual(try draftFiles().count, 7)
+        XCTAssertEqual(try draftByteCount(), capacity)
+        // Inspect a production envelope to ensure equal-size replacement advanced the recovery content.
+        let recordURL = root.appendingPathComponent("drafts").appendingPathComponent(updated.documentIdentifier + ".json")
+        let record = try JSONDecoder().decode(FileDocumentDraft.self, from: Data(contentsOf: recordURL))
+        XCTAssertEqual(record.text.utf8.count, fillCount)
+        XCTAssertTrue(record.text.allSatisfy { $0 == "B" })
+        let shrunk = try XCTUnwrap(replace(updated, "shrunk"))
+        persist(shrunk.documentIdentifier)
+        XCTAssertLessThan(try draftByteCount(), capacity)
+        persist(extra.documentIdentifier)
+        XCTAssertEqual(try draftFiles().count, 8)
+        let shrunkRecord = try JSONDecoder().decode(FileDocumentDraft.self, from: Data(contentsOf: recordURL))
+        XCTAssertEqual(shrunkRecord.text, "shrunk")
+    }
+
 }
