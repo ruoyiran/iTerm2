@@ -4,11 +4,12 @@ import Foundation
 @objcMembers final class iTermFileOpenCoordinator: NSObject {
     private let coordinator: iTermFileSessionCoordinator
     private var pending: Pending?
-    private var queued: (() -> Void)?
+    private var queued: (run: () -> Void, cancel: () -> Void)?
     private final class Pending {
         let request: iTermFileOpenRequest
         var pinned: Bool
         var superseded = false
+        weak var admittedPane: iTermFileSessionPane?
         init(_ request: iTermFileOpenRequest) { self.request = request; pinned = request.activation == .pinned }
     }
     init(coordinator: iTermFileSessionCoordinator) { self.coordinator = coordinator }
@@ -18,23 +19,30 @@ import Foundation
               activate: @escaping (iTermFileSessionPane) -> Void, completion: @escaping (Bool) -> Void) {
         if let pending, !pending.superseded, isCurrent(), request.placement == .tab, pending.request.placement == .tab,
            request.context === pending.request.context, request.path == pending.request.path {
-            pending.pinned = pending.pinned || request.activation == .pinned; completion(true); return
+            pending.pinned = pending.pinned || request.activation == .pinned
+            if pending.pinned { pending.admittedPane?.pin() }; completion(true); return
         }
         if let pending {
             pending.superseded = true
-            queued = { [weak self] in self?.open(request, candidates: candidates, isCurrent: isCurrent, install: install, activate: activate, completion: completion) }
+            let previous = queued
+            queued = ({ [weak self] in self?.open(request, candidates: candidates, isCurrent: isCurrent, install: install, activate: activate, completion: completion) }, { completion(false) })
+            previous?.cancel()
             return
         }
         let intent = Pending(request); pending = intent
         let ended: (Bool) -> Void = { [weak self] success in
             guard let self else { completion(false); return }
-            if self.pending === intent { self.pending = nil }
-            let next = self.queued; self.queued = nil
-            completion(success); next?()
+            self.coordinator.afterPendingDocumentReleases { [weak self] in
+                guard let self else { completion(false); return }
+                if self.pending === intent { self.pending = nil }
+                let next = self.queued; self.queued = nil
+                next?.run(); completion(success)
+            }
         }
         let current = { [weak self, weak intent] in self?.pending === intent && intent?.superseded == false && isCurrent() }
         let finish: (iTermFileSessionPane) -> Void = { pane in
             guard current() else { pane.controller.cancelPendingFocus(); ended(false); return }
+            intent.admittedPane = pane
             if intent.pinned { pane.pin() }
             activate(pane); ended(true)
         }
@@ -44,8 +52,11 @@ import Foundation
         }
         let admit = { [weak self] in
             guard let self, current() else { ended(false); return }
-            self.coordinator.openFile(atPath: request.path, context: request.context,
-                viewIdentifier: UUID().uuidString, preview: !intent.pinned) { pane, error in
+            let owner = request.ownerContext
+            let descriptor = iTermFileSessionDescriptor(filePath: request.path, documentIdentifier: nil,
+                rootDirectory: owner.rootDirectory, projectIdentifier: owner.projectIdentifier,
+                worktreeIdentifier: owner.worktreeIdentifier, preview: !intent.pinned, viewState: iTermFileViewState())
+            self.coordinator.restore(descriptor, viewIdentifier: StableSessionID.generate(), context: request.context) { pane, error in
                 guard let pane else {
                     if current(), let error { self.coordinator.delegate?.fileSessionCoordinator(self.coordinator, didFail: error) }
                     ended(false); return
@@ -58,6 +69,7 @@ import Foundation
                 install(pane) { installed in
                     guard installed else { self.coordinator.abandon(pane); ended(false); return }
                     // Insertion itself changes native selection. Its native callback already rechecked the origin.
+                    intent.admittedPane = pane
                     if intent.pinned { pane.pin() }
                     if !intent.superseded { activate(pane) }
                     else { pane.controller.cancelPendingFocus() }

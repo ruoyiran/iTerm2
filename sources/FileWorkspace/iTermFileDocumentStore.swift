@@ -545,11 +545,11 @@ func fileDocumentError(_ code: Int) -> NSError {
             for mapping in mappings {
                 guard let old = mapping.oldPath else { continue }
                 for document in self.documents.values {
-                    let matches: (String) -> Bool = { $0 == old || (mapping.isDirectory && $0.hasPrefix(old + "/")) }
-                    guard let path = [document.path, document.canonicalPath].first(where: matches) else { continue }
+                    guard let suffix = fileDocumentAffectedSuffix(displayPath: document.path, canonicalPath: document.canonicalPath,
+                        affectedPath: old, includingDescendants: mapping.isDirectory) else { continue }
                     if let new = mapping.newPath {
-                        document.path = new + path.dropFirst(old.count)
-                        document.canonicalPath = document.path
+                        document.path = new + suffix
+                        document.canonicalPath = URL(fileURLWithPath: document.path).resolvingSymlinksInPath().standardizedFileURL.path
                     } else { document.conflict = true }
                     self.changed(document)
                     self.scheduleDraft(document.identifier)

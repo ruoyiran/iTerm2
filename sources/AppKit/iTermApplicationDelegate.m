@@ -1475,7 +1475,7 @@ void TurnOnDebugLoggingAutomatically(void) {
 }
 
 - (void)applicationWillFinishLaunching:(NSNotification *)aNotification {
-    [iTermFileWorkspaceService bootstrap];
+    (void)[iTermFileWorkspaceService bootstrap];
     DLog(@"Begin");
     // Parallel test runs start several test hosts with the same suite on purpose. The modal warning
     // about another instance would stall each one after the first.

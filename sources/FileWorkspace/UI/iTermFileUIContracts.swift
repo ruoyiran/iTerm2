@@ -31,13 +31,20 @@ func fileUIInteger(_ value: Any?, minimum: Int = 0, maximum: Int = Int.max) -> I
 
 @objcMembers final class iTermFileOpenRequest: NSObject {
     let context: iTermFileBrowserContext
+    let ownerContext: iTermFileBrowserContext
     let path: String
     let placement: iTermOpenStyle
     let activation: iTermFileActivation
     let lineNumber: Int
     let utf16Column: Int
-    init(context: iTermFileBrowserContext, path: String, placement: iTermOpenStyle, activation: iTermFileActivation,
-         lineNumber: Int = 0, utf16Column: Int = 0) {
+    convenience init(context: iTermFileBrowserContext, path: String, placement: iTermOpenStyle, activation: iTermFileActivation,
+                     lineNumber: Int = 0, utf16Column: Int = 0) {
+        self.init(context: context, ownerContext: context, path: path, placement: placement, activation: activation,
+                  lineNumber: lineNumber, utf16Column: utf16Column)
+    }
+    init(context: iTermFileBrowserContext, ownerContext: iTermFileBrowserContext, path: String,
+         placement: iTermOpenStyle, activation: iTermFileActivation, lineNumber: Int = 0, utf16Column: Int = 0) {
+        self.ownerContext = ownerContext
         self.context = context; self.path = path; self.placement = placement; self.activation = activation
         self.lineNumber = lineNumber; self.utf16Column = utf16Column
     }
@@ -51,11 +58,21 @@ func fileUIInteger(_ value: Any?, minimum: Int = 0, maximum: Int = Int.max) -> I
     let name: String?
     let nameQuery: String?
     let contentQuery: iTermFileContentQuery?
-    let openRequest: iTermFileOpenRequest?
+    private(set) var openRequest: iTermFileOpenRequest?
     let terminalPlacement: iTermOpenStyle
     let showsHiddenFiles: Bool
     let showsGitIgnoredFiles: Bool
     let cancelledRequestIdentifier: String?
+
+    /// Bound by the native browser coordinator, never accepted from web payloads.
+    @nonobjc func setFileOwnerContext(_ owner: iTermFileBrowserContext) -> Bool {
+        guard let open = openRequest, owner.projectIdentifier == context.projectIdentifier,
+              owner.worktreeIdentifier == context.worktreeIdentifier,
+              context.rootDirectory == owner.rootDirectory || context.rootDirectory.hasPrefix(owner.rootDirectory == "/" ? "/" : owner.rootDirectory + "/") else { return false }
+        openRequest = iTermFileOpenRequest(context: open.context, ownerContext: owner, path: open.path,
+            placement: open.placement, activation: open.activation, lineNumber: open.lineNumber, utf16Column: open.utf16Column)
+        return true
+    }
 
     @nonobjc init?(identifier: String, context: iTermFileBrowserContext, type: String, payload: [String: Any]) {
         guard let kind = iTermFileBrowserRequestKind(wireName: type) else { return nil }

@@ -97,27 +97,38 @@ import AppKit
                 self.controller.focusQuery(contents: true)
             }
         case .returnToRoot: switchContext(base)
+        case .openFile:
+            guard request.setFileOwnerContext(base ?? context) else { return }
+            nativeRequest?(request)
         case .createFile, .createFolder, .rename, .duplicateFile, .trash, .move, .undo, .redo:
-            mutate(request)
+            performMutation(request) { _ in }
         default: nativeRequest?(request)
         }
     }
-    private func mutate(_ request: iTermFileBrowserRequest) {
+    func performMutation(_ request: iTermFileBrowserRequest, completion: @escaping (NSError?) -> Void) {
+        guard !stopped, visible, request.context === context,
+              [.createFile, .createFolder, .rename, .duplicateFile, .trash, .move, .undo, .redo].contains(request.kind) else {
+            completion(iTermFileSessionCoordinator.error(1)); return
+        }
         let context = request.context
         // Undo/redo may affect any path in this backend journal. Conservatively guard the entire owner root.
         let affected = [.undo, .redo].contains(request.kind) ? [context.rootDirectory] :
             ([.rename, .trash, .move].contains(request.kind) ? request.paths : [])
-        native.prepareFileMutation(paths: affected, isCurrent: { [weak self] in self?.context === context && self?.visible == true }) { [self] allowed in
-            guard allowed else { controller.completeRequest(request.identifier, context: context, error: iTermFileSessionCoordinator.error(1)); return }
+        native.prepareFileMutation(paths: affected, preservingChanges: [.rename, .move].contains(request.kind), isCurrent: { [weak self] in self?.context === context && self?.visible == true }) { [self] allowed in
+            guard allowed else {
+                let error = iTermFileSessionCoordinator.error(1)
+                controller.completeRequest(request.identifier, context: context, error: error); completion(error); return
+            }
             let done: (iTermFileOperationResult) -> Void = { [self] result in
                 // Do not check display context until every committed mapping and draft path has been applied.
-                native.applyCommittedPathMappings(result.mappings) { [self] in
+                native.applyCommittedPathMappings(result.mappings, completionWithError: { [self] mappingError in
                     native.finishOperation { [self] error in
-                        controller.completeRequest(request.identifier, context: context, error: result.error ?? error)
+                        controller.completeRequest(request.identifier, context: context, error: result.error ?? mappingError ?? error)
                         controller.applyOperationState(canUndo: result.canUndo, canRedo: result.canRedo, context: context)
                         if self.context === context { refresh() }
+                        completion(result.error ?? mappingError ?? error)
                     }
-                }
+                })
             }
             switch request.kind {
             case .createFile: backend.createFile(inDirectory: request.directoryPath!, name: request.name!, context: context, completion: done)

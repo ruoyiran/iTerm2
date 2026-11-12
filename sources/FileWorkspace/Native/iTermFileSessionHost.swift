@@ -123,6 +123,25 @@ import AppKit
         case .kiTermWarningSelection1: completion(quitting ? .keepDrafts : .discard)
         default: completion(.cancel) }
     }
+    func fileSessionCoordinator(_ coordinator: iTermFileSessionCoordinator, decideForFileMutation documents: [iTermFileDocumentSnapshot],
+                                preservingChanges: Bool, completion: @escaping (iTermFileCloseDecision) -> Void) {
+        guard preservingChanges else {
+            fileSessionCoordinator(coordinator, decideFor: documents, quitting: false, completion: completion); return
+        }
+        let title = String(localized: "FileSession.RelocateDirty", defaultValue: "Save changes before moving or renaming these files?",
+            comment: "Confirmation for a file move or rename; unsaved changes can be saved or kept in recovery drafts")
+        let names = documents.map { ($0.filePath as NSString).lastPathComponent }.joined(separator: "\n")
+        let save = String(localized: "FileSession.Save", defaultValue: "Save", comment: "Save edited files before closing")
+        let keep = String(localized: "FileSession.KeepUnsavedChanges", defaultValue: "Keep Unsaved Changes",
+            comment: "Keep edited file contents in durable recovery drafts while moving or renaming the source files")
+        let answer = iTermWarning.show(withTitle: title + "\n\n" + names, actions: [save, keep, iTermLocalizedCancel()],
+            accessory: nil, identifier: nil, silenceable: .kiTermWarningTypePersistent, heading: nil, window: NSApp.keyWindow)
+        switch answer {
+        case .kiTermWarningSelection0: completion(.save)
+        case .kiTermWarningSelection1: completion(.keepDrafts)
+        default: completion(.cancel)
+        }
+    }
     func fileSessionCoordinator(_ coordinator: iTermFileSessionCoordinator, didFail error: NSError) {
         _ = iTermWarning.show(withTitle: error.localizedDescription, actions: [iTermLocalizedOK()], accessory: nil,
             identifier: nil, silenceable: .kiTermWarningTypePersistent, heading: nil, window: NSApp.keyWindow)

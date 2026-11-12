@@ -6,6 +6,9 @@ import AppKit
     func fileSessionCoordinator(_ coordinator: iTermFileSessionCoordinator, decideFor documents: [iTermFileDocumentSnapshot],
                                 quitting: Bool, completion: @escaping (iTermFileCloseDecision) -> Void)
     func fileSessionCoordinator(_ coordinator: iTermFileSessionCoordinator, didFail error: NSError)
+    @objc optional func fileSessionCoordinator(_ coordinator: iTermFileSessionCoordinator,
+        decideForFileMutation documents: [iTermFileDocumentSnapshot], preservingChanges: Bool,
+        completion: @escaping (iTermFileCloseDecision) -> Void)
 }
 
 @objc protocol iTermFileSessionPaneDelegate: AnyObject {
@@ -97,6 +100,7 @@ import AppKit
     private var operationGeneration: UInt64 = 0
     private var approved = Set<String>()
     private var releasePending = Set<String>()
+    private var releaseWaiters = [() -> Void]()
     private var cleanup = Set<String>()
     var panes: [iTermFileSessionPane] { registry.allObjects.filter { !$0.closed } }
     var operationInProgress: Bool { operation }
@@ -219,8 +223,8 @@ import AppKit
                     cancelOperation(); completion(false, Self.error(1)); return
                 }
                 let descriptor = iTermFileSessionDescriptor(filePath: request.path, documentIdentifier: snapshot?.documentIdentifier,
-                    rootDirectory: request.context.rootDirectory, projectIdentifier: request.context.projectIdentifier,
-                    worktreeIdentifier: request.context.worktreeIdentifier, preview: request.activation == .preview, viewState: iTermFileViewState())
+                    rootDirectory: request.ownerContext.rootDirectory, projectIdentifier: request.ownerContext.projectIdentifier,
+                    worktreeIdentifier: request.ownerContext.worktreeIdentifier, preview: request.activation == .preview, viewState: iTermFileViewState())
                 pane.rebind(descriptor: descriptor, context: request.context, snapshot: snapshot, error: error)
                 if let old, old != pane.documentIdentifier { cleanup.insert(old) }
                 cancelOperation(); completion(true, error)
@@ -228,36 +232,61 @@ import AppKit
         }
     }
     func applyCommittedPathMappings(_ mappings: [iTermFilePathMapping], completion: @escaping () -> Void) {
-        documentStore.applyPathMappings(mappings) { [self] in
-            documentStore.allSnapshots { [self] snapshots in
-                let live = Set(snapshots.map(\.documentIdentifier))
-                for pane in panes where pane.documentIdentifier.map({ !live.contains($0) }) ?? true {
-                    pane.applyCommittedMappings(mappings)
+        applyCommittedPathMappings(mappings, completionWithError: { [self] error in
+            if let error { delegate?.fileSessionCoordinator(self, didFail: error) }
+            completion()
+        })
+    }
+    func applyCommittedPathMappings(_ mappings: [iTermFilePathMapping], completionWithError: @escaping (NSError?) -> Void) {
+        // Rescan durable records even if initial recovery ran or a dirty document was released.
+        // Valid records/live documents must still follow committed mappings when another record fails.
+        documentStore.recoverDrafts { [self] _, recoveryError in
+            documentStore.applyPathMappings(mappings) { [self] in
+                documentStore.allSnapshots { [self] snapshots in
+                    let live = Set(snapshots.map(\.documentIdentifier))
+                    for pane in panes where pane.documentIdentifier.map({ !live.contains($0) }) ?? true {
+                        pane.applyCommittedMappings(mappings)
+                    }
+                    completionWithError(recoveryError)
                 }
-                completion()
             }
         }
     }
-    /// Filesystem transactions include every affected document, even when another pane also owns it.
     func prepareFileMutation(paths: [String], isCurrent: @escaping () -> Bool, completion: @escaping (Bool) -> Void) {
+        prepareFileMutation(paths: paths, preservingChanges: false, isCurrent: isCurrent, completion: completion)
+    }
+    /// The reservation covers durable recovery, writer drain, decisions, mutation and path persistence.
+    func prepareFileMutation(paths: [String], preservingChanges: Bool,
+                             isCurrent: @escaping () -> Bool, completion: @escaping (Bool) -> Void) {
         beginOperation { [self] error in
             guard error == nil else { completion(false); return }
             let generation = operationGeneration
-            documentStore.allSnapshots { [self] values in
+            documentStore.recoverDrafts { [self] _, error in
                 guard operation, generation == operationGeneration else { completion(false); return }
-                let dirty = values.filter { value in value.isDirty && paths.contains { value.filePath == $0 || value.filePath.hasPrefix($0 + "/") } }
-                let decide: (iTermFileCloseDecision) -> Void = { [self] decision in
+                guard error == nil else { fail(error!, completion: completion); return }
+                documentStore.allSnapshots { [self] values in
                     guard operation, generation == operationGeneration else { completion(false); return }
-                    guard isCurrent(), decision == .save || decision == .discard else { cancelOperation(); completion(false); return }
-                    persist(dirty, decision: decision, generation: generation) { [self] error in
+                    let dirty = values.filter { value in value.isDirty && paths.contains {
+                        fileDocumentAffectedSuffix(displayPath: value.filePath, canonicalPath: value.canonicalPath,
+                            affectedPath: $0, includingDescendants: true) != nil
+                    } }
+                    let decide: (iTermFileCloseDecision) -> Void = { [self] decision in
                         guard operation, generation == operationGeneration else { completion(false); return }
-                        guard error == nil else { fail(error!, completion: completion); return }
-                        completion(true)
+                        let allowed = decision == .save || (preservingChanges ? decision == .keepDrafts : decision == .discard)
+                        guard isCurrent(), allowed else { cancelOperation(); completion(false); return }
+                        persist(dirty, decision: decision, generation: generation) { [self] error in
+                            guard operation, generation == operationGeneration else { completion(false); return }
+                            guard error == nil else { fail(error!, completion: completion); return }
+                            completion(true)
+                        }
                     }
+                    if dirty.isEmpty { decide(.save) }
+                    else if let delegate {
+                        if delegate.fileSessionCoordinator?(self, decideForFileMutation: dirty, preservingChanges: preservingChanges, completion: decide) == nil {
+                            delegate.fileSessionCoordinator(self, decideFor: dirty, quitting: false, completion: decide)
+                        }
+                    } else { decide(.cancel) }
                 }
-                if dirty.isEmpty { decide(.save) }
-                else if let delegate { delegate.fileSessionCoordinator(self, decideFor: dirty, quitting: false, completion: decide) }
-                else { decide(.cancel) }
             }
         }
     }
@@ -350,6 +379,10 @@ import AppKit
         approved.removeAll(); operation = false
         if quitting { runtime.shutdown() } else { runtime.resumeEditing(); performCleanup() }
     }
+    /// Native admissions may resume only after actual asynchronous document cleanup releases its reservation.
+    func afterPendingDocumentReleases(_ completion: @escaping () -> Void) {
+        if releasePending.isEmpty { completion() } else { releaseWaiters.append(completion) }
+    }
     private func performCleanup() {
         guard !operation, pendingOpens == 0, pendingMutations == 0 else { return }
         let live = Set(panes.compactMap(\.documentIdentifier))
@@ -358,6 +391,10 @@ import AppKit
             documentStore.releaseDocument(documentIdentifier: id) { [weak self] error in
                 guard let self else { return }; self.releasePending.remove(id)
                 if let error { self.cleanup.insert(id); self.delegate?.fileSessionCoordinator(self, didFail: error) }
+                if self.releasePending.isEmpty {
+                    let callbacks = self.releaseWaiters; self.releaseWaiters.removeAll()
+                    callbacks.forEach { $0() }
+                }
             }
         }
     }

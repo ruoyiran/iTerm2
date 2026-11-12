@@ -97,3 +97,16 @@ test('recent owner contexts retain queries and expansions with bounded RAM cache
  for(let i=0;i<8;i++)e.receive('context',{token:String(i),rootDirectory:'/root'+i,projectIdentifier:'p',worktreeIdentifier:'w'});
  assert.ok(e.recentContexts.size<=4);e.dispose();w.happyDOM.abort();
 });
+test('context changes invalidate retained create forms and detached menu callbacks',()=>{
+ for(const sameRoot of [false,true])for(const kind of ['createFile','createFolder']) {
+  const f=fixture();try {
+   f.explorer.inline(kind,null);const form=f.explorer.form;form.querySelector('input').value='old-intent';
+   f.explorer.receive('context',{token:'next',rootDirectory:sameRoot?'/r':'/other',projectIdentifier:'new-owner',worktreeIdentifier:'new-tree'});
+   const before=f.sent.length;form.dispatchEvent(new f.w.Event('submit',{bubbles:true,cancelable:true}));
+   assert.equal(f.sent.slice(before).some(message=>message.type===kind),false);assert.equal(f.root.querySelector('.inline-input'),null);
+   f.explorer.menu(new f.w.MouseEvent('contextmenu'),null);const menu=f.explorer.menuNode;const button=menu.querySelector('button');
+   f.explorer.receive('context',{token:'third',rootDirectory:sameRoot?'/r':'/third',projectIdentifier:'third-owner',worktreeIdentifier:'new-tree'});
+   button.click();assert.equal(f.root.querySelector('.inline-input'),null);assert.equal(f.explorer.menuNode,null);
+  }finally{f.close();}
+ }
+});

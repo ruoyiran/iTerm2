@@ -68,8 +68,12 @@ export class Explorer {
     if(rows<=10000&&this.state.expanded.size<=10000)this.recentContexts.set(key,{state:this.state,names:this.names.value,contents:this.contents.value,include:this.include.value,exclude:this.exclude.value,flags:{...this.flags},mode:this.mode});
     while(this.recentContexts.size>4)this.recentContexts.delete(this.recentContexts.keys().next().value);
   }
+  invalidateTransientUI() {
+    this.transientGeneration=(this.transientGeneration??0)+1;clearTimeout(this.nameTimer);
+    this.form?.remove();this.form=null;this.formRequest=null;this.composing=false;this.closeMenu();
+  }
   changeContext(payload) {
-    this.cancelSearch();this.rememberContext();this.resultFocus=null;this.scope=payload.rootDirectory?payload:null;
+    this.invalidateTransientUI();this.cancelSearch();this.rememberContext();this.resultFocus=null;this.scope=payload.rootDirectory?payload:null;
     const saved=this.recentContexts.get(this.contextKey(this.scope));this.recentContexts.delete(this.contextKey(this.scope));
     this.state=saved?.state??new TreeState();this.state.scope=this.scope;this.state.pending.clear();
     this.title.textContent=payload.title||this.t('selectProject');this.names.value=saved?.names??'';this.contents.value=saved?.contents??'';
@@ -169,11 +173,11 @@ export class Explorer {
   more(event) {
     this.closeMenu();const menu=element('div','context-menu');for(const [key,label] of [['showsHiddenFiles','showHidden'],['showsGitIgnoredFiles','showIgnored']]) {const b=button(this.t(label),()=>{this.send('setVisibility',{showsHiddenFiles:!!this.scope?.showsHiddenFiles,showsGitIgnoredFiles:!!this.scope?.showsGitIgnoredFiles,[key]:!this.scope?.[key]});this.closeMenu();});b.prepend(document.createTextNode(this.scope?.[key]?'✓ ':''));menu.append(b);}menu.append(button(this.t('returnToRoot'),()=>{this.send('returnToRoot',{});this.closeMenu();}));this.showMenu(menu,event);
   }
-  showMenu(menu,event) {this.menuNode=menu;menu.style.left=`${Math.min(event.clientX||0,Math.max(0,window.innerWidth-220))}px`;menu.style.top=`${Math.min(event.clientY||32,Math.max(0,window.innerHeight-400))}px`;this.root.append(menu);menu.addEventListener('keydown',e=>{if(e.key==='Escape')this.closeMenu();});const close=e=>{if(!menu.contains(e.target))this.closeMenu();};this.menuCloser=close;document.addEventListener('pointerdown',close);menu.querySelector('button')?.focus();}
+  showMenu(menu,event) {const scope=this.scope,generation=this.transientGeneration;const fence=event=>{if(this.scope!==scope||this.transientGeneration!==generation||this.menuNode!==menu){event.preventDefault();event.stopImmediatePropagation();}};menu.addEventListener('click',fence,true);menu.addEventListener('keydown',fence,true);this.menuNode=menu;menu.style.left=`${Math.min(event.clientX||0,Math.max(0,window.innerWidth-220))}px`;menu.style.top=`${Math.min(event.clientY||32,Math.max(0,window.innerHeight-400))}px`;this.root.append(menu);menu.addEventListener('keydown',e=>{if(e.key==='Escape')this.closeMenu();});const close=e=>{if(!menu.contains(e.target))this.closeMenu();};this.menuCloser=close;document.addEventListener('pointerdown',close);menu.querySelector('button')?.focus();}
   closeMenu(){if(this.menuCloser)document.removeEventListener('pointerdown',this.menuCloser);this.menuNode?.remove();this.menuNode=null;}
   inline(kind,row) {
-    this.closeMenu();this.form?.remove();const form=element('form','inline-input');const input=element('input');input.setAttribute('aria-label',this.t(kind==='rename'?'rename':'name'));input.value=kind==='rename'?row.name:'';form.append(icon(kind==='createFolder'?'folder-plus':'file-plus'),input,button(this.t('cancel'),()=>form.remove(),'x'));this.viewport.before(form);this.form=form;
-    form.addEventListener('submit',event=>{event.preventDefault();if(this.composing||!input.value)return;const directoryPath=row?.isDirectory?row.path:row?parentPath(row.path):this.scope?.rootDirectory;this.formRequest=this.send(kind,{paths:row?[row.path]:[],directoryPath,name:input.value});});input.addEventListener('compositionstart',()=>this.composing=true);input.addEventListener('compositionend',()=>this.composing=false);input.addEventListener('keydown',event=>{if(event.key==='Escape')form.remove();});input.focus();input.select();
+    this.closeMenu();this.form?.remove();const scope=this.scope,generation=this.transientGeneration;const form=element('form','inline-input');const current=()=>this.scope===scope&&this.transientGeneration===generation&&this.form===form;const input=element('input');input.setAttribute('aria-label',this.t(kind==='rename'?'rename':'name'));input.value=kind==='rename'?row.name:'';form.append(icon(kind==='createFolder'?'folder-plus':'file-plus'),input,button(this.t('cancel'),()=>form.remove(),'x'));this.viewport.before(form);this.form=form;
+    form.addEventListener('submit',event=>{event.preventDefault();if(!current()||this.composing||!input.value)return;const directoryPath=row?.isDirectory?row.path:row?parentPath(row.path):this.scope?.rootDirectory;this.formRequest=this.send(kind,{paths:row?[row.path]:[],directoryPath,name:input.value});});input.addEventListener('compositionstart',()=>{if(current())this.composing=true;});input.addEventListener('compositionend',()=>{if(current())this.composing=false;});input.addEventListener('keydown',event=>{if(current()&&event.key==='Escape')form.remove();});input.focus();input.select();
   }
-  dispose() {this.root.removeEventListener('focusin',this.focusHandler);clearTimeout(this.nameTimer);this.cancelSearch();this.closeMenu();this.root.replaceChildren();}
+  dispose() {this.invalidateTransientUI();this.root.removeEventListener('focusin',this.focusHandler);clearTimeout(this.nameTimer);this.cancelSearch();this.closeMenu();this.root.replaceChildren();}
 }

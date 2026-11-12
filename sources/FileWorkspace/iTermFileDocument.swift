@@ -20,6 +20,22 @@ import CryptoKit
     }
 }
 
+/// Shared preflight/mapping predicate. Resolve ancestors, not the final component: moving a
+/// symlink itself must not be mistaken for moving its target. The same calculation works
+/// before and after the affected leaf has moved, including /var versus /private/var aliases.
+func fileDocumentAffectedSuffix(displayPath: String, canonicalPath: String, affectedPath: String,
+                                includingDescendants: Bool) -> String? {
+    let url = URL(fileURLWithPath: affectedPath)
+    let canonicalSource = url.deletingLastPathComponent().resolvingSymlinksInPath()
+        .appendingPathComponent(url.lastPathComponent).standardizedFileURL.path
+    for (path, source) in [(displayPath, affectedPath), (canonicalPath, canonicalSource)] {
+        if path == source { return "" }
+        let prefix = source == "/" ? "/" : source + "/"
+        if includingDescendants && path.hasPrefix(prefix) { return String(path.dropFirst(source == "/" ? 0 : source.count)) }
+    }
+    return nil
+}
+
 @objcMembers final class iTermFileDocumentSnapshot: NSObject {
     let documentIdentifier: String
     let filePath: String

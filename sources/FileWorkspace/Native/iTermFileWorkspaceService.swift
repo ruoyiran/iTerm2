@@ -12,7 +12,7 @@ import AppKit
         coordinator = iTermFileSessionCoordinator(documentStore: documentStore, runtime: runtime)
         super.init()
     }
-    static func bootstrap() -> iTermFileWorkspaceService {
+    @discardableResult static func bootstrap() -> iTermFileWorkspaceService {
         guard let path = FileManager.default.applicationSupportDirectoryWithoutCreating() else { it_fatalError("Missing application support directory") }
         if let service = suites[path] { iTermFileSessionHost.installCoordinator(service.coordinator); return service }
         let service = iTermFileWorkspaceService(directory: URL(fileURLWithPath: path, isDirectory: true))

@@ -72,7 +72,14 @@ final class FileSessionTests: XCTestCase {
             iTermFileOpenRequest(context: context, path: f.file.path, placement: style, activation: activation)
         }
         var installed = [iTermFileSessionPane](), activated = [String]()
-        let install: (iTermFileSessionPane, @escaping (Bool) -> Void) -> Void = { pane, done in installed.append(pane); f.panes.append(pane); done(true) }
+        let install: (iTermFileSessionPane, @escaping (Bool) -> Void) -> Void = { pane, done in
+            // This is the native PTYSession factory's actual identity validator, not a permissive UI fake.
+            guard StableSessionID.canonical(pane.viewIdentifier) == pane.viewIdentifier else {
+                XCTFail("Native file factory rejects pane identity"); done(false); return
+            }
+            XCTAssertNotNil(pane.documentIdentifier.flatMap(UUID.init(uuidString:)))
+            installed.append(pane); f.panes.append(pane); done(true)
+        }
         let activate: (iTermFileSessionPane) -> Void = { activated.append($0.viewIdentifier) }
         f.wait { done in
             policy.open(request(.tab, .preview), candidates: [], isCurrent: { true }, install: install, activate: activate) { success in XCTAssertTrue(success); done() }
@@ -89,6 +96,167 @@ final class FileSessionTests: XCTestCase {
             XCTAssertEqual(installed.count, count + 1)
             XCTAssertEqual(first.documentIdentifier, installed.last?.documentIdentifier)
             XCTAssertNotEqual(first.viewIdentifier, installed.last?.viewIdentifier)
+        }
+    }
+
+    func testWorkspaceRapidDifferentOpensWaitForActualDocumentRelease() throws {
+        let f = try Fixture(); defer { f.cleanup() }
+        let second = f.root.appendingPathComponent("second.txt")
+        try "second".write(to: second, atomically: true, encoding: .utf8)
+        let context = iTermFileBrowserContext(rootDirectory: f.root.path, projectIdentifier: "p", worktreeIdentifier: "w", generation: 1)
+        let policy = iTermFileOpenCoordinator(coordinator: f.coordinator)
+        f.coordinator.delegate = f
+        let firstDone = expectation(description: "superseded open finished")
+        let secondDone = expectation(description: "newest open installed")
+        var installed = [iTermFileSessionPane]()
+        let install: (iTermFileSessionPane, @escaping (Bool) -> Void) -> Void = { pane, done in
+            XCTAssertEqual(StableSessionID.canonical(pane.viewIdentifier), pane.viewIdentifier)
+            installed.append(pane); f.panes.append(pane); done(true)
+        }
+        policy.open(iTermFileOpenRequest(context: context, path: f.file.path, placement: .tab, activation: .preview), candidates: [], isCurrent: { true }, install: install, activate: { _ in }) { success in XCTAssertFalse(success); firstDone.fulfill() }
+        policy.open(iTermFileOpenRequest(context: context, path: second.path, placement: .tab, activation: .preview), candidates: [], isCurrent: { true }, install: install, activate: { _ in }) { success in XCTAssertTrue(success); secondDone.fulfill() }
+        wait(for: [firstDone, secondDone], timeout: 10)
+        XCTAssertEqual(installed.count, 1); XCTAssertEqual(installed.first?.descriptor.filePath, second.path)
+        XCTAssertEqual(f.coordinator.panes.count, 1)
+        f.wait { done in f.store.allSnapshots { values in XCTAssertEqual(values.count, 1); XCTAssertEqual(values.first?.filePath, second.path); done() } }
+        f.wait { done in f.coordinator.beginOperation { error in XCTAssertNil(error); done() } }
+        f.wait { done in f.coordinator.finishOperation { error in XCTAssertNil(error); done() } }
+    }
+
+    func testWorkspaceScopedFindPreservesBaseOwnerForFreshAndPreviewRebind() throws {
+        let f = try Fixture(); defer { f.cleanup() }
+        let folder = f.root.appendingPathComponent("scope")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        for name in ["first.txt", "second.txt"] { try name.write(to: folder.appendingPathComponent(name), atomically: true, encoding: .utf8) }
+        let base = iTermFileBrowserContext(rootDirectory: f.root.path, projectIdentifier: "owner", worktreeIdentifier: "worktree", generation: 10)
+        let browser = iTermFileBrowserCoordinator(native: f.coordinator); defer { browser.shutdown() }
+        browser.applyContext(base); browser.setVisible(true)
+        browser.fileBrowser(browser.controller, didRequest: try XCTUnwrap(iTermFileBrowserRequest(identifier: "scope", context: base, type: "findInFolder", payload: ["directoryPath": folder.path])))
+        // The backend queue orders this callback after the real subtree-validation completion.
+        f.wait { done in browser.backend.operationState(base) { _, _ in done() } }
+        let scoped = try XCTUnwrap(browser.context); XCTAssertEqual(scoped.rootDirectory, folder.path)
+        let policy = iTermFileOpenCoordinator(coordinator: f.coordinator)
+        var admitted: iTermFileSessionPane?
+        for name in ["first.txt", "second.txt"] {
+            var captured: iTermFileOpenRequest?
+            browser.nativeRequest = { captured = $0.openRequest }
+            browser.fileBrowser(browser.controller, didRequest: try XCTUnwrap(iTermFileBrowserRequest(identifier: name, context: scoped, type: "openFile", payload: ["path": folder.appendingPathComponent(name).path, "activation": "preview"])))
+            let request = try XCTUnwrap(captured); XCTAssertTrue(request.context === scoped)
+            f.wait { done in policy.open(request, candidates: admitted.map { [$0] } ?? [], isCurrent: { true }, install: { pane, installed in
+                XCTAssertEqual(StableSessionID.canonical(pane.viewIdentifier), pane.viewIdentifier)
+                XCTAssertNil(admitted); admitted = pane; f.panes.append(pane); installed(true)
+            }, activate: { _ in }) { success in XCTAssertTrue(success); done() } }
+            let pane = try XCTUnwrap(admitted)
+            let saved = try XCTUnwrap(iTermFileSessionDescriptor(dictionary: pane.descriptor.dictionary))
+            XCTAssertEqual(saved.filePath, folder.appendingPathComponent(name).path)
+            XCTAssertEqual(saved.rootDirectory, base.rootDirectory)
+            XCTAssertEqual(saved.projectIdentifier, base.projectIdentifier); XCTAssertEqual(saved.worktreeIdentifier, base.worktreeIdentifier)
+        }
+        browser.fileBrowser(browser.controller, didRequest: try XCTUnwrap(iTermFileBrowserRequest(identifier: "return", context: scoped, type: "returnToRoot", payload: [:])))
+        XCTAssertEqual(browser.context?.rootDirectory, base.rootDirectory)
+        XCTAssertEqual(admitted?.descriptor.rootDirectory, base.rootDirectory)
+    }
+
+    func testWorkspaceMutationFindsDurableDraftsBeforeFirstOpenAndAfterRelease() throws {
+        for freshSuite in [true, false] {
+            let f = try Fixture(); defer { f.cleanup() }
+            let directory = f.root.appendingPathComponent("old")
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            let file = directory.appendingPathComponent("draft.txt")
+            try "disk".write(to: file, atomically: true, encoding: .utf8)
+            let context = iTermFileBrowserContext(rootDirectory: f.root.path, projectIdentifier: "owner", worktreeIdentifier: "tree", generation: 1)
+            var result: iTermFileSessionPane?
+            f.wait { done in f.coordinator.openFile(atPath: file.path, context: context, viewIdentifier: StableSessionID.generate(), preview: false) { pane, error in XCTAssertNil(error); result = pane; done() } }
+            let seed = try XCTUnwrap(result); f.panes.append(seed); f.edit(seed, "durable unsaved text")
+            let id = try XCTUnwrap(seed.documentIdentifier)
+            f.wait { done in f.store.persistDraft(documentIdentifier: id) { error in XCTAssertNil(error); done() } }
+            f.coordinator.didClose(seed, quitting: false)
+            f.wait { done in f.coordinator.afterPendingDocumentReleases(done) }
+            f.wait { done in f.store.allSnapshots { values in XCTAssertTrue(values.isEmpty); done() } }
+            let store = freshSuite ? iTermFileDocumentStore(storageDirectory: f.drafts) : f.store
+            let runtime = freshSuite ? iTermFileWorkspaceUIRuntime(documentStore: store,
+                resourceDirectory: ProcessInfo.processInfo.environment["FILE_UI_RESOURCE_DIR"].map { URL(fileURLWithPath: $0) }) : f.runtime
+            defer { if freshSuite { runtime.shutdown() } }
+            let native = freshSuite ? iTermFileSessionCoordinator(documentStore: store, runtime: runtime) : f.coordinator
+            native.delegate = f; f.decision = .cancel
+            let browser = iTermFileBrowserCoordinator(native: native); defer { browser.shutdown() }
+            browser.applyContext(context); browser.setVisible(true)
+            let request = try XCTUnwrap(iTermFileBrowserRequest(identifier: "rename", context: context, type: "rename", payload: ["paths": [directory.path], "name": "new"]))
+            f.wait { done in browser.performMutation(request) { error in XCTAssertNotNil(error); done() } }
+            XCTAssertEqual(f.prompts, 1); XCTAssertTrue(FileManager.default.fileExists(atPath: directory.path))
+            let target = f.root.appendingPathComponent("new/draft.txt")
+            XCTAssertFalse(FileManager.default.fileExists(atPath: target.path))
+            func recovered() -> [iTermFileDocumentSnapshot] {
+                let inspector = iTermFileDocumentStore(storageDirectory: f.drafts)
+                var values = [iTermFileDocumentSnapshot]()
+                f.wait { done in inspector.recoverDrafts { result, error in XCTAssertNil(error); values = result; done() } }
+                return values
+            }
+            let canceled = recovered(); XCTAssertEqual(canceled.first?.documentIdentifier, id)
+            XCTAssertEqual(canceled.first?.text, "durable unsaved text"); XCTAssertEqual(canceled.first?.filePath, file.path)
+            guard FileManager.default.fileExists(atPath: directory.path) else { continue }
+            f.decision = .keepDrafts
+            f.wait { done in browser.performMutation(request) { error in XCTAssertNil(error); done() } }
+            XCTAssertEqual(f.mutationModes, [true, true])
+            let moved = recovered(); XCTAssertEqual(moved.count, 1)
+            XCTAssertEqual(moved.first?.documentIdentifier, id); XCTAssertEqual(moved.first?.text, "durable unsaved text")
+            XCTAssertEqual(moved.first?.filePath, target.path); XCTAssertTrue(moved.first?.isDirty == true)
+            XCTAssertEqual(try String(contentsOf: target, encoding: .utf8), "disk")
+            XCTAssertFalse(native.operationInProgress)
+        }
+    }
+
+    func testWorkspaceCanonicalAliasCancellationAndDirectoryMappingUseSameIdentity() throws {
+        for directoryMove in [false, true] {
+            let f = try Fixture(); defer { f.cleanup() }
+            let directory = f.root.appendingPathComponent("real")
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            let file = directory.appendingPathComponent("target.txt")
+            try "disk".write(to: file, atomically: true, encoding: .utf8)
+            let alias = f.root.appendingPathComponent("link.txt")
+            try FileManager.default.createSymbolicLink(at: alias, withDestinationURL: file)
+            let context = iTermFileBrowserContext(rootDirectory: f.root.path, projectIdentifier: "p", worktreeIdentifier: "w", generation: 1)
+            var result: iTermFileSessionPane?
+            f.wait { done in f.coordinator.openFile(atPath: alias.path, context: context, viewIdentifier: StableSessionID.generate(), preview: false) { pane, error in XCTAssertNil(error); result = pane; done() } }
+            let pane = try XCTUnwrap(result); f.panes.append(pane); f.edit(pane, "unsaved through alias")
+            f.wait { done in f.store.persistDraft(documentIdentifier: pane.documentIdentifier!) { error in XCTAssertNil(error); done() } }
+            f.coordinator.delegate = f; f.decision = .cancel
+            let browser = iTermFileBrowserCoordinator(native: f.coordinator); defer { browser.shutdown() }
+            browser.applyContext(context); browser.setVisible(true)
+            let source = directoryMove ? directory : file
+            let target = source.deletingLastPathComponent().appendingPathComponent("renamed")
+            let request = try XCTUnwrap(iTermFileBrowserRequest(identifier: "rename", context: context, type: "rename", payload: ["paths": [source.path], "name": "renamed"]))
+            f.wait { done in browser.performMutation(request) { error in XCTAssertNotNil(error); done() } }
+            XCTAssertEqual(f.prompts, 1); XCTAssertTrue(FileManager.default.fileExists(atPath: source.path)); XCTAssertFalse(FileManager.default.fileExists(atPath: target.path))
+            XCTAssertEqual(f.snapshot(pane)?.text, "unsaved through alias")
+            let recovery = iTermFileDocumentStore(storageDirectory: f.drafts)
+            f.wait { done in recovery.recoverDrafts { values, error in XCTAssertNil(error); XCTAssertEqual(values.first?.text, "unsaved through alias"); done() } }
+            guard FileManager.default.fileExists(atPath: source.path) else { continue }
+            let trash = try XCTUnwrap(iTermFileBrowserRequest(identifier: "trash", context: context, type: "trash", payload: ["paths": [source.path]]))
+            f.wait { done in browser.performMutation(trash) { error in XCTAssertNotNil(error); done() } }
+            XCTAssertEqual(f.mutationModes, [true, false])
+            XCTAssertTrue(FileManager.default.fileExists(atPath: source.path))
+            let destination = f.root.appendingPathComponent("destination")
+            try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
+            let move = try XCTUnwrap(iTermFileBrowserRequest(identifier: "move", context: context, type: "move", payload: ["paths": [source.path], "directoryPath": destination.path]))
+            f.wait { done in browser.performMutation(move) { error in XCTAssertNotNil(error); done() } }
+            XCTAssertEqual(f.mutationModes, [true, false, true])
+            XCTAssertTrue(FileManager.default.fileExists(atPath: source.path))
+            f.decision = .keepDrafts
+            let id = pane.documentIdentifier
+            f.wait { done in browser.performMutation(request) { error in XCTAssertNil(error); done() } }
+            XCTAssertEqual(pane.documentIdentifier, id)
+            XCTAssertEqual(f.snapshot(pane)?.text, "unsaved through alias")
+            XCTAssertEqual(pane.descriptor.filePath, directoryMove ? target.appendingPathComponent("target.txt").path : target.path)
+            f.wait { done in f.store.openFile(atPath: pane.descriptor.filePath) { value, error in
+                XCTAssertNil(error); XCTAssertEqual(value?.documentIdentifier, id); done()
+            } }
+            let movedDrafts = iTermFileDocumentStore(storageDirectory: f.drafts)
+            f.wait { done in movedDrafts.recoverDrafts { values, error in
+                XCTAssertNil(error); XCTAssertEqual(values.first?.documentIdentifier, id)
+                XCTAssertEqual(values.first?.filePath, pane.descriptor.filePath)
+                XCTAssertEqual(values.first?.text, "unsaved through alias"); done()
+            } }
         }
     }
 
@@ -742,6 +910,7 @@ final class FileSessionTests: XCTestCase {
         var panes = [iTermFileSessionPane]()
         var decision = iTermFileCloseDecision.cancel
         var prompts = 0
+        var mutationModes = [Bool]()
         var deferDecision = false
         var pendingDecision: ((iTermFileCloseDecision) -> Void)?
         var onDecision: (() -> Void)?
@@ -790,6 +959,11 @@ final class FileSessionTests: XCTestCase {
                                     completion: @escaping (iTermFileCloseDecision) -> Void) {
             prompts += 1
             if deferDecision { pendingDecision = completion; onDecision?() } else { completion(decision) }
+        }
+        func fileSessionCoordinator(_ coordinator: iTermFileSessionCoordinator, decideForFileMutation documents: [iTermFileDocumentSnapshot],
+                                    preservingChanges: Bool, completion: @escaping (iTermFileCloseDecision) -> Void) {
+            mutationModes.append(preservingChanges)
+            fileSessionCoordinator(coordinator, decideFor: documents, quitting: false, completion: completion)
         }
         func fileSessionCoordinator(_ coordinator: iTermFileSessionCoordinator, didFail error: NSError) { XCTFail("Unexpected error \(error)") }
         func cleanup() {
