@@ -7,7 +7,6 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		26A182B539D3130D9CAB8E8B /* iTermProjectSidebarTree.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D62222F2B6B2D847665FA46 /* iTermProjectSidebarTree.swift */; };
 		CBC96459BD6FC8896785A3D9 /* TmuxWorkgroupPeerCreation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FA61C02D50EE6E66768FE0C /* TmuxWorkgroupPeerCreation.swift */; };
 		3EF33423CA26E1A5D858D1C9 /* TmuxWorkgroupAdoption.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CD54BF2A45695A8C76271D5 /* TmuxWorkgroupAdoption.swift */; };
 		40063C16D73D3B917B920C9B /* FramerPaneStrandedFinder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 704E93B8A70AA0106E558871 /* FramerPaneStrandedFinder.swift */; };
@@ -20743,20 +20742,6 @@
 				D7BEED2BBCFDBE57CF0A6022 /* AIModelListDiscovery.swift in Sources */,
 				DA15C6ED3B5E1F6F74357D16 /* iTermEventTapBookkeeping.swift in Sources */,
 				2683D27699B9CA4F714C7FAA /* WorkgroupPeerStartingDirectory.swift in Sources */,
-				936933B20C8B0F3579CABEA5 /* iTermProjectDirectory.swift in Sources */,
-				52C8BD1DD57BE8398F2B9560 /* iTermProjectSidebarView.swift in Sources */,
-				27CC50C21AA3ACC846338DE3 /* iTermFileTreeDataSource.swift in Sources */,
-				808B145AC6927BB02F390943 /* iTermToolFileTree.swift in Sources */,
-				64092936C7FB00C18AE12255 /* iTermProjectWindowController.swift in Sources */,
-				95CE5807A5237FB9DE221F86 /* iTermFileTreeState.swift in Sources */,
-				093B5519D92944F137A02D49 /* iTermSidebarCellView.swift in Sources */,
-				F2864F8165F7C6E5821F2BC6 /* iTermFileTreeWatcher.swift in Sources */,
-				A6DF3B58BF92EFE0F657FCF0 /* iTermSidebarToggleButton.swift in Sources */,
-				19593BE9433D01E9CD71CD19 /* iTermGitWorktreeScanner.swift in Sources */,
-				71D931259AA97CABB8B6D73A /* iTermGitWorktreeCommandRunner.swift in Sources */,
-				26A182B539D3130D9CAB8E8B /* iTermProjectSidebarTree.swift in Sources */,
-				9BB0A5D7EBD9755A76861ED7 /* iTermProjectSessionContext.swift in Sources */,
-				6B8D707F5E29B12661218411 /* iTermProjectTerminalMenu.swift in Sources */,
 				CEE26DA06146C45B783BD1C0 /* iTermFileDocument.swift in Sources */,
 				8A03960F9CA08730C73D6116 /* iTermFileDocumentStore.swift in Sources */,
 				829C84100EAD015BD4E53AF6 /* iTermFileDraftStore.swift in Sources */,
