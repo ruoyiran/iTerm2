@@ -12,6 +12,7 @@
 #import "iTermVariableScope.h"
 #import "NSHost+iTerm.h"
 #import "PTYSession.h"
+#import "iTerm2SharedARC-Swift.h"
 
 // Arguments to title BIF
 static NSString *const iTermSessionTitleArgName = @"name";
@@ -162,6 +163,7 @@ static NSString *const iTermSessionTitleSession = @"session";
     NSNumber *rows = parameters[iTermSessionTitleArgRows];
     NSNumber *columns = parameters[iTermSessionTitleArgColumns];
 
+    if (session.isFileSession) { return session.fileSessionPane.title ?: name; }
     iTermTitleComponents titleComponents;
     titleComponents = [iTermProfilePreferences unsignedIntegerForKey:KEY_TITLE_COMPONENTS
                                                            inProfile:session.profile];

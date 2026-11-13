@@ -946,6 +946,7 @@ typedef NS_ENUM(NSUInteger, PTYSessionTurdType) {
 }
 
 + (void)registerSessionInArrangement:(NSDictionary *)arrangement {
+    if (arrangement[iTermFileSessionDescriptor.arrangementKey] != nil) { return; }
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
         gRegisteredSessionContents = [[NSMutableDictionary alloc] init];
@@ -969,9 +970,14 @@ typedef NS_ENUM(NSUInteger, PTYSessionTurdType) {
 }
 
 - (instancetype)initSynthetic:(BOOL)synthetic {
+    return [self initSynthetic:synthetic fileDescriptor:nil];
+}
+
+- (instancetype)initSynthetic:(BOOL)synthetic fileDescriptor:(NSDictionary *)descriptor {
     self = [super init];
     if (self) {
         DLog(@"Begin initialization of new PTYsession %p", self);
+        _fileSessionDescriptor = [descriptor copy];
         _autoLogId = arc4random();
         _useAdaptiveFrameRate = [iTermAdvancedSettingsModel useAdaptiveFrameRate];
         _adaptiveFrameRateThroughputThreshold = [iTermAdvancedSettingsModel adaptiveFrameRateThroughputThreshold];
@@ -1379,6 +1385,9 @@ ITERM_WEAKLY_REFERENCEABLE
     [_lastCommand release];
     [_substitutions release];
     [_automaticProfileSwitcher release];
+    [_fileSessionDescriptor release];
+    [_fileSessionPane release];
+    [_fileSessionHost release];
     [_directoryTracker release];
 
     [_keyLabels release];
@@ -1529,6 +1538,7 @@ ITERM_WEAKLY_REFERENCEABLE
 }
 
 - (void)didFinishInitialization {
+    if (self.isFileSession) { _initializationFinished = YES; return; }
     DLog(@"didFinishInitialization");
     [_directoryTracker poll];
     _initializationFinished = YES;
@@ -1778,6 +1788,7 @@ ITERM_WEAKLY_REFERENCEABLE
 }
 
 - (BOOL)sessionModeConsumesEvent:(NSEvent *)event {
+    if (self.isFileSession) { return NO; }
     if (_view.isBrowser) {
         // Browser is modeless, for now.
         return NO;
@@ -2215,6 +2226,25 @@ ITERM_WEAKLY_REFERENCEABLE
                          forObjectType:(iTermObjectType)objectType
                     partialAttachments:(NSDictionary *)partialAttachments
                                options:(NSDictionary *)options {
+    if (arrangement[iTermFileSessionDescriptor.arrangementKey] != nil) {
+        NSDictionary *descriptor = [NSDictionary castFrom:arrangement[iTermFileSessionDescriptor.arrangementKey]] ?: @{};
+        PTYSession *session = [self fileSessionWithDescriptor:descriptor profile:arrangement[SESSION_ARRANGEMENT_BOOKMARK]];
+        if (![options[PTYSessionArrangementOptionsForDuplication] boolValue]) {
+            NSString *saved = [self stableIDInArrangement:arrangement];
+            // Earlier siblings may already exist but not yet belong to a registered window.
+            const BOOL alreadyLive = [[[self sessionMap] objectEnumerator].allObjects anyWithBlock:^BOOL(PTYSession *other) {
+                return other != session && !other.exited && [other.stableID isEqualToString:saved];
+            }];
+            if (saved && !alreadyLive) { session.stableID = saved; }
+        }
+        session.projectIdentifier = [iTermProjectSessionOwnership identifierFromArrangement:arrangement] ?: session.projectIdentifier;
+        session.view = sessionView;
+        session.delegate = delegate;
+        [session setScreenSize:sessionView.frame.size parent:[delegate realParentWindow]];
+        [iTermFileSessionHost restoreSession:session];
+        [session didFinishInitialization];
+        return session;
+    }
     RLog(@"Restoring session from arrangement");
     if ([self arrangementIsMarkedAsArchive:arrangement] && !options[PTYSessionArrangementOptionsArchive]) {
         options = [(options ?: @{}) dictionaryBySettingObject:@YES forKey:PTYSessionArrangementOptionsArchive];
@@ -2971,7 +3001,10 @@ ITERM_WEAKLY_REFERENCEABLE
                                                               aSize.height)];
     _textview.colorMap = _screen.colorMap;
     _textview.keyboardHandler.keyMapper = _keyMapper;
-    if (self.isBrowserSession && _view.browserViewController != nil) {
+    if (self.isFileSession) {
+        _view.fileViewController = self.fileSessionPane.controller;
+        _view.mainResponder = self.fileSessionPane.controller;
+    } else if (self.isBrowserSession && _view.browserViewController != nil) {
         _view.mainResponder = _view.browserViewController;
     } else if (!self.isBrowserSession) {
         _view.mainResponder = _textview;
@@ -3053,6 +3086,7 @@ ITERM_WEAKLY_REFERENCEABLE
 
 - (BOOL)tryToAttachToServerWithProcessId:(pid_t)serverPid
                                      tty:(NSString *)tty {
+    if (self.isFileSession) { return NO; }
     if (![iTermAdvancedSettingsModel runJobsInServers]) {
         DLog(@"Failing to attach because run jobs in servers is off");
         return NO;
@@ -3068,6 +3102,7 @@ ITERM_WEAKLY_REFERENCEABLE
 }
 
 - (BOOL)tryToAttachToMultiserverWithRestorationIdentifier:(NSDictionary *)restorationIdentifier {
+    if (self.isFileSession) { return NO; }
     const iTermJobManagerAttachResults results = [_shell tryToAttachToMultiserverWithRestorationIdentifier:restorationIdentifier];
     if (results & iTermJobManagerAttachResultsRegistered) {
         DLog(@"Registered");
@@ -3086,6 +3121,7 @@ ITERM_WEAKLY_REFERENCEABLE
 // Note: this async code path is taken by orphan adoption.
 - (void)attachToServer:(iTermGeneralServerConnection)serverConnection
             completion:(void (^)(void))completion {
+    if (self.isFileSession) { if (completion) { completion(); } return; }
     if ([iTermAdvancedSettingsModel runJobsInServers]) {
         RLog(@"Attaching to a server...");
         [_shell attachToServer:serverConnection completion:^(iTermJobManagerAttachResults results) {
@@ -3320,6 +3356,7 @@ ITERM_WEAKLY_REFERENCEABLE
 }
 
 - (NSArray<iTermProcessInfo *> *)processInfoForShellAndDescendants {
+    if (self.isFileSession) { return @[]; }
     NSMutableArray<iTermProcessInfo *> *result = [NSMutableArray array];
     if (_conductor) {
         [result addObjectsFromArray:_conductor.transitiveProcesses];
@@ -3362,6 +3399,7 @@ ITERM_WEAKLY_REFERENCEABLE
 }
 
 - (iTermPromptOnCloseReason *)promptOnCloseReason {
+    if (self.isFileSession && !_locked) { return [iTermPromptOnCloseReason noReason]; }
     DLog(@"entered");
     if (_exited) {
         return [iTermPromptOnCloseReason noReason];
@@ -3814,6 +3852,7 @@ webViewConfiguration:(WKWebViewConfiguration *)webViewConfiguration
           completion:(void (^)(BOOL))completion {
     // command can be a user-configured command line, environment can carry exported
     // secrets, and substitutions can carry user values; keep them out of the ring.
+    if (self.isFileSession) { if (completion) { completion(NO); } return; }
     RLog(@"startProgram:%@ ssh:%@ browser:%@ environment:%@ customShell:%@ isUTF8:%@ substitutions:%@ arrangementName:%@ fromArrangement:%@, self=%@",
          RLogRedact(command, @(command.length)),
          @(ssh),
@@ -4258,6 +4297,7 @@ webViewConfiguration:(WKWebViewConfiguration *)webViewConfiguration
 // "restart", which is done by first calling revive and then replaceTerminatedShellWithNewInstance.
 - (void)terminate {
     RLog(@"terminate called from %@", [NSThread callStackSymbols]);
+    if (self.isFileSession) { [iTermFileSessionHost sessionWillTerminate:self]; }
     [self cancelRemoteCommandBecauseSessionEnded];
     // tmuxMode is cleared below, before observers are notified.
     const BOOL wasTmuxClient = (self.tmuxMode == TMUX_CLIENT);
@@ -4311,7 +4351,7 @@ webViewConfiguration:(WKWebViewConfiguration *)webViewConfiguration
         _tmuxGateway = nil;
     }
     _terminatedAsTmuxClient = wasTmuxClient;
-    BOOL undoable = (![self isTmuxClient] &&
+    BOOL undoable = (!self.isFileSession && ![self isTmuxClient] &&
                      !_shouldRestart &&
                      !_synthetic &&
                      ![[iTermController sharedInstance] applicationIsQuitting]);
@@ -4463,7 +4503,7 @@ webViewConfiguration:(WKWebViewConfiguration *)webViewConfiguration
     if (_restoredArchivePath) {
         // Its contents are already in that archive.
         archivePath = _restoredArchivePath;
-    } else if (!self.isTmuxClient &&
+    } else if (!self.isFileSession && !self.isTmuxClient &&
                !_terminatedAsTmuxClient &&
                !_isArchive &&
                [iTermProfilePreferences boolForKey:KEY_ARCHIVE inProfile:self.profile]) {
@@ -4551,6 +4591,7 @@ webViewConfiguration:(WKWebViewConfiguration *)webViewConfiguration
         forceEncoding:(BOOL)forceEncoding
          canBroadcast:(BOOL)canBroadcast
             reporting:(BOOL)reporting {
+    if (self.isFileSession) { return; }
     const NSStringEncoding encoding = forceEncoding ? optionalEncoding : _screen.terminalEncoding;
     if (gDebugLogging) {
         NSArray *stack = [NSThread callStackSymbols];
@@ -4623,6 +4664,7 @@ webViewConfiguration:(WKWebViewConfiguration *)webViewConfiguration
 }
 
 - (void)writeData:(NSData *)data {
+    if (self.isFileSession) { return; }
     if (_view.isBrowser) {
         [_view.browserViewController sendData:data];
         return;
@@ -4675,6 +4717,7 @@ webViewConfiguration:(WKWebViewConfiguration *)webViewConfiguration
 }
 
 - (void)enterUsername:(NSString *)username {
+    if (self.isFileSession) { return; }
     if (_view.isBrowser) {
         [_view.browserViewController enterUsername:username];
         return;
@@ -4784,6 +4827,7 @@ webViewConfiguration:(WKWebViewConfiguration *)webViewConfiguration
 }
 
 - (void)writeLatin1EncodedData:(NSData *)data broadcastAllowed:(BOOL)broadcast reporting:(BOOL)reporting {
+    if (self.isFileSession) { return; }
     // `data` contains raw bytes we want to pass through. I believe Latin-1 is the only encoding that
     // won't perform any transformation when converting from data to string. This is needed because
     // sometimes the user wants to send particular bytes regardless of the encoding (e.g., the
@@ -5306,6 +5350,7 @@ webViewConfiguration:(WKWebViewConfiguration *)webViewConfiguration
 }
 
 - (BOOL)isRestartable {
+    if (self.isFileSession) { return NO; }
     if (self.isBrowserSession) {
         return NO;
     }
@@ -5841,6 +5886,7 @@ webViewConfiguration:(WKWebViewConfiguration *)webViewConfiguration
     if (diffOverlay != nil && diffOverlay.window != nil && !diffOverlay.isHidden) {
         return diffOverlay.promptResponder;
     }
+    if (self.isFileSession) { return [NSView castFrom:self.fileSessionPane.controller.preferredFirstResponder] ?: self.view.fileViewController.view; }
     if (_view.isBrowser) {
         return _view.browserViewController.webView;
     }
@@ -5893,6 +5939,7 @@ webViewConfiguration:(WKWebViewConfiguration *)webViewConfiguration
 }
 
 - (BOOL)hasSelection {
+    if (self.isFileSession) { return self.fileSessionPane.controller.status.hasSelection; }
     if (self.isBrowserSession) {
         return self.view.browserViewController.hasSelection;
     }
@@ -7198,6 +7245,7 @@ webViewConfiguration:(WKWebViewConfiguration *)webViewConfiguration
 
 // You're processing if data was read off the socket in the last "idleTimeSeconds".
 - (BOOL)isProcessing {
+    if (self.isFileSession) { return NO; }
     // For browser tabs, check if navigation is in progress
     if (_view.isBrowser) {
         return _browserIsLoading;
@@ -7209,6 +7257,7 @@ webViewConfiguration:(WKWebViewConfiguration *)webViewConfiguration
 
 // You're idle if it's been one second since isProcessing was true.
 - (BOOL)isIdle {
+    if (self.isFileSession) { return YES; }
     NSTimeInterval now = [NSDate timeIntervalSinceReferenceDate];
     return (now - _lastOutputIgnoringOutputAfterResizing) > (_idleTime + 1);
 }
@@ -7290,6 +7339,7 @@ webViewConfiguration:(WKWebViewConfiguration *)webViewConfiguration
 }
 
 - (NSImage *)tabGraphicForProfile:(Profile *)profile {
+    if (self.isFileSession) { return [NSImage imageNamed:NSImageNameMultipleDocuments]; }
     const iTermProfileIcon icon = [iTermProfilePreferences unsignedIntegerForKey:KEY_ICON inProfile:profile];
     switch (icon) {
         case iTermProfileIconNone:
@@ -7390,6 +7440,7 @@ webViewConfiguration:(WKWebViewConfiguration *)webViewConfiguration
     [_view autorelease];
     _view = [newView retain];
     newView.delegate = self;
+    if (self.isFileSession) { newView.fileViewController = self.fileSessionPane.controller; }
     newView.searchResultsMinimapViewDelegate = _textview.findOnPageHelper;
     newView.driver.dataSource = _metalGlue;
     [newView updateTitleFrame];
@@ -7913,6 +7964,17 @@ webViewConfiguration:(WKWebViewConfiguration *)webViewConfiguration
                           saveProgram:(BOOL)saveProgram
                          pendingJumps:(NSArray<iTermSSHReconnectionInfo *> *)pendingJumps
                               options:(NSDictionary *)options {
+    if (self.isFileSession) {
+        result[iTermFileSessionDescriptor.arrangementKey] = self.fileSessionPane.descriptor.dictionary ?: self.fileSessionDescriptor;
+        result[SESSION_ARRANGEMENT_GUID] = _guid;
+        result[SESSION_ARRANGEMENT_STABLE_ID] = _stableID;
+        result[SESSION_ARRANGEMENT_BOOKMARK] = replacementProfile ?: _profile;
+        result[SESSION_ARRANGEMENT_COLUMNS] = @(MAX(1, _screen.width));
+        result[SESSION_ARRANGEMENT_ROWS] = @(MAX(1, _screen.height));
+        NSDictionary *owner = [iTermProjectSessionOwnership arrangementFieldsWithProjectIdentifier:self.projectIdentifier];
+        for (NSString *key in owner) { result[key] = owner[key]; }
+        return YES;
+    }
     DLog(@"Construct arrangement for session %@ with includeContents=%@", self, @(includeContents));
     if (_filter.length && _liveSession != nil) {
         DLog(@"Encode live session because this one is filtered.");
@@ -8452,6 +8514,7 @@ webViewConfiguration:(WKWebViewConfiguration *)webViewConfiguration
 }
 
 - (NSString *)jobName {
+    if (self.isFileSession) { return nil; }
     return [self.variablesScope valueForVariableName:iTermVariableKeySessionJob];
 }
 
@@ -8615,11 +8678,13 @@ webViewConfiguration:(WKWebViewConfiguration *)webViewConfiguration
     DLog(@"setActive:%@ timerRunning=%@ updateTimer.isValue=%@ lastTimeout=%f session=%@",
          @(active), @(_timerRunning), @(_cadenceController.updateTimerIsValid), _lastTimeout, self);
     _active = active;
+    if (self.isFileSession) { [self.fileSessionHost updateVisibility]; return; }
     _activityInfo.lastActivity = [NSDate it_timeSinceBoot];
     [_cadenceController changeCadenceIfNeeded];
 }
 
 - (void)doAntiIdle {
+    if (self.isFileSession) { return; }
     NSTimeInterval now = [NSDate timeIntervalSinceReferenceDate];
 
     if (![self isTmuxGateway] && now >= _lastInput + _antiIdlePeriod - kAntiIdleGracePeriod) {
@@ -8630,6 +8695,7 @@ webViewConfiguration:(WKWebViewConfiguration *)webViewConfiguration
 }
 
 - (BOOL)canInstantReplayPrev {
+    if (self.isFileSession) { return NO; }
     if (self.isBrowserSession) {
         return self.view.browserViewController.instantReplayAvailable;
     }
@@ -9498,6 +9564,7 @@ DLog(args); \
 }
 // Note that the caller is responsible for respecting swapFindNextPrevious
 - (void)searchNext {
+    if (self.isFileSession) { [self filePerformCommand:iTermFileViewCommandFindNext]; return; }
     [_view createFindDriverIfNeeded];
     [_view.findDriver searchNext];
     [self.tailFindController beginOneShotTailFind];
@@ -9505,6 +9572,7 @@ DLog(args); \
 
 // Note that the caller is responsible for respecting swapFindNextPrevious
 - (void)searchPrevious {
+    if (self.isFileSession) { [self filePerformCommand:iTermFileViewCommandFindPrevious]; return; }
     [_view createFindDriverIfNeeded];
     [_view.findDriver searchPrevious];
     [self.tailFindController beginOneShotTailFind];
@@ -9902,7 +9970,7 @@ extendResultsAcrossSoftBoundaries:(BOOL)extendResultsAcrossSoftBoundaries {
 }
 
 - (BOOL)findDriverEnterInFindPanelPerformsForwardSearch {
-    return self.isBrowserSession;
+    return self.isFileSession || self.isBrowserSession;
 }
 
 - (NSInteger)findDriverCurrentIndex {
@@ -10079,6 +10147,7 @@ extendResultsAcrossSoftBoundaries:(BOOL)extendResultsAcrossSoftBoundaries {
 }
 
 - (BOOL)metalAllowed:(out iTermMetalUnavailableReason *)reason {
+    if (self.isFileSession) { if (reason) { *reason = iTermMetalUnavailableReasonNotATerminal; } return NO; }
     static dispatch_once_t onceToken;
     static BOOL machineSupportsMetal;
     dispatch_once(&onceToken, ^{
@@ -10501,6 +10570,7 @@ extendResultsAcrossSoftBoundaries:(BOOL)extendResultsAcrossSoftBoundaries {
 }
 
 - (void)enterPassword:(NSString *)password {
+    if (self.isFileSession) { return; }
     if (_view.isBrowser) {
         [_view.browserViewController enterPassword:password];
         return;
@@ -10552,6 +10622,7 @@ extendResultsAcrossSoftBoundaries:(BOOL)extendResultsAcrossSoftBoundaries {
 }
 
 - (BOOL)hasCoprocess {
+    if (self.isFileSession) { return NO; }
     if (self.isBrowserSession)  {
         return NO;
     }
@@ -10559,6 +10630,7 @@ extendResultsAcrossSoftBoundaries:(BOOL)extendResultsAcrossSoftBoundaries {
 }
 
 - (void)launchCoprocessWithCommand:(NSString *)command mute:(BOOL)mute {
+    if (self.isFileSession) { return; }
     // The coprocess command line can carry arguments/credentials; keep it out of the ring.
     RLog(@"Launch coprocess with command %@. Mute=%@", RLogRedact(command, @(command.length)), @(mute));
     NSDictionary *env = [self environmentForNewJobFromEnvironment:self.environment
@@ -10595,6 +10667,7 @@ extendResultsAcrossSoftBoundaries:(BOOL)extendResultsAcrossSoftBoundaries {
 }
 
 - (void)setFocused:(BOOL)focused {
+    if (self.isFileSession && !focused) { [self.fileSessionPane.controller cancelPendingFocus]; }
     DLog(@"setFocused:%@ self=%@", @(focused), self);
     if (_disableFocusReporting) {
         DLog(@"Focus reporting disabled");
@@ -11270,8 +11343,29 @@ typedef NS_ENUM(NSUInteger, PTYSessionTmuxReport) {
     }
     return _newOutput;
 }
+- (BOOL)isFileSession { return _fileSessionDescriptor != nil; }
+- (BOOL)isTerminalSession { return !self.isFileSession && !self.isBrowserSession; }
+
++ (PTYSession *)fileSessionWithDescriptor:(NSDictionary *)descriptor profile:(NSDictionary *)profile {
+    PTYSession *session = [[[self alloc] initSynthetic:NO fileDescriptor:descriptor] autorelease];
+    NSMutableDictionary *appearance = [[(profile ?: [[ProfileModel sharedInstance] defaultBookmark]) mutableCopy] autorelease];
+    appearance[KEY_CUSTOM_COMMAND] = @"No";
+    [session setProfile:appearance];
+    session.projectIdentifier = [NSString castFrom:descriptor[@"projectIdentifier"]] ?: @"";
+    return session;
+}
+
+ + (PTYSession *)fileSessionWithPane:(iTermFileSessionPane *)pane profile:(NSDictionary *)profile {
+    NSString *identifier = [iTermStableSessionID canonical:pane.viewIdentifier];
+    if (!identifier || [[iTermController sharedInstance] anySessionWithStableID:identifier]) { return nil; }
+    PTYSession *session = [self fileSessionWithDescriptor:pane.descriptor.dictionary profile:profile];
+    session.stableID = identifier;
+    [iTermFileSessionHost attach:pane to:session];
+    return session;
+}
+
 - (BOOL)isBrowserSession {
-    return self.view.isBrowser || self.profile.profileIsBrowser;
+    return !self.isFileSession && (self.view.isBrowser || self.profile.profileIsBrowser);
 }
 
 // A session's type is fixed when it is created. Returns newValues with any
@@ -12829,7 +12923,7 @@ typedef NS_ENUM(NSUInteger, PTYSessionTmuxReport) {
                                                            event:nil];
         return;
     }
-    [self.textview.window makeFirstResponder:self.mainResponder];
+    [self.view.window makeFirstResponder:self.mainResponder];
     [self performKeyBindingAction:keyBindingAction
                             event:nil];
 }
@@ -13028,6 +13122,31 @@ typedef NS_ENUM(NSUInteger, PTYSessionTmuxReport) {
 }
 
 - (void)reallyPerformKeyBindingAction:(iTermKeyBindingAction *)action event:(NSEvent *)event {
+    if (self.isFileSession) {
+        switch (action.keyAction) {
+            case KEY_ACTION_COPY_OR_SEND: [self filePerformCommand:iTermFileViewCommandCopy]; return;
+            case KEY_ACTION_PASTE_OR_SEND: [self filePerformCommand:iTermFileViewCommandPaste]; return;
+            case KEY_ACTION_UNDO: [self filePerformCommand:iTermFileViewCommandUndo]; return;
+            case KEY_ACTION_FIND_REGEX: [self filePerformCommand:iTermFileViewCommandFind]; return;
+            case KEY_ACTION_MOVE_TAB_LEFT: case KEY_ACTION_MOVE_TAB_RIGHT:
+            case KEY_ACTION_NEXT_MRU_TAB: case KEY_ACTION_PREVIOUS_MRU_TAB:
+            case KEY_ACTION_NEXT_PANE: case KEY_ACTION_PREVIOUS_PANE:
+            case KEY_ACTION_NEXT_SESSION: case KEY_ACTION_PREVIOUS_SESSION:
+            case KEY_ACTION_NEXT_WINDOW: case KEY_ACTION_PREVIOUS_WINDOW:
+            case KEY_ACTION_SELECT_PANE_LEFT: case KEY_ACTION_SELECT_PANE_RIGHT:
+            case KEY_ACTION_SELECT_PANE_ABOVE: case KEY_ACTION_SELECT_PANE_BELOW:
+            case KEY_ACTION_TOGGLE_FULLSCREEN: case KEY_ACTION_NEW_WINDOW_WITH_PROFILE:
+            case KEY_ACTION_NEW_TAB_WITH_PROFILE: case KEY_ACTION_SPLIT_HORIZONTALLY_WITH_PROFILE:
+            case KEY_ACTION_SPLIT_VERTICALLY_WITH_PROFILE: case KEY_ACTION_DUPLICATE_TAB:
+            case KEY_ACTION_MOVE_TO_SPLIT_PANE: case KEY_ACTION_SWAP_PANE_LEFT:
+            case KEY_ACTION_SWAP_PANE_RIGHT: case KEY_ACTION_SWAP_PANE_ABOVE:
+            case KEY_ACTION_SWAP_PANE_BELOW: case KEY_ACTION_SWAP_WITH_NEXT_PANE:
+            case KEY_ACTION_SWAP_WITH_PREVIOUS_PANE: case KEY_ACTION_SELECT_MENU_ITEM:
+            case KEY_ACTION_INVOKE_SCRIPT_FUNCTION: case KEY_ACTION_SEQUENCE:
+                break;
+            default: return;
+        }
+    }
     if (_view.isBrowser) {
         if ([_view.browserViewController performKeyBindingAction:action event:event]) {
             return;
@@ -13725,6 +13844,7 @@ typedef NS_ENUM(NSUInteger, PTYSessionTmuxReport) {
 }
 
 - (void)regularKeyDown:(NSEvent *)event {
+    if (self.isFileSession) { return; }
     if (_view.isBrowser) {
         return;
     }
@@ -14224,7 +14344,13 @@ typedef NS_ENUM(NSUInteger, PTYSessionTmuxReport) {
     [_pasteHelper pasteLiteralString:string afterDelay:delay];
 }
 
+- (void)selectAll:(id)sender {
+    if (self.isFileSession) { [self filePerformCommand:iTermFileViewCommandSelectAll]; }
+    else { [super selectAll:sender]; }
+}
+
 - (void)paste:(id)sender {
+    if (self.isFileSession) { [self filePerformCommand:iTermFileViewCommandPaste]; return; }
     DLog(@"PTYSession paste:");
 
     if ([self haveAutoComposer]) {
@@ -15122,6 +15248,7 @@ typedef NS_ENUM(NSUInteger, PTYSessionTmuxReport) {
 }
 
 - (void)injectSynthesizedKeyEvent:(NSEvent *)event literalText:(NSString *)literalText {
+    if (self.isFileSession) { return; }
     if (_exited) {
         DLog(@"injectSynthesizedKeyEvent: session already dead");
         return;
@@ -15823,6 +15950,7 @@ typedef NS_ENUM(NSUInteger, PTYSessionTmuxReport) {
 }
 
 - (void)requestRedraw {
+    if (self.isFileSession) { return; }
     [_view requestRedraw];
     [self updateWrapperAlphaForMetalEnabled:_view.useMetal];
     if (self.isBrowserSession) {
@@ -18866,6 +18994,7 @@ static NSString *PTYSessionDECRQCRANoLabel(void) {
 }
 
 - (void)injectData:(NSData *)data {
+    if (self.isFileSession) { return; }
     if (self.isBrowserSession) {
         return;
     }
@@ -20954,6 +21083,7 @@ static const NSTimeInterval PTYSessionFocusReportBellSquelchTimeIntervalThreshol
 }
 
 - (void)asyncCurrentLocalWorkingDirectory:(void (^)(NSString *pwd))completion {
+    if (self.isFileSession) { completion(nil); return; }
     [_directoryTracker asyncCurrentLocalWorkingDirectoryWithCompletion:completion];
 }
 
@@ -22944,6 +23074,7 @@ static const int iTermNestedFramerRecoveryMaximumExtensions = 4;
 }
 
 - (void)sessionViewMouseEntered:(NSEvent *)event {
+    if (self.isFileSession) { return; }
     DLog(@"sessionViewMouseEntered");
     if (_view.isBrowser) {
         return;
@@ -22954,12 +23085,14 @@ static const int iTermNestedFramerRecoveryMaximumExtensions = 4;
 }
 
 - (void)sessionViewMouseExited:(NSEvent *)event {
+    if (self.isFileSession) { return; }
     [_textview mouseExited:event];
     [_textview requestDelegateRedraw];
     [_textview updateCursor:event];
 }
 
 - (void)sessionViewMouseMoved:(NSEvent *)event {
+    if (self.isFileSession) { return; }
     [_textview mouseMoved:event];
 }
 
@@ -22976,6 +23109,7 @@ static const int iTermNestedFramerRecoveryMaximumExtensions = 4;
 }
 
 - (void)sessionViewRightMouseDown:(NSEvent *)event {
+    if (self.isFileSession) { return; }
     [_textview rightMouseDown:event];
 }
 
@@ -23070,6 +23204,7 @@ static const int iTermNestedFramerRecoveryMaximumExtensions = 4;
 }
 
 - (void)userInitiatedShowFindPanel {
+    if (self.isFileSession) { [self filePerformCommand:iTermFileViewCommandFind]; return; }
     const BOOL findPanelWasOpen = self.view.findDriver.viewController.searchIsVisible;
     [self showFindPanel];
     if (!findPanelWasOpen) {
@@ -23541,6 +23676,7 @@ static const int iTermNestedFramerRecoveryMaximumExtensions = 4;
 }
 
 - (BOOL)updateTTYSize {
+    if (self.isFileSession) { return NO; }
     DLog(@"%@\n%@", self, [NSThread callStackSymbols]);
     return [_shell.winSizeController setGridSize:_screen.size
                                         viewSize:_screen.viewSize
@@ -23830,7 +23966,7 @@ static const int iTermNestedFramerRecoveryMaximumExtensions = 4;
 }
 
 - (BOOL)textViewProfileTypeIsTerminal {
-    return !_view.isBrowser;
+    return self.isTerminalSession;
 }
 
 - (void)textViewSaveArchive:(iTermSavePanelItem *)location {
@@ -23908,10 +24044,11 @@ static const int iTermNestedFramerRecoveryMaximumExtensions = 4;
 }
 
 - (void)sessionViewBecomeFirstResponder {
-    [self.textview.window makeFirstResponder:self.mainResponder];
+    [self.view.window makeFirstResponder:self.mainResponder];
 }
 
 - (void)sessionViewDidChangeWindow {
+    if (self.isFileSession) { [self.fileSessionHost updateVisibility]; return; }
     [self invalidateBlend];
     [self updateMetalDriver];
     if (!_shell.ttySizeInitialized) {
@@ -24098,6 +24235,7 @@ static const int iTermNestedFramerRecoveryMaximumExtensions = 4;
 }
 
 - (void)sessionViewWillDraw {
+    if (self.isFileSession) { return; }
     if (self.isBrowserSession) {
         [_textview configureIndicatorsHelperWithRightMargin:0];
     }
@@ -24464,7 +24602,7 @@ static const int iTermNestedFramerRecoveryMaximumExtensions = 4;
     ITMGetBufferResponse *response = [[[ITMGetBufferResponse alloc] init] autorelease];
 
     const VT100GridAbsWindowedRange windowedRange = [self absoluteWindowedCoordRangeFromLineRange:request.lineRange];
-    if (windowedRange.coordRange.start.x < 0 || self.isBrowserSession) {
+    if (windowedRange.coordRange.start.x < 0 || self.isBrowserSession || self.isFileSession) {
         response.status = ITMGetBufferResponse_Status_InvalidLineRange;
         return nil;
     }
@@ -24773,7 +24911,7 @@ resolveSymlinksInDirectory:(NSString *)directory
     // Browser sessions always have a name fallback (page title, host, or profile name),
     // so a blank built-in title is always a transient artifact and should be dropped in
     // favor of the last good title. Terminal sessions may legitimately clear their name.
-    return self.isBrowserSession;
+    return self.isFileSession || self.isBrowserSession;
 }
 
 - (void)sessionNameControllerNameWillChangeTo:(NSString *)newName {
@@ -24860,6 +24998,7 @@ resolveSymlinksInDirectory:(NSString *)directory
 }
 
 - (void)graphicSourceDidReload:(NSNotification *)notification {
+    if (self.isFileSession) { return; }
     // The icon/color maps changed (e.g. a settings-sync import). Recompute this session's icon from
     // its current job so the change is visible without waiting for the next foreground-job change.
     //
@@ -25679,6 +25818,7 @@ resolveSymlinksInDirectory:(NSString *)directory
 - (void)runCoprocessWithCompletion:(void (^)(id, NSError *))completion
                        commandLine:(NSString *)command
                             mute:(NSNumber *)muteNumber {
+    if (self.isFileSession) { completion(nil, [iTermFileSessionCoordinator error:1]); return; }
     if (self.isBrowserSession) {
         NSError *error = [NSError errorWithDomain:@"com.iterm2.run-coprocess-command"
                                              code:0

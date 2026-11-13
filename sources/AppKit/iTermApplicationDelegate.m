@@ -264,6 +264,9 @@ static BOOL hasBecomeActive = NO;
 
     iTermScriptsMenuController *_scriptsMenuController;
     BOOL _disableTermination;
+    BOOL _fileQuitPending;
+    BOOL _fileQuitApproved;
+    BOOL _fileQuitOptionHeld;
 
     iTermFocusFollowsMouseController *_focusFollowsMouseController;
     iTermGlobalScopeController *_globalScopeController;
@@ -448,6 +451,17 @@ static NSModalResponse iTermCompareRenderingRunModal(id self, SEL _cmd) {
 
 - (BOOL)validateMenuItem:(NSMenuItem *)menuItem {
     const SEL action = [menuItem action];
+    if (action == @selector(saveSelectedTextOrFile:) || action == @selector(saveFileAs:)) {
+        NSNumber *fileEnabled = [iTermFileMenuActions validate:menuItem firstResponder:NSApp.keyWindow.firstResponder];
+        if (fileEnabled) { return fileEnabled.boolValue; }
+        if (action == @selector(saveFileAs:)) { return NO; }
+        menuItem.title = NSLocalizedStringWithDefaultValue(@"FileSession.SaveSelectedText", nil, [NSBundle mainBundle], @"Save Selected Text…", @"Legacy terminal save-selection menu title when file editor does not own focus");
+        NSMenuItem *legacy = [[menuItem copy] autorelease];
+        legacy.action = @selector(saveDocumentAs:);
+        id target = [NSApp targetForAction:legacy.action to:nil from:legacy];
+        return target && (![target conformsToProtocol:@protocol(NSMenuItemValidation)] || [target validateMenuItem:legacy]);
+    }
+
     if (action == @selector(newSessionInTabAtIndex:) ||
         action == @selector(newSession:) ||
         action == @selector(newSessionWithSameProfile:)) {
@@ -1051,17 +1065,38 @@ static NSModalResponse iTermCompareRenderingRunModal(id self, SEL _cmd) {
     }
 }
 
-- (NSApplicationTerminateReply)applicationShouldTerminate:(NSNotification *)theNotification {
+- (NSApplicationTerminateReply)applicationShouldTerminate:(NSApplication *)sender {
     DLog(@"applicationShouldTerminate:");
     NSArray *terminals;
     if (_disableTermination) {
         return NSTerminateCancel;
     }
 
+    if (!_fileQuitApproved) {
+        if (_fileQuitPending) { return NSTerminateLater; }
+        _fileQuitOptionHeld = ([NSEvent modifierFlags] & NSEventModifierFlagOption) != 0;
+        _fileQuitPending = YES;
+        if ([iTermFileSessionHost beginQuitWithCompletion:^(BOOL allowed) {
+            // Always leave the initiating applicationShouldTerminate stack before replying.
+            dispatch_async(dispatch_get_main_queue(), ^{
+                _fileQuitPending = NO;
+                if (!allowed) { [NSApp replyToApplicationShouldTerminate:NO]; return; }
+                _fileQuitApproved = YES;
+                NSApplicationTerminateReply reply = [self applicationShouldTerminate:sender];
+                if (reply == NSTerminateCancel) {
+                    _fileQuitApproved = NO;
+                    [iTermFileSessionHost cancelQuit];
+                }
+                [NSApp replyToApplicationShouldTerminate:reply == NSTerminateNow];
+            });
+        }]) { return NSTerminateLater; }
+        _fileQuitPending = NO;
+    }
+
     // Capture the option-key state for the “Quit and Close All Windows”
     // detection below. We sample it before any modal prompt so a slow user
     // releasing the key doesn’t change the answer.
-    const BOOL optionHeldAtQuit = ([NSEvent modifierFlags] & NSEventModifierFlagOption) != 0;
+    const BOOL optionHeldAtQuit = _fileQuitApproved ? _fileQuitOptionHeld : (([NSEvent modifierFlags] & NSEventModifierFlagOption) != 0);
 
     // Sparkle normally tells us before it quits us for an update (see
     // sparkleWillRestartApp:). These are the two cases where it does not, and
@@ -1220,6 +1255,7 @@ static NSModalResponse iTermCompareRenderingRunModal(id self, SEL _cmd) {
         [[iTermRemotePreferences sharedInstance] applicationWillTerminate];
     }
 
+    [iTermFileSessionHost finishQuit];
     DLog(@"applicationShouldTerminate returning Now");
     return NSTerminateNow;
 }
@@ -1439,6 +1475,7 @@ void TurnOnDebugLoggingAutomatically(void) {
 }
 
 - (void)applicationWillFinishLaunching:(NSNotification *)aNotification {
+    (void)[iTermFileWorkspaceService bootstrap];
     DLog(@"Begin");
     // Parallel test runs start several test hosts with the same suite on purpose. The modal warning
     // about another instance would stall each one after the first.
@@ -3356,7 +3393,25 @@ static iTermKeyEventReplayer *gReplayer;
                 defaultDelay:0.125];
 }
 
+- (BOOL)performFileMenuAction:(SEL)selector sender:(id)sender {
+    NSMenuItem *item = [NSMenuItem castFrom:sender];
+    if (!item || item.action != selector) {
+        item = [[[NSMenuItem alloc] initWithTitle:@"" action:selector keyEquivalent:@""] autorelease];
+    }
+    return [iTermFileMenuActions perform:item firstResponder:NSApp.keyWindow.firstResponder completion:nil] != nil;
+}
+
+- (IBAction)saveSelectedTextOrFile:(id)sender {
+    if ([self performFileMenuAction:_cmd sender:sender]) { return; }
+    [NSApp sendAction:@selector(saveDocumentAs:) to:nil from:sender];
+}
+
+- (IBAction)saveFileAs:(id)sender {
+    [self performFileMenuAction:_cmd sender:sender];
+}
+
 - (IBAction)undo:(id)sender {
+    if ([self performFileMenuAction:_cmd sender:sender]) { return; }
     // ⌘Z is idiomatic text undo: it undoes the focused editor. Undo Close moved to
     // Shell > Undo Close (⌘⇧T). The first time the user presses ⌘Z while a session
     // they just closed is still restorable, show a one-time notice explaining the
@@ -3390,6 +3445,7 @@ static iTermKeyEventReplayer *gReplayer;
 // undo a settings-table edit while a text field is focused, and ⌘⇧Z still redoes
 // in editable web content), while keeping text editors on their private stacks.
 - (void)performUndoRedoSelector:(SEL)selector sender:(id)sender {
+    if ([self performFileMenuAction:selector sender:sender]) { return; }
     const BOOL isUndo = (selector == @selector(undo:));
     NSResponder *firstResponder = [[NSApp keyWindow] firstResponder];
     if ([firstResponder isKindOfClass:[NSText class]]) {
@@ -3450,6 +3506,8 @@ static iTermKeyEventReplayer *gReplayer;
 - (BOOL)validateUndoRedoMenuItem:(NSMenuItem *)menuItem
                         selector:(SEL)selector
                   allowMigration:(BOOL)allowMigration {
+    NSNumber *fileEnabled = [iTermFileMenuActions validate:menuItem firstResponder:NSApp.keyWindow.firstResponder];
+    if (fileEnabled) { return fileEnabled.boolValue; }
     const BOOL isUndo = (selector == @selector(undo:));
     NSString *genericTitle = isUndo
         ? NSLocalizedStringWithDefaultValue(@"UndoMenu.Undo", nil, [NSBundle mainBundle], @"Undo", @"Generic Undo menu item title shown when there is nothing specific to undo")

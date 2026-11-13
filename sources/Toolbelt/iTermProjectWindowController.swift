@@ -46,6 +46,11 @@ import Foundation
                 context.projectIdentifier, inheriting: delegate?.projectTabAssociations[context.tabIdentifier]) ?? ""
         }
     }
+    private var terminalAssociations: [String: String] {
+        guard let contexts = sessionContexts else { return targetAssociations }
+        let identifiers = Set(contexts.filter(\.isTerminal).map(\.sessionIdentifier))
+        return targetAssociations.filter { identifiers.contains($0.key) }
+    }
     private func selectTarget(_ identifier: String) {
         if sessionContexts != nil { delegate?.projectSelectSession?(identifier) }
         else { delegate?.projectSelectTab(identifier) }
@@ -164,7 +169,7 @@ import Foundation
 
     func selectInitialWorkingDirectoryIfNeeded() {
         guard let delegate, let tab = activeTargetIdentifier,
-              targetAssociations[tab] == "", selectedProjectIdentifier == nil,
+              terminalAssociations[tab] == "", selectedProjectIdentifier == nil,
               !completedWorkingDirectories.contains(tab), pendingWorkingDirectories[tab]?.generation != selectionGeneration,
               let readDirectory = delegate.projectWorkingDirectory else { return }
         let request = UUID()
@@ -293,7 +298,7 @@ import Foundation
             selectWorktree(worktree, openIfNeeded: openIfNeeded)
             return
         }
-        let associations = targetAssociations
+        let associations = terminalAssociations
         let remembered = rememberedTabs[project.identifier].flatMap { associations[$0] == project.identifier ? $0 : nil }
         let existing = remembered ?? associations.keys.sorted().first(where: { associations[$0] == project.identifier })
         guard openIfNeeded || existing != nil else {
@@ -335,7 +340,7 @@ import Foundation
 
     func selectWorktree(_ worktree: iTermGitWorktree, openIfNeeded: Bool) {
         guard let current = catalog.worktree(withIdentifier: worktree.identifier), let delegate else { return }
-        let associations = targetAssociations
+        let associations = terminalAssociations
         let tabs = associations.keys.filter { tab in
             associations[tab].flatMap { catalog.worktree(forProjectIdentifier: $0)?.identifier } == current.identifier
         }

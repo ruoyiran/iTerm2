@@ -1,0 +1,13 @@
+import {readFileSync} from 'node:fs';
+import {createHash} from 'node:crypto';
+import {execFileSync} from 'node:child_process';
+import {fileURLToPath} from 'node:url';
+const root=fileURLToPath(new URL('./',import.meta.url));
+const hash=path=>createHash('sha256').update(readFileSync(path)).digest('hex');
+const target=root+'node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/utils/editorGutter.js';
+const patch=root+'patches/monaco-editor@0.55.1.patch';
+if(JSON.parse(readFileSync(root+'node_modules/monaco-editor/package.json')).version!=='0.55.1'||hash(patch)!=='53b71f7d8a7c00b76ffdb73ce83d18e31692f193f5fafa6a390e48f5b3fdd636')throw new Error('Unexpected Monaco version or patch');
+const before='2f814890d1a8d28b8afb5eafe69e881b4e62591856e0fe2148bdbca9e1db8522';
+const after='3449f8ef05528d0f071d605361ad384628a9827b3e52aeee3a17c020701c3b77';
+if(hash(target)===before)execFileSync('/usr/bin/patch',['-p1','--forward','-i',patch],{cwd:root+'node_modules/monaco-editor'});
+if(hash(target)!==after)throw new Error('Monaco patch verification failed');

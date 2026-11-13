@@ -117,14 +117,15 @@ final class iTermFileTreeWatcher {
 
 private final class iTermFileTreeNativeWatchStream: iTermFileTreeWatchStream {
     private final class Context {
+        let root: String
         let onEvents: ([String]) -> Void
-        init(onEvents: @escaping ([String]) -> Void) { self.onEvents = onEvents }
+        init(root: String, onEvents: @escaping ([String]) -> Void) { self.root = root; self.onEvents = onEvents }
     }
     private var stream: FSEventStreamRef?
     private var started = false
 
     init?(root: String, queue: DispatchQueue, onEvents: @escaping ([String]) -> Void) {
-        let context = Context(onEvents: onEvents)
+        let context = Context(root: root, onEvents: onEvents)
         var nativeContext = FSEventStreamContext(
             version: 0,
             info: Unmanaged.passUnretained(context).toOpaque(),
@@ -137,15 +138,17 @@ private final class iTermFileTreeNativeWatchStream: iTermFileTreeWatchStream {
                 if let info { Unmanaged<Context>.fromOpaque(info).release() }
             },
             copyDescription: nil)
-        let flags = FSEventStreamCreateFlags(kFSEventStreamCreateFlagUseCFTypes | kFSEventStreamCreateFlagWatchRoot)
-        guard let stream = FSEventStreamCreate(kCFAllocatorDefault, { _, info, count, paths, _, _ in
+        let flags = FSEventStreamCreateFlags(kFSEventStreamCreateFlagUseCFTypes | kFSEventStreamCreateFlagWatchRoot | kFSEventStreamCreateFlagFileEvents)
+        guard let stream = FSEventStreamCreate(kCFAllocatorDefault, { _, info, count, paths, eventFlags, _ in
             guard let info else { return }
             let context = Unmanaged<Context>.fromOpaque(info).takeUnretainedValue()
             // UseCFTypes supplies a CFArray of CFStrings under the Get rule. Copy the
             // bridged Swift strings before returning; no borrowed native buffer escapes.
             let array = Unmanaged<NSArray>.fromOpaque(paths).takeUnretainedValue()
             guard array.count == count else { return }
-            let copied = array.compactMap { value -> String? in
+            let rescanFlags = FSEventStreamEventFlags(kFSEventStreamEventFlagMustScanSubDirs | kFSEventStreamEventFlagRootChanged | kFSEventStreamEventFlagMount | kFSEventStreamEventFlagUnmount)
+            let copied = array.enumerated().compactMap { index, value -> String? in
+                if eventFlags[index] & rescanFlags != 0 { return context.root }
                 guard let path = value as? String else { return nil }
                 return path.count > 1 && path.hasSuffix("/") ? String(path.dropLast()) : path
             }

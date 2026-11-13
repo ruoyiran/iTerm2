@@ -54,6 +54,7 @@ extern NSString *const SESSION_ARRANGEMENT_SERVER_DICT;
 
 + (void)openPartialAttachmentsForArrangement:(NSDictionary *)arrangement
                                   completion:(void (^)(NSDictionary *))completion {
+    if (arrangement[iTermFileSessionDescriptor.arrangementKey] != nil) { completion(@{}); return; }
     DLog(@"PTYSession.openPartialAttachmentsForArrangement: start");
     if (arrangement[SESSION_ARRANGEMENT_TMUX_PANE] ||
         ![iTermAdvancedSettingsModel runJobsInServers] ||

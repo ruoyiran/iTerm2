@@ -94,6 +94,14 @@ static const CGFloat iTermToolWrapperCollapsedHeight = 22.0;
 }
 
 - (void)relayout {
+    BOOL ownsHeader = [self.tool respondsToSelector:@selector(ownsToolHeader)] && self.tool.ownsToolHeader;
+    _title.hidden = ownsHeader;
+    _closeButton.hidden = ownsHeader;
+    if (ownsHeader) {
+        _container.frame = self.bounds;
+        if ([self.tool respondsToSelector:@selector(relayout)]) { [self.tool relayout]; }
+        return;
+    }
     NSRect frame = [self frame];
     const CGFloat sideMargin = kCloseButtonLeftMargin + kButtonSize;
     _title.frame = NSMakeRect(sideMargin,
@@ -120,6 +128,7 @@ static const CGFloat iTermToolWrapperCollapsedHeight = 22.0;
 }
 
 - (CGFloat)minimumHeightWhenExpanded {
+    if ([self.tool respondsToSelector:@selector(ownsToolHeader)] && self.tool.ownsToolHeader) { return [self.tool minimumHeight]; }
     return [self.tool minimumHeight] + kTitleHeight + kMargin + kBottomMargin;
 }
 

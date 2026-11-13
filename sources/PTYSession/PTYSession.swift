@@ -382,7 +382,7 @@ extension PTYSession {
     }
 
     func ensureIsTerminal() throws {
-        if isBrowserSession() {
+        if isBrowserSession() || isFileSession {
             throw NotATerminalError()
         }
     }

@@ -134,7 +134,8 @@ STATUS BAR (profile "Status Bar Layout")
   components with script-defined knob keys are only partially covered.
 
 WINDOW ARRANGEMENTS -> session dicts (SESSION_ARRANGEMENT_*)
-  Removed:  Contents, Clippings, Clippings Archive, Session Note, Conductor,
+  Removed:  File Session (document/root paths and per-pane descriptor),
+            Contents, Clippings, Clippings Archive, Session Note, Conductor,
             Conductor Parser Tree, Reusable Cookie, Browser State,
             Hostname to Shell, Tmux History, Tmux AltHistory, Tmux State
             Pending Jumps (SSH reconnection args + directory)
@@ -299,6 +300,7 @@ CONTENT_KEYS = {
     "Initial URL": REDACT_V,
     "Browser Target": REDACT_V,
     "Browser State": REMOVE,
+    "File Session": REMOVE,
     "AitermURL": REDACT_V,
     # User-chosen Ollama model names (locally created/namespaced models).
     "AIOllamaRegularModel": REDACT_V,
