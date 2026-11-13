@@ -29,6 +29,13 @@ final class FileSessionTests: XCTestCase {
         }
         let rows = "return new Promise(resolve => { const check = () => { const row = [...document.querySelectorAll('[data-path]')].find(r => r.dataset.path === path); if (row) { observer.disconnect(); resolve(row.textContent); } }; const observer = new MutationObserver(check); observer.observe(document.body, {childList:true,subtree:true}); check(); });"
         XCTAssertNotNil(try evaluate(rows, arguments: ["path": f.file.path]))
+        XCTAssertEqual(try evaluate("const find=path=>[...document.querySelectorAll('[data-path]')].find(row=>row.dataset.path===path);window.keptFolder=find(folder);window.keptFile=find(file);window.keptFolder.click();return window.keptFolder===find(folder)&&window.keptFile===find(file)&&document.querySelector('.explorer-status').hidden;", arguments: ["folder": f.root.appendingPathComponent("Library").path, "file": f.file.path]) as? Bool, true)
+        XCTAssertNotNil(try evaluate(rows, arguments: ["path": cacheDirectory.path]))
+        XCTAssertEqual(try evaluate("const find=path=>[...document.querySelectorAll('[data-path]')].find(row=>row.dataset.path===path);const kept=window.keptFolder===find(folder)&&window.keptFile===find(file);window.keptFolder.click();return kept&&window.keptFile===find(file);", arguments: ["folder": f.root.appendingPathComponent("Library").path, "file": f.file.path]) as? Bool, true)
+        XCTAssertEqual(try evaluate("document.querySelector('.explorer-toolbar > button:last-child').click(); window.nativeDismissSeen=new Promise(resolve=>{const original=window.fileWorkspace.receive;window.fileWorkspace.receive=async function(message){await original.call(this,message);if(message.type==='dismissMenu'){window.fileWorkspace.receive=original;resolve(true);}};});return !!document.querySelector('.context-menu');") as? Bool, true)
+        browser.controller.dismissMenus()
+        XCTAssertEqual(try evaluate("return window.nativeDismissSeen;") as? Bool, true)
+        XCTAssertEqual(try evaluate("return document.querySelector('.context-menu')===null;") as? Bool, true)
         _ = try evaluate("window.stableRow=document.querySelector('[data-path]'); window.quietChangeSeen=new Promise(resolve => { const original=window.fileWorkspace.receive; window.fileWorkspace.receive=async function(message) { await original.call(this,message); if(message.type==='filesystemChanges') { window.fileWorkspace.receive=original; resolve(true); } }; }); return true;")
         let backgroundFile = cacheDirectory.appendingPathComponent("background.log")
         try Data("background".utf8).write(to: backgroundFile)

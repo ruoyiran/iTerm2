@@ -371,6 +371,7 @@ static NSString *const kDynamicToolURL = @"URL";
 
         _menuButton.frame = self.menuButtonFrame;
         [self addSubview:_menuButton];
+        [self updateMenuButtonVisibility];
     }
     return self;
 }
@@ -399,6 +400,13 @@ static NSString *const kDynamicToolURL = @"URL";
         return;
     }
     _noToolsMessage.frame = rect;
+}
+
+- (void)updateMenuButtonVisibility {
+    // A tool with its own toolbar provides the top-right menu. The View > Toolbelt
+    // menu remains available for configuring tools.
+    iTermToolWrapper *first = [iTermToolWrapper castFrom:_splitter.subviews.firstObject];
+    _menuButton.hidden = !first.collapsed && [first.tool respondsToSelector:@selector(ownsToolHeader)] && first.tool.ownsToolHeader;
 }
 
 - (NSRect)menuButtonFrame {
@@ -719,6 +727,7 @@ static NSString *const kDynamicToolURL = @"URL";
     for (iTermToolWrapper *wrapper in [_splitter subviews]) {
         [wrapper relayout];
     }
+    [self updateMenuButtonVisibility];
 }
 
 - (NSDictionary *)restorableState {
@@ -886,6 +895,7 @@ static NSString *const kDynamicToolURL = @"URL";
     for (iTermToolWrapper *wrapper in _splitter.subviews) {
         [wrapper restoreSubviews];
     }
+    [self updateMenuButtonVisibility];
 }
 #pragma mark - PTYSplitViewDelegate
 
@@ -1013,6 +1023,7 @@ draggingDidEndOfSplit:(int)clickedOnSplitterIndex
 }
 
 - (void)splitViewDidChangeSubviews:(PTYSplitView *)splitView {
+    [self updateMenuButtonVisibility];
 }
 
 #pragma mark - iTermDragHandleViewDelegate

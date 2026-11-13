@@ -79,6 +79,12 @@ class SoftwareUpdater: NSObject {
             DLog("Not starting the updater in a test host")
             return
         }
+        // This custom build must not replace itself with an upstream release or ask
+        // about automatic updates. Set Sparkle's answer before its startup cycle.
+        updater.automaticallyChecksForUpdates = false
+        updater.automaticallyDownloadsUpdates = false
+        iTermUserDefaults.userDefaults().set(false, forKey: kPreferenceKeyCheckForUpdatesAutomatically)
+        DLog("Automatic update checks and downloads disabled for this build")
         started = true
         controller.startUpdater()
 

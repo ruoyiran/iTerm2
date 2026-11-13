@@ -19,10 +19,12 @@ import AppKit
     private var operationState: [String: Any] = ["canUndo": false, "canRedo": false]
     private var pendingQueryFocus: Bool?
     private var stopped = false
+    private var dismissalMonitor: Any?
+    private var resignObserver: NSObjectProtocol?
     private var requests = [String: iTermFileBrowserRequestKind]()
     private let errorLabel = NSTextField(wrappingLabelWithString: "")
     init(runtime: iTermFileWorkspaceUIRuntime) { self.runtime = runtime; super.init(nibName: nil, bundle: nil) }
-    deinit { acquisition?.cancel() }
+    deinit { acquisition?.cancel(); removeDismissalMonitors() }
     required init?(coder: NSCoder) { it_fatalError("init(coder:) has not been implemented") }
     override func loadView() { view = NSView(); errorLabel.isHidden = true; view.addSubview(errorLabel) }
     override func viewDidLayout() { super.viewDidLayout(); renderer?.frame = view.bounds; errorLabel.frame = view.bounds.insetBy(dx: 12, dy: 12) }
@@ -32,8 +34,10 @@ import AppKit
         renderer?.bind(viewIdentifier: viewIdentifier, context: context, token: token, purpose: "explorer")
     }
     func setVisible(_ visible: Bool) {
+        if !visible { dismissMenus(); removeDismissalMonitors() }
         self.visible = visible
         if !visible { pendingQueryFocus = nil; cancelSearches(); return }
+        installDismissalMonitors()
         if renderer != nil { refresh(); return }
         guard !stopped, renderer == nil, !acquiring else { return }; acquiring = true
         acquisition = runtime.acquire(owner: self) { [weak self, weak runtime = self.runtime] renderer, error in
@@ -46,6 +50,23 @@ import AppKit
             renderer.autoresizingMask = [.width, .height]; self.view.addSubview(renderer)
             renderer.bind(viewIdentifier: self.viewIdentifier, context: self.context, token: self.token, purpose: "explorer")
         }
+    }
+    func dismissMenus() {
+        guard surfaceReady, visible else { return }
+        renderer?.send("dismissMenu")
+    }
+    private func installDismissalMonitors() {
+        guard dismissalMonitor == nil else { return }
+        dismissalMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]) { [weak self] event in
+            guard let self, self.visible, let renderer = self.renderer, let window = renderer.window else { return event }
+            if event.window !== window || !renderer.bounds.contains(renderer.convert(event.locationInWindow, from: nil)) { self.dismissMenus() }
+            return event
+        }
+        resignObserver = NotificationCenter.default.addObserver(forName: NSApplication.didResignActiveNotification, object: nil, queue: .main) { [weak self] _ in self?.dismissMenus() }
+    }
+    private func removeDismissalMonitors() {
+        if let dismissalMonitor { NSEvent.removeMonitor(dismissalMonitor) }; dismissalMonitor = nil
+        if let resignObserver { NotificationCenter.default.removeObserver(resignObserver) }; resignObserver = nil
     }
     func applyListing(_ entries: [iTermFileBrowserEntry]?, directoryPath: String, requestIdentifier: String,
                       context: iTermFileBrowserContext, error: NSError?) {

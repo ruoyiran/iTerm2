@@ -5,8 +5,8 @@ export function button(label, action, symbol) { const b=element('button','icon-b
 const parentPath=path=>path.slice(0,path.lastIndexOf('/'))||'/';
 export class Explorer {
   constructor(root, send, translate) {
-    this.root=root;this.contextReady=false;this.root.inert=true;this.send=(type,payload,id)=>this.contextReady?send(type,payload,id):null;this.t=translate;this.state=new TreeState();this.mode='names';this.collapsed=new Set();this.focused=null;this.resultFocus=null;this.rows=[];this.composing=false;this.nameTimer=null;this.scope=null;this.pendingDirectoryChanges=new Set();
-    this.build();this.focusHandler=()=>this.send('focus',{});this.root.addEventListener('focusin',this.focusHandler);
+    this.root=root;this.contextReady=false;this.root.inert=true;this.send=(type,payload,id)=>this.contextReady?send(type,payload,id):null;this.t=translate;this.state=new TreeState();this.mode='names';this.collapsed=new Set();this.focused=null;this.resultFocus=null;this.rows=[];this.composing=false;this.nameTimer=null;this.scope=null;this.pendingDirectoryChanges=new Set();this.entryNodes=new Map();
+    this.blurHandler=()=>this.closeMenu();window.addEventListener('blur',this.blurHandler);this.build();this.focusHandler=()=>this.send('focus',{});this.root.addEventListener('focusin',this.focusHandler);
   }
   build() {
     const t=this.t;this.root.className='explorer';
@@ -102,7 +102,7 @@ export class Explorer {
     this.invalidateTransientUI();this.cancelSearch();this.contextReady=false;this.root.inert=true;
   }
   changeContext(payload) {
-    this.invalidateTransientUI();this.cancelSearch();this.pendingDirectoryChanges.clear();this.rememberContext();this.resultFocus=null;this.scope=payload.rootDirectory?payload:null;
+    this.invalidateTransientUI();this.cancelSearch();this.pendingDirectoryChanges.clear();this.entryNodes.clear();this.rememberContext();this.resultFocus=null;this.scope=payload.rootDirectory?payload:null;
     const saved=this.recentContexts.get(this.contextKey(this.scope));this.recentContexts.delete(this.contextKey(this.scope));
     this.state=saved?.state??new TreeState();this.state.scope=this.scope;this.state.pending.clear();
     this.title.textContent=payload.title||this.t('selectProject');this.names.value=saved?.names??'';this.contents.value=saved?.contents??'';
@@ -112,6 +112,7 @@ export class Explorer {
     this.setMode(saved?.mode??'names');if(this.scope)this.refresh();
   }
   receive(type,payload) {
+    if(type==='dismissMenu'){this.closeMenu();return;}
     if(type==='context') this.changeContext(payload);
     if(type==='refresh') this.refresh();
     if(type==='filesystemChanges'){this.filesystemChanges(payload);return;}
@@ -137,7 +138,7 @@ export class Explorer {
     } else for(const row of this.state.rows()){this.rows.push({kind:'entry',row,top:height,height:26});height+=26;}
     this.canvas.style.height=`${height}px`;
     this.summary.hidden=this.mode!=='contents'||!this.state.matches.size;const matches=[...this.state.matches.values()].reduce((sum,group)=>sum+group.lines.reduce((count,line)=>count+line.ranges.length,0),0);this.summary.replaceChildren(element('span','',this.t('results')),element('strong','',new Intl.NumberFormat().format(matches)),element('span','',this.t('files')),element('strong','',new Intl.NumberFormat().format(this.state.matches.size)));
-    const s=this.state;const failedDirectory=[...s.directories.entries()].find(([,value])=>value.error);this.status.textContent=s.error||failedDirectory?.[1].error||(!this.scope?this.t('selectProject'):s.searching||this.refreshing||[...s.pending.values()].some(path=>!s.directories.has(path))?this.t('loading'):s.truncated?this.t('truncated'):s.skipped?this.t('skipped'):this.rows.length?'':this.mode==='contents'?(this.contents.value?this.t('noResults'):this.t('typeSearch')):this.t('empty'));
+    const s=this.state;const failedDirectory=[...s.directories.entries()].find(([,value])=>value.error);this.status.textContent=s.error||failedDirectory?.[1].error||(!this.scope?this.t('selectProject'):s.searching||this.refreshing||[...s.pending.values()].some(path=>path===this.scope?.rootDirectory&&!s.directories.has(path))?this.t('loading'):s.truncated?this.t('truncated'):s.skipped?this.t('skipped'):this.rows.length?'':this.mode==='contents'?(this.contents.value?this.t('noResults'):this.t('typeSearch')):this.t('empty'));
     if(failedDirectory){const retry=button(this.t('retry'),()=>{s.directories.delete(failedDirectory[0]);this.list(failedDirectory[0]);this.render();});retry.dataset.retry='true';this.status.append(retry);}this.status.hidden=!this.status.textContent;this.renderRows();
   }
   renderRows() {
@@ -145,13 +146,25 @@ export class Explorer {
     const min=this.viewport.scrollTop-520,max=this.viewport.scrollTop+(this.viewport.clientHeight||600)+520;
     const children=[];
     for(const [index,item] of this.rows.entries()) {if(item.top+item.height<min||item.top>max)continue;let node;
-      if(item.kind==='entry')node=this.entry(item.row);
+      if(item.kind==='entry') {
+        const row=item.row,signature=JSON.stringify([row.name,!!row.isDirectory,!!row.isExpandable,!!row.isSymbolicLink,row.relativePath]);
+        const cached=this.entryNodes.get(row.path);node=cached?.signature===signature?cached.node:this.entry(row);
+        this.entryNodes.set(row.path,{signature,node});
+        node.setAttribute('aria-level',String(row.depth+1));node.setAttribute('aria-selected',String(this.state.selected.has(row.path)));node.style.paddingLeft=`${row.depth*16+8}px`;
+        const loading=[...this.state.pending.values()].includes(row.path);node.setAttribute('aria-busy',String(loading));
+        if(row.isExpandable){node.setAttribute('aria-expanded',String(this.state.expanded.has(row.path)));node.querySelector('svg use').setAttribute('href',`./icons/lucide.svg#${this.state.expanded.has(row.path)?'chevron-down':'chevron-right'}`);}
+      }
       else if(item.kind==='group') {node=button(item.group.relativePath,()=>{if(this.collapsed.has(item.group.path))this.collapsed.delete(item.group.path);else this.collapsed.add(item.group.path);this.render();});node.className='result-group';node.prepend(icon(this.collapsed.has(item.group.path)?'chevron-right':'chevron-down'));}
       else {node=element('button','result-match');node.type='button';node.append(element('span','line-number',String(item.line.lineNumber)));for(const part of snippetParts(item.line.snippet,item.line.ranges,item.line.snippetColumn))node.append(element(part.match?'mark':'span','',part.text));node.addEventListener('click',()=>this.open({path:item.group.path},'preview','tab',item.line.lineNumber,(item.line.ranges[0]?.location??0)+1));node.addEventListener('dblclick',()=>this.open({path:item.group.path},'pinned','tab',item.line.lineNumber,(item.line.ranges[0]?.location??0)+1));}
       if(item.kind!=='entry'){node.dataset.resultIndex=String(index);node.dataset.resultKey=item.key;node.addEventListener('focus',()=>{this.resultFocus={key:item.key,path:item.group.path};});}
       node.style.top=`${item.top}px`;node.style.height=`${item.height}px`;children.push(node);
     }
-    this.canvas.replaceChildren(...children);
+    if(this.mode==='names') {
+      const desired=new Set(children);
+      for(const node of [...this.canvas.children])if(!desired.has(node))node.remove();
+      for(const [index,node] of children.entries())if(this.canvas.children[index]!==node)this.canvas.insertBefore(node,this.canvas.children[index]??null);
+      for(const [path,cached] of this.entryNodes)if(!desired.has(cached.node))this.entryNodes.delete(path);
+    } else {this.entryNodes.clear();this.canvas.replaceChildren(...children);}
     if(restoreFocus&&this.resultFocus){
       let key=this.resultFocus.key;if(!this.rows.some(row=>row.key===key))key=JSON.stringify(['group',this.resultFocus.path]);
       const target=[...this.canvas.querySelectorAll('[data-result-key]')].find(node=>node.dataset.resultKey===key);
@@ -210,11 +223,11 @@ export class Explorer {
   more(event) {
     this.closeMenu();const menu=element('div','context-menu');for(const [key,label] of [['showsHiddenFiles','showHidden'],['showsGitIgnoredFiles','showIgnored']]) {const b=button(this.t(label),()=>{this.send('setVisibility',{showsHiddenFiles:!!this.scope?.showsHiddenFiles,showsGitIgnoredFiles:!!this.scope?.showsGitIgnoredFiles,[key]:!this.scope?.[key]});this.closeMenu();});b.prepend(document.createTextNode(this.scope?.[key]?'✓ ':''));menu.append(b);}menu.append(button(this.t('returnToRoot'),()=>{this.send('returnToRoot',{});this.closeMenu();}));this.showMenu(menu,event);
   }
-  showMenu(menu,event) {const scope=this.scope,generation=this.transientGeneration;const fence=event=>{if(this.scope!==scope||this.transientGeneration!==generation||this.menuNode!==menu){event.preventDefault();event.stopImmediatePropagation();}};menu.addEventListener('click',fence,true);menu.addEventListener('keydown',fence,true);this.menuNode=menu;menu.style.left=`${Math.min(event.clientX||0,Math.max(0,window.innerWidth-220))}px`;menu.style.top=`${Math.min(event.clientY||32,Math.max(0,window.innerHeight-400))}px`;this.root.append(menu);menu.addEventListener('keydown',e=>{if(e.key==='Escape')this.closeMenu();});const close=e=>{if(!menu.contains(e.target))this.closeMenu();};this.menuCloser=close;document.addEventListener('pointerdown',close);menu.querySelector('button')?.focus();}
-  closeMenu(){if(this.menuCloser)document.removeEventListener('pointerdown',this.menuCloser);this.menuNode?.remove();this.menuNode=null;}
+  showMenu(menu,event) {const scope=this.scope,generation=this.transientGeneration;const fence=event=>{if(this.scope!==scope||this.transientGeneration!==generation||this.menuNode!==menu){event.preventDefault();event.stopImmediatePropagation();}};menu.addEventListener('click',fence,true);menu.addEventListener('keydown',fence,true);this.menuNode=menu;menu.style.left=`${Math.min(event.clientX||0,Math.max(0,window.innerWidth-220))}px`;menu.style.top=`${Math.min(event.clientY||32,Math.max(0,window.innerHeight-400))}px`;this.root.append(menu);menu.addEventListener('keydown',e=>{if(e.key==='Escape')this.closeMenu();});const close=e=>{if(!menu.contains(e.target))this.closeMenu();};this.menuCloser=close;document.addEventListener('pointerdown',close,true);document.addEventListener('mousedown',close,true);menu.querySelector('button')?.focus();}
+  closeMenu(){if(this.menuCloser){document.removeEventListener('pointerdown',this.menuCloser,true);document.removeEventListener('mousedown',this.menuCloser,true);}this.menuCloser=null;this.menuNode?.remove();this.menuNode=null;}
   inline(kind,row) {
     this.closeMenu();this.form?.remove();const scope=this.scope,generation=this.transientGeneration;const form=element('form','inline-input');const current=()=>this.scope===scope&&this.transientGeneration===generation&&this.form===form;const input=element('input');input.setAttribute('aria-label',this.t(kind==='rename'?'rename':'name'));input.value=kind==='rename'?row.name:'';form.append(icon(kind==='createFolder'?'folder-plus':'file-plus'),input,button(this.t('cancel'),()=>form.remove(),'x'));this.viewport.before(form);this.form=form;
     form.addEventListener('submit',event=>{event.preventDefault();if(!current()||this.composing||!input.value)return;const directoryPath=row?.isDirectory?row.path:row?parentPath(row.path):this.scope?.rootDirectory;this.formRequest=this.send(kind,{paths:row?[row.path]:[],directoryPath,name:input.value});});input.addEventListener('compositionstart',()=>{if(current())this.composing=true;});input.addEventListener('compositionend',()=>{if(current())this.composing=false;});input.addEventListener('keydown',event=>{if(current()&&event.key==='Escape')form.remove();});input.focus();input.select();
   }
-  dispose() {this.beginContextTransition();this.root.removeEventListener('focusin',this.focusHandler);clearTimeout(this.nameTimer);this.cancelSearch();this.closeMenu();this.root.replaceChildren();this.root.inert=false;}
+  dispose() {this.entryNodes.clear();window.removeEventListener('blur',this.blurHandler);this.beginContextTransition();this.root.removeEventListener('focusin',this.focusHandler);clearTimeout(this.nameTimer);this.cancelSearch();this.closeMenu();this.root.replaceChildren();this.root.inert=false;}
 }

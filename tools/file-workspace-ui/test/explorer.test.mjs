@@ -106,7 +106,7 @@ test('context changes invalidate retained create forms and detached menu callbac
    assert.equal(f.sent.slice(before).some(message=>message.type===kind),false);assert.equal(f.root.querySelector('.inline-input'),null);
    f.explorer.menu(new f.w.MouseEvent('contextmenu'),null);const menu=f.explorer.menuNode;const button=menu.querySelector('button');
    f.explorer.receive('context',{token:'third',rootDirectory:sameRoot?'/r':'/third',projectIdentifier:'third-owner',worktreeIdentifier:'new-tree'});
-   button.click();assert.equal(f.root.querySelector('.inline-input'),null);assert.equal(f.explorer.menuNode,null);
+   button.click();assert.equal(f.root.querySelector('.inline-input'),null);assert.equal(f.explorer.menuNode===null,true);
   }finally{f.close();}
  }
 });
@@ -186,5 +186,32 @@ test('Git metadata rescans the loaded subtree without refreshing a collapsed par
   f.root.querySelector('[data-path="/r/repo"]').click();f.listing(f.sent.findLast(x=>x.type==='listDirectory'),[{path:'/r/repo/a',name:'a'}]);const expanded=f.sent.length;
   f.explorer.receive('filesystemChanges',{token:'scope',paths:[],rescanDirectories:['/r/repo']});
   assert.deepEqual(f.sent.slice(expanded).map(x=>x.payload.directoryPath),['/r/repo']);
+ }finally{f.close();}
+});
+test('menus close on outside pointer events even when another control stops bubbling',()=>{
+ const f=fixture();try {
+  f.explorer.more(new f.w.MouseEvent('click',{clientX:100,clientY:30}));const menu=f.explorer.menuNode;assert.ok(menu);
+  const outside=document.createElement('div');document.body.append(outside);outside.addEventListener('pointerdown',event=>event.stopPropagation());
+  outside.dispatchEvent(new f.w.PointerEvent('pointerdown',{bubbles:true}));assert.equal(f.explorer.menuNode===null,true);assert.equal(menu.isConnected,false);
+ }finally{f.close();}
+});
+test('native focus changes and browser blur dismiss menus without activating an item',()=>{
+ const f=fixture();try {
+  for(const close of [()=>f.explorer.receive('dismissMenu',{}),()=>f.w.dispatchEvent(new f.w.Event('blur'))]) {
+   f.explorer.more(new f.w.MouseEvent('click',{clientX:100,clientY:30}));const before=f.sent.length;
+   close();assert.equal(f.explorer.menuNode===null,true);assert.equal(f.sent.length,before);
+  }
+ }finally{f.close();}
+});
+test('expanding a directory preserves existing row nodes and scroll position while loading only its children',()=>{
+ const f=fixture();try {
+  f.listing(f.sent.find(x=>x.type==='listDirectory'),[{path:'/r/d',name:'d',isDirectory:true,isExpandable:true},{path:'/r/sibling',name:'sibling',isDirectory:false}]);
+  const directory=f.root.querySelector('[data-path="/r/d"]'),sibling=f.root.querySelector('[data-path="/r/sibling"]');f.explorer.viewport.scrollTop=50;const before=f.sent.length;
+  directory.click();assert.equal(f.root.querySelector('[data-path="/r/d"]')===directory,true);assert.equal(f.root.querySelector('[data-path="/r/sibling"]')===sibling,true);
+  assert.notEqual(f.explorer.status.textContent,'loading');assert.equal(f.explorer.viewport.scrollTop,50);
+  assert.deepEqual(f.sent.slice(before).filter(x=>x.type==='listDirectory').map(x=>x.payload.directoryPath),['/r/d']);
+  f.listing(f.sent.findLast(x=>x.type==='listDirectory'),[{path:'/r/d/child',name:'child',isDirectory:false}]);
+  assert.equal(f.root.querySelector('[data-path="/r/d"]')===directory,true);assert.equal(f.root.querySelector('[data-path="/r/sibling"]')===sibling,true);assert.equal(f.explorer.viewport.scrollTop,50);
+  assert.ok(f.root.querySelector('[data-path="/r/d/child"]'));directory.click();assert.equal(f.root.querySelector('[data-path="/r/sibling"]')===sibling,true);
  }finally{f.close();}
 });
