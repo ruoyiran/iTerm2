@@ -7,7 +7,7 @@ export class MessageBridge {
     const text=JSON.stringify(message);
     if(text.length<=131072)this.post(message);
     else {
-      if(text.length>32*1024*1024)throw new Error('Message exceeds transport capacity');
+      if(text.length>300*1024*1024)throw new Error('Message exceeds transport capacity');
       const parts=[];for(let start=0;start<text.length;){let end=Math.min(text.length,start+131072);if(end<text.length&&/[\uD800-\uDBFF]/.test(text[end-1]))end--;parts.push(text.slice(start,end));start=end;}
       const identifier=crypto.randomUUID();for(let index=0;index<parts.length;index++)this.post({...message,type:'chunkNative',payload:{identifier,index,total:parts.length,text:parts[index]}});
     }
