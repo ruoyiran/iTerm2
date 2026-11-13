@@ -13,6 +13,7 @@ enum FileUIStrings {
         "refresh": String(localized: "FileWorkspace.refresh", defaultValue: "Refresh Explorer", comment: "File workspace control or status: refresh"),
         "more": String(localized: "FileWorkspace.more", defaultValue: "More Explorer Actions", comment: "File workspace control or status: more"),
         "findFiles": String(localized: "FileWorkspace.findFiles", defaultValue: "Find files", comment: "File workspace control or status: findFiles"),
+        "searchTooLong": String(localized: "FileWorkspace.SearchTooLong", defaultValue: "Search text is too long.", comment: "Search queries exceeding the UTF-8 size limit cannot run"),
         "search": String(localized: "FileWorkspace.search", defaultValue: "Search", comment: "File workspace control or status: search"),
         "caseSensitive": String(localized: "FileWorkspace.caseSensitive", defaultValue: "Match Case", comment: "File workspace control or status: caseSensitive"),
         "wholeWord": String(localized: "FileWorkspace.wholeWord", defaultValue: "Match Whole Word", comment: "File workspace control or status: wholeWord"),

@@ -116,3 +116,29 @@ test('disposing a suspended explorer releases the shared root for its next rende
   f.explorer.dispose();assert.equal(f.root.inert,false);assert.equal(f.root.children.length,0);
  }finally{f.close();}
 });
+test('undo remains available after the last row disappears and in Contents mode',()=>{
+ const f=fixture();try {
+  f.listing(f.sent.find(x=>x.type==='listDirectory'),[]);
+  for(const mode of ['names','contents']) {
+   f.explorer.setMode(mode);const before=f.sent.length;
+   f.explorer.viewport.dispatchEvent(new f.w.KeyboardEvent('keydown',{key:'z',metaKey:true,bubbles:true,cancelable:true}));
+   f.explorer.viewport.dispatchEvent(new f.w.KeyboardEvent('keydown',{key:'z',metaKey:true,shiftKey:true,bubbles:true,cancelable:true}));
+   assert.deepEqual(f.sent.slice(before).map(message=>message.type),['undo','redo']);
+  }
+ }finally{f.close();}
+});
+test('oversized UTF8 queries and filters report errors without a pending request and recover on correction',()=>{
+ for(const mode of ['names','contents'])for(const invalid of ['a'.repeat(2049),'😀'.repeat(513)]) {
+  const f=fixture();try {
+   f.listing(f.sent.find(x=>x.type==='listDirectory'),[]);f.explorer.setMode(mode);
+   const input=mode==='names'?f.explorer.names:f.explorer.contents;input.value=invalid;const before=f.sent.length;f.explorer.search(mode);
+   assert.equal(f.sent.slice(before).some(message=>['searchNames','searchContents'].includes(message.type)),false);
+   assert.equal(f.explorer.state.searching,false);assert.equal(f.explorer.status.textContent,'searchTooLong');
+   input.value='valid';f.explorer.search(mode);assert.equal(f.sent.at(-1).type,mode==='names'?'searchNames':'searchContents');assert.equal(f.explorer.state.searching,true);
+  }finally{f.close();}
+ }
+ const f=fixture();try {
+  f.explorer.setMode('contents');f.explorer.contents.value='valid';f.explorer.include.value='a'.repeat(2049);const before=f.sent.length;f.explorer.search('contents');
+  assert.equal(f.sent.slice(before).some(message=>message.type==='searchContents'),false);assert.equal(f.explorer.state.searching,false);assert.equal(f.explorer.status.textContent,'searchTooLong');
+ }finally{f.close();}
+});

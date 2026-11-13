@@ -37,12 +37,12 @@ $(SRCROOT)/sources/FileWorkspace/Resources/FileWorkspaceUI/chunks/bicep-57UJWBJF
 $(SRCROOT)/sources/FileWorkspace/Resources/FileWorkspaceUI/chunks/cameligo-DK3DUO22.js
 $(SRCROOT)/sources/FileWorkspace/Resources/FileWorkspaceUI/chunks/chunk-47PQWOYZ.js
 $(SRCROOT)/sources/FileWorkspace/Resources/FileWorkspaceUI/chunks/chunk-AHD24BCH.js
-$(SRCROOT)/sources/FileWorkspace/Resources/FileWorkspaceUI/chunks/chunk-DCM5NK4S.js
 $(SRCROOT)/sources/FileWorkspace/Resources/FileWorkspaceUI/chunks/chunk-E5KL7K2E.js
 $(SRCROOT)/sources/FileWorkspace/Resources/FileWorkspaceUI/chunks/chunk-I452YSKO.js
 $(SRCROOT)/sources/FileWorkspace/Resources/FileWorkspaceUI/chunks/chunk-M3PYR5EU.js
 $(SRCROOT)/sources/FileWorkspace/Resources/FileWorkspaceUI/chunks/chunk-SENOILCD.js
 $(SRCROOT)/sources/FileWorkspace/Resources/FileWorkspaceUI/chunks/chunk-SENOILCD.js.LEGAL.txt
+$(SRCROOT)/sources/FileWorkspace/Resources/FileWorkspaceUI/chunks/chunk-V7E6HHCL.js
 $(SRCROOT)/sources/FileWorkspace/Resources/FileWorkspaceUI/chunks/chunk-VC46IEJQ.js
 $(SRCROOT)/sources/FileWorkspace/Resources/FileWorkspaceUI/chunks/chunk-VLHO5PAB.js
 $(SRCROOT)/sources/FileWorkspace/Resources/FileWorkspaceUI/chunks/chunk-XXSLXSM2.js
@@ -60,7 +60,7 @@ $(SRCROOT)/sources/FileWorkspace/Resources/FileWorkspaceUI/chunks/cypher-P42G5O6
 $(SRCROOT)/sources/FileWorkspace/Resources/FileWorkspaceUI/chunks/dart-MMDKJOGH.js
 $(SRCROOT)/sources/FileWorkspace/Resources/FileWorkspaceUI/chunks/dockerfile-OUGZO3ZZ.js
 $(SRCROOT)/sources/FileWorkspace/Resources/FileWorkspaceUI/chunks/ecl-DD366YRU.js
-$(SRCROOT)/sources/FileWorkspace/Resources/FileWorkspaceUI/chunks/editor-4AR2HRTO.js
+$(SRCROOT)/sources/FileWorkspace/Resources/FileWorkspaceUI/chunks/editor-MXV4FVTJ.js
 $(SRCROOT)/sources/FileWorkspace/Resources/FileWorkspaceUI/chunks/editor-Y4BFK3PW.css
 $(SRCROOT)/sources/FileWorkspace/Resources/FileWorkspaceUI/chunks/elixir-HQALYWIX.js
 $(SRCROOT)/sources/FileWorkspace/Resources/FileWorkspaceUI/chunks/flow9-HG2PDBRJ.js

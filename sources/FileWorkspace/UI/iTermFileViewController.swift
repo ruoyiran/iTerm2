@@ -133,7 +133,9 @@ import AppKit
         case .save, .undo, .redo: return ready && !status.isReadOnly && !composing
         case .cut, .paste: return rendererReady && previewController == nil && !status.isReadOnly && !composing
         case .copy: return previewController?.hasSelection ?? (rendererReady && selection)
-        case .find, .findNext, .findPrevious, .selectAll: return rendererReady && previewController == nil
+        case .find, .findNext, .findPrevious:
+            return previewController?.canPerform(command) ?? rendererReady
+        case .selectAll: return rendererReady && previewController == nil
         case .toggleMarkdownPreview: return snapshot?.kind == .markdown && snapshot?.text != nil
         case .saveAs: return snapshot?.text != nil
         case .pin: return preview
@@ -154,6 +156,9 @@ import AppKit
                     self.renderer?.isHidden = false; self.resumeEditing(); self.setVisible(true)
                 }; self.delegate?.fileView(self, didChangeViewState: self.cachedViewState)
             }
+        case .find, .findNext, .findPrevious:
+            if let controller = previewController { controller.perform(command) }
+            else { renderer?.send("command", payload: ["command": command.wireName]) }
         case .cut, .copy: if command == .copy, let controller = previewController { controller.copySelection() } else { renderer?.send("copySelection", payload: ["cut": command == .cut]) }
         case .paste: if let text = NSPasteboard.general.string(forType: .string), text.utf8.count <= 10 * 1024 * 1024 { renderer?.send("paste", payload: ["text": text]) }
         default: renderer?.send("command", payload: ["command": command.wireName])

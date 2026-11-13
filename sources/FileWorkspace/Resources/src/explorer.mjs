@@ -44,10 +44,12 @@ export class Explorer {
   cancelSearch() {if(this.state.searchIdentifier)this.send('cancelSearch',{identifier:this.state.searchIdentifier});this.state.searchIdentifier=null;this.state.searching=false;}
   search(mode) {
     if(!this.scope)return;this.cancelSearch();const value=(mode==='names'?this.names:this.contents).value;
-    if(!value){this.state.nameResults=null;this.state.matches.clear();this.render();return;}
+    this.state.error=null;if(!value){this.state.nameResults=null;this.state.matches.clear();this.render();return;}
+    const globs=input=>input.value.split(',').map(s=>s.trim()).filter(Boolean),includeGlobs=globs(this.include),excludeGlobs=globs(this.exclude);
+    const filters=mode==='contents'?[...includeGlobs,...excludeGlobs]:[];
+    if(filters.length>128||[value,...filters].some(text=>new TextEncoder().encode(text).length>2048)){this.state.error=this.t('searchTooLong');this.render();return;}
     const id=crypto.randomUUID();this.resultFocus=null;this.state.startSearch(id,mode==='names');
-    const globs=input=>input.value.split(',').map(s=>s.trim()).filter(Boolean);
-    this.send(mode==='names'?'searchNames':'searchContents',mode==='names'?{query:value}:{query:{text:value,...this.flags,includeGlobs:globs(this.include),excludeGlobs:globs(this.exclude)}},id);this.render();
+    this.send(mode==='names'?'searchNames':'searchContents',mode==='names'?{query:value}:{query:{text:value,...this.flags,includeGlobs,excludeGlobs}},id);this.render();
   }
   list(path) { const id=crypto.randomUUID();this.state.begin(id,path);this.send('listDirectory',{directoryPath:path},id); }
   refresh() {
@@ -137,9 +139,9 @@ export class Explorer {
   }
   key(event) {
     if(event.isComposing||this.composing||['INPUT','TEXTAREA'].includes(event.target.tagName))return;
+    if((event.metaKey||event.ctrlKey)&&event.key.toLowerCase()==='z'){event.preventDefault();this.send(event.shiftKey?'redo':'undo',{});return;}
     if(this.mode==='contents'){this.resultKey(event);return;}
     const current=this.focused??this.state.rows()[0]?.path;const row=this.state.rows().find(r=>r.path===current);if(!row)return;
-    if((event.metaKey||event.ctrlKey)&&event.key.toLowerCase()==='z'){event.preventDefault();this.send(event.shiftKey?'redo':'undo',{});return;}
     if((event.metaKey||event.ctrlKey)&&event.key.toLowerCase()==='c'){event.preventDefault();this.send(event.shiftKey?'copyRelativePaths':'copyAbsolutePaths',{paths:[...this.state.selected]});return;}
     if(event.key==='Backspace'&&(event.metaKey||event.ctrlKey)||event.key==='Delete'){event.preventDefault();this.send('trash',{paths:[...this.state.selected]});return;}
     if(event.key==='Enter'){event.preventDefault();this.inline('rename',row);return;}

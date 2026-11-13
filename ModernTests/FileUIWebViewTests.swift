@@ -1,5 +1,6 @@
 import AppKit
 import WebKit
+import PDFKit
 import XCTest
 import Darwin
 @testable import iTerm2SharedARC
@@ -14,6 +15,95 @@ final class FileUIWebViewTests: XCTestCase, FileUIWebViewDelegate {
 
 
 
+
+ private func descendants(_ view: NSView) -> [NSView] {
+  [view] + view.subviews.flatMap { descendants($0) }
+ }
+ private func withPreview(_ name: String, data: Data, body: (iTermFileViewController) throws -> Void) throws {
+  let dir=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+  try FileManager.default.createDirectory(at:dir,withIntermediateDirectories:true)
+  defer {try? FileManager.default.removeItem(at:dir)}
+  let path=dir.appendingPathComponent(name);try data.write(to:path)
+  let store=iTermFileDocumentStore(storageDirectory:dir.appendingPathComponent("drafts"))
+  let opened=expectation(description:"open preview fixture");var snapshot:iTermFileDocumentSnapshot?
+  store.openFile(atPath:path.path){value,error in XCTAssertNil(error);snapshot=value;opened.fulfill()};wait(for:[opened],timeout:5)
+  let runtime=iTermFileWorkspaceUIRuntime(documentStore:store)
+  let controller=iTermFileViewController(runtime:runtime,viewIdentifier:UUID().uuidString)
+  defer {controller.shutdown();runtime.shutdown()}
+  controller.view.frame=NSRect(x:0,y:0,width:640,height:480)
+  controller.applyDocumentChanges(try XCTUnwrap(snapshot),edits:nil);controller.setVisible(true)
+  try body(controller)
+ }
+ func testImagePreviewZoomControlsChangeMagnification() throws {
+  let bitmap=try XCTUnwrap(NSBitmapImageRep(bitmapDataPlanes:nil,pixelsWide:4096,pixelsHigh:4096,bitsPerSample:8,samplesPerPixel:4,hasAlpha:true,isPlanar:false,colorSpaceName:.deviceRGB,bytesPerRow:0,bitsPerPixel:0))
+  try withPreview("zoom.png",data:try XCTUnwrap(bitmap.representation(using:.png,properties:[:]))) {controller in
+   let observer=FileUIViewObserver();var focusCount=0;observer.focused={focusCount += 1};controller.delegate=observer
+   let loaded=XCTNSPredicateExpectation(predicate:NSPredicate {_,_ in self.descendants(controller.view).contains {$0 is NSImageView}},object:nil)
+   wait(for:[loaded],timeout:5)
+   let scroll=try XCTUnwrap(descendants(controller.view).compactMap {$0 as? NSScrollView}.first)
+   XCTAssertTrue(scroll.allowsMagnification)
+   let zoom=try XCTUnwrap(descendants(controller.view).compactMap {$0 as? NSButton}.first {$0.identifier?.rawValue == "file-preview-zoom-in"})
+   controller.view.frame=NSRect(x:0,y:0,width:240,height:150);controller.view.layoutSubtreeIfNeeded()
+   let fit=try XCTUnwrap(descendants(controller.view).compactMap {$0 as? NSButton}.first {$0.identifier?.rawValue == "file-preview-image-fit"})
+   fit.performClick(nil)
+   let image=try XCTUnwrap(scroll.documentView as? NSImageView)
+   XCTAssertLessThanOrEqual(image.bounds.width * scroll.magnification,scroll.contentSize.width + 1)
+   XCTAssertLessThanOrEqual(image.bounds.height * scroll.magnification,scroll.contentSize.height + 1)
+   let initial=scroll.magnification;zoom.performClick(nil)
+   XCTAssertGreaterThan(scroll.magnification,initial);XCTAssertEqual(focusCount,2)
+  }
+ }
+ func testPDFPreviewFindCommandsNavigateMatchesAcrossPages() throws {
+  let data=NSMutableData(),consumer=try XCTUnwrap(CGDataConsumer(data:data))
+  var box=CGRect(x:0,y:0,width:300,height:300)
+  let context=try XCTUnwrap(CGContext(consumer:consumer,mediaBox:&box,nil))
+  for text in ["alpha first", "unrelated", "alpha last"] {
+   context.beginPDFPage(nil);NSGraphicsContext.saveGraphicsState()
+   NSGraphicsContext.current=NSGraphicsContext(cgContext:context,flipped:false)
+   (text as NSString).draw(at:NSPoint(x:20,y:200),withAttributes:[.font:NSFont.systemFont(ofSize:18)])
+   NSGraphicsContext.restoreGraphicsState();context.endPDFPage()
+  }
+  context.closePDF()
+  try withPreview("find.pdf",data:data as Data) {controller in
+   let observer=FileUIViewObserver();var focusCount=0;observer.focused={focusCount += 1};controller.delegate=observer
+   let loaded=XCTNSPredicateExpectation(predicate:NSPredicate {_,_ in self.descendants(controller.view).contains {$0 is PDFView}},object:nil)
+   wait(for:[loaded],timeout:5)
+   XCTAssertTrue(controller.canPerform(.find));controller.perform(.find)
+   let pdf=try XCTUnwrap(descendants(controller.view).compactMap {$0 as? PDFView}.first)
+   let field=try XCTUnwrap(descendants(controller.view).compactMap {$0 as? NSSearchField}.first)
+   field.stringValue="alpha";_ = field.target?.perform(try XCTUnwrap(field.action),with:field)
+   let found=XCTNSPredicateExpectation(predicate:NSPredicate {_,_ in pdf.currentSelection?.string == "alpha" && pdf.document?.isFinding == false},object:nil)
+   wait(for:[found],timeout:5);XCTAssertEqual(focusCount,1)
+   XCTAssertTrue(controller.canPerform(.findNext));XCTAssertTrue(controller.canPerform(.findPrevious))
+   XCTAssertEqual(pdf.document?.index(for:try XCTUnwrap(pdf.currentSelection?.pages.first)),0)
+   controller.perform(.findNext)
+   XCTAssertEqual(pdf.document?.index(for:try XCTUnwrap(pdf.currentSelection?.pages.first)),2)
+   controller.perform(.findPrevious)
+   XCTAssertEqual(pdf.document?.index(for:try XCTUnwrap(pdf.currentSelection?.pages.first)),0)
+  }
+ }
+
+ func testPDFSearchBoundsLargeResultSets() throws {
+  let data=NSMutableData(),consumer=try XCTUnwrap(CGDataConsumer(data:data))
+  var box=CGRect(x:0,y:0,width:2400,height:2200)
+  let context=try XCTUnwrap(CGContext(consumer:consumer,mediaBox:&box,nil));context.beginPDFPage(nil)
+  NSGraphicsContext.saveGraphicsState();NSGraphicsContext.current=NSGraphicsContext(cgContext:context,flipped:false)
+  for row in 0..<100 {
+   (String(repeating:"alpha ",count:51) as NSString).draw(at:NSPoint(x:10,y:2180-row*20),withAttributes:[.font:NSFont.systemFont(ofSize:8)])
+  }
+  NSGraphicsContext.restoreGraphicsState();context.endPDFPage();context.closePDF()
+  try withPreview("many.pdf",data:data as Data) {controller in
+   let loaded=XCTNSPredicateExpectation(predicate:NSPredicate {_,_ in self.descendants(controller.view).contains {$0 is PDFView}},object:nil);wait(for:[loaded],timeout:5)
+   let pdf=try XCTUnwrap(descendants(controller.view).compactMap {$0 as? PDFView}.first)
+   let document=try XCTUnwrap(pdf.document),field=try XCTUnwrap(descendants(controller.view).compactMap {$0 as? NSSearchField}.first)
+   XCTAssertEqual(document.string?.components(separatedBy:"alpha").count,5101)
+   let observer=PDFSearchObserver(downstream:try XCTUnwrap(document.delegate));document.delegate=observer
+   field.stringValue="alpha";_ = field.target?.perform(try XCTUnwrap(field.action),with:field)
+   let found=XCTNSPredicateExpectation(predicate:NSPredicate {_,_ in observer.emittedMatches>0 && !document.isFinding},object:nil);wait(for:[found],timeout:10)
+   XCTAssertLessThanOrEqual(observer.emittedMatches,5000)
+   XCTAssertTrue(descendants(controller.view).compactMap {$0 as? NSTextField}.contains {$0.stringValue.contains("5000+")})
+  }
+ }
 
  private func withEditor(_ body: (iTermFileViewController, iTermFileDocumentStore, iTermFileDocumentSnapshot, iTermFileWorkspaceUIRuntime, iTermFileWorkspaceWebView) throws -> Void) throws {
   let dir=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -305,7 +395,8 @@ final class FileUIWebViewTests: XCTestCase, FileUIWebViewDelegate {
 private final class FileUIViewObserver: NSObject, iTermFileViewControllerDelegate {
  var changed: ((iTermFileViewStatus) -> Void)?
  var requested: ((iTermFileViewCommand) -> Void)?
- func fileViewDidReceiveFocus(_ controller: iTermFileViewController) {}
+ var focused: (() -> Void)?
+ func fileViewDidReceiveFocus(_ controller: iTermFileViewController) { focused?() }
  func fileView(_ controller: iTermFileViewController, didChangeStatus status: iTermFileViewStatus) { changed?(status) }
  func fileView(_ controller: iTermFileViewController, didChangeViewState state: iTermFileViewState) {}
  func fileViewDidRequestPin(_ controller: iTermFileViewController) {}
@@ -320,3 +411,11 @@ private final class FileUIBrowserObserver: NSObject, iTermFileBrowserViewControl
  func fileBrowserDidReceiveFocus(_ controller: iTermFileBrowserViewController) {}
 }
 private final class WeakFileUIWebView { weak var value:iTermFileWorkspaceWebView?; init(_ value:iTermFileWorkspaceWebView) {self.value=value} }
+
+private final class PDFSearchObserver: NSObject, PDFDocumentDelegate {
+ let downstream: PDFDocumentDelegate
+ var emittedMatches=0
+ init(downstream: PDFDocumentDelegate) { self.downstream=downstream }
+ func didMatchString(_ instance: PDFSelection) { emittedMatches += 1;downstream.didMatchString?(instance) }
+ func documentDidEndDocumentFind(_ notification: Notification) { downstream.documentDidEndDocumentFind?(notification) }
+}

@@ -10,7 +10,7 @@
     {
       "path": "app.js",
       "bytes": 2154,
-      "sha256": "5856d052a9cd5e237788cee9e8bace48bd2526ebfbc9b0e0d8892b27b7177e98",
+      "sha256": "db94f6f30fd3fffc542107bf23591d4e007a81feb884961791a90e156d34961d",
       "mime": "text/javascript; charset=utf-8"
     },
     {
@@ -74,12 +74,6 @@
       "mime": "text/javascript; charset=utf-8"
     },
     {
-      "path": "chunks/chunk-DCM5NK4S.js",
-      "bytes": 23390,
-      "sha256": "553bd9a7dcd3cd0bb9465b7a39e6f8baa41d1edd3a379ab6e8b437ed8f67834c",
-      "mime": "text/javascript; charset=utf-8"
-    },
-    {
       "path": "chunks/chunk-E5KL7K2E.js",
       "bytes": 4895,
       "sha256": "45bb33fe02e337b5dea4ba3f43076a2263065a871357e0ae65400a5629d0ddcb",
@@ -108,6 +102,12 @@
       "bytes": 278,
       "sha256": "500520d9d47c2d50feb0216c6950b602104a9e513c1a45a34d9a0314f2d0ea51",
       "mime": "text/plain; charset=utf-8"
+    },
+    {
+      "path": "chunks/chunk-V7E6HHCL.js",
+      "bytes": 23590,
+      "sha256": "528a8e5b41849d8414d71dafe1aacaa84ae92ea0827cad16f09692c1f95ef8c5",
+      "mime": "text/javascript; charset=utf-8"
     },
     {
       "path": "chunks/chunk-VC46IEJQ.js",
@@ -212,9 +212,9 @@
       "mime": "text/javascript; charset=utf-8"
     },
     {
-      "path": "chunks/editor-4AR2HRTO.js",
+      "path": "chunks/editor-MXV4FVTJ.js",
       "bytes": 62465,
-      "sha256": "449d7cea14540059df45de94876de803a6237324d1a1298dc832c1f4677f106d",
+      "sha256": "2e6b248e1e19c108d507eba09fc4c199a2782730e4f462fb6fe01c3fa8086b90",
       "mime": "text/javascript; charset=utf-8"
     },
     {
@@ -901,7 +901,7 @@
     },
     {
       "path": "sources/FileWorkspace/Resources/src/explorer.mjs",
-      "sha256": "1e051d0d5904b5ad9510dba215dd8efba5f267c09b32c0c269de19aab111c7db"
+      "sha256": "87e5773bad521783916d6531f0c4714b9835c9ba9a1849efb6dd505cb95ce703"
     },
     {
       "path": "sources/FileWorkspace/Resources/src/tree-state.mjs",
