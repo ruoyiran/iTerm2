@@ -10,7 +10,7 @@
     {
       "path": "app.js",
       "bytes": 2154,
-      "sha256": "db94f6f30fd3fffc542107bf23591d4e007a81feb884961791a90e156d34961d",
+      "sha256": "7efd2fd3d62a5a626c15c5019faebdfe9c14c3f92d06f6d56f68071e8f108041",
       "mime": "text/javascript; charset=utf-8"
     },
     {
@@ -104,12 +104,6 @@
       "mime": "text/plain; charset=utf-8"
     },
     {
-      "path": "chunks/chunk-V7E6HHCL.js",
-      "bytes": 23590,
-      "sha256": "528a8e5b41849d8414d71dafe1aacaa84ae92ea0827cad16f09692c1f95ef8c5",
-      "mime": "text/javascript; charset=utf-8"
-    },
-    {
       "path": "chunks/chunk-VC46IEJQ.js",
       "bytes": 106,
       "sha256": "ff9e0dca4365b7b1581e7275f3c6dbcf1474ffb874d81a3375ecf7a835dbaa6f",
@@ -119,6 +113,12 @@
       "path": "chunks/chunk-VLHO5PAB.js",
       "bytes": 4435,
       "sha256": "146155b165e24bc608fba71cf4812ac2490d2a32f14adce43516a423916abdee",
+      "mime": "text/javascript; charset=utf-8"
+    },
+    {
+      "path": "chunks/chunk-XLAIJ5TE.js",
+      "bytes": 25739,
+      "sha256": "929a3dcc70a1343b5a02e7ebd0211ee07cf38bc2c728863161ba0a5bc5a7dbe0",
       "mime": "text/javascript; charset=utf-8"
     },
     {
@@ -212,9 +212,9 @@
       "mime": "text/javascript; charset=utf-8"
     },
     {
-      "path": "chunks/editor-MXV4FVTJ.js",
+      "path": "chunks/editor-SMLEDQUU.js",
       "bytes": 62465,
-      "sha256": "2e6b248e1e19c108d507eba09fc4c199a2782730e4f462fb6fe01c3fa8086b90",
+      "sha256": "d2573533def4712b43cff9721eb7e8e24e23425a26c99194b7c99dcea4c5a1e5",
       "mime": "text/javascript; charset=utf-8"
     },
     {
@@ -901,11 +901,11 @@
     },
     {
       "path": "sources/FileWorkspace/Resources/src/explorer.mjs",
-      "sha256": "87e5773bad521783916d6531f0c4714b9835c9ba9a1849efb6dd505cb95ce703"
+      "sha256": "8c3638b74c17dd86baacd8538805942da6200b61e87939a6dd56e7ae7ef36fa4"
     },
     {
       "path": "sources/FileWorkspace/Resources/src/tree-state.mjs",
-      "sha256": "ca9689c9c61c6548c1c3ab0ce6ab7bbaf3d06773232010c537fd3a033c2661ae"
+      "sha256": "578a93e78e379177c806d204a174ce18be6aa8c45a1f6a000f6090260ba4d846"
     },
     {
       "path": "tools/file-workspace-ui/build.mjs",

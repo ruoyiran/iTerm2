@@ -87,6 +87,10 @@ import AppKit
         guard surfaceReady, let renderer = renderer, let contents = pendingQueryFocus else { return }
         pendingQueryFocus = nil; renderer.send("focusQuery", payload: ["contents": contents])
     }
+    func applyFilesystemChanges(_ paths: [String], rescanDirectories: [String], context: iTermFileBrowserContext) {
+        guard context === self.context, surfaceReady, visible else { return }
+        renderer?.send("filesystemChanges", payload: ["token": token, "paths": paths, "rescanDirectories": rescanDirectories])
+    }
     func refresh() { if surfaceReady && visible { renderer?.send("refresh") } }
     func shutdown() { guard !stopped else { return }; stopped = true; setVisible(false); acquisition?.cancel(); acquisition = nil; renderer = nil; requests.removeAll(); delegate = nil }
     @nonobjc func fileUIWebViewReady(_ webView: iTermFileWorkspaceWebView) {

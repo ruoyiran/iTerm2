@@ -7,6 +7,11 @@ import XCTest
 final class FileSessionTests: XCTestCase {
     func testWorkspaceBrowserBackendRoundTripAndPausedSurfacePreserveQuery() throws {
         let f = try Fixture(); defer { f.cleanup() }
+        let git = Process(); git.executableURL = URL(fileURLWithPath: "/usr/bin/git"); git.arguments = ["-C", f.root.path, "init", "-q"]
+        git.standardOutput = FileHandle.nullDevice; git.standardError = FileHandle.nullDevice
+        try git.run(); git.waitUntilExit(); XCTAssertEqual(git.terminationStatus, 0)
+        let cacheDirectory = f.root.appendingPathComponent("Library/Caches")
+        try FileManager.default.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
         let browser = iTermFileBrowserCoordinator(native: f.coordinator); defer { browser.shutdown() }
         let other = iTermFileBrowserCoordinator(native: f.coordinator); defer { other.shutdown() }
         let context = iTermFileBrowserContext(rootDirectory: f.root.path, projectIdentifier: "project", worktreeIdentifier: "", generation: 1)
@@ -24,6 +29,20 @@ final class FileSessionTests: XCTestCase {
         }
         let rows = "return new Promise(resolve => { const check = () => { const row = [...document.querySelectorAll('[data-path]')].find(r => r.dataset.path === path); if (row) { observer.disconnect(); resolve(row.textContent); } }; const observer = new MutationObserver(check); observer.observe(document.body, {childList:true,subtree:true}); check(); });"
         XCTAssertNotNil(try evaluate(rows, arguments: ["path": f.file.path]))
+        _ = try evaluate("window.stableRow=document.querySelector('[data-path]'); window.quietChangeSeen=new Promise(resolve => { const original=window.fileWorkspace.receive; window.fileWorkspace.receive=async function(message) { await original.call(this,message); if(message.type==='filesystemChanges') { window.fileWorkspace.receive=original; resolve(true); } }; }); return true;")
+        let backgroundFile = cacheDirectory.appendingPathComponent("background.log")
+        try Data("background".utf8).write(to: backgroundFile)
+        browser.filesystemChanged([backgroundFile.path])
+        XCTAssertEqual(try evaluate("return window.quietChangeSeen;") as? Bool, true)
+        XCTAssertEqual(try evaluate("return window.stableRow===document.querySelector('[data-path]');") as? Bool, true)
+        let external = f.root.appendingPathComponent("external.txt")
+        try Data("outside edit".utf8).write(to: external)
+        browser.filesystemChanged([external.path])
+        XCTAssertNotNil(try evaluate(rows, arguments: ["path": external.path]))
+        _ = try evaluate("window.hiddenRuleChanged=new Promise(resolve => { const observer=new MutationObserver(() => { if(![...document.querySelectorAll('[data-path]')].some(row=>row.dataset.path===path)){observer.disconnect();resolve(true);} }); observer.observe(document.body,{childList:true,subtree:true}); }); return true;", arguments: ["path": external.path])
+        let ignore = f.root.appendingPathComponent(".gitignore"); try Data("external.txt\n".utf8).write(to: ignore)
+        browser.filesystemChanged([ignore.path])
+        XCTAssertEqual(try evaluate("return window.hiddenRuleChanged;") as? Bool, true)
         let pane = f.open("shared")
         // A second explorer activation must not reset the first backend's context.
         other.applyContext(iTermFileBrowserContext(rootDirectory: f.root.path, projectIdentifier: "other", worktreeIdentifier: "", generation: 2))

@@ -5,7 +5,7 @@ export function button(label, action, symbol) { const b=element('button','icon-b
 const parentPath=path=>path.slice(0,path.lastIndexOf('/'))||'/';
 export class Explorer {
   constructor(root, send, translate) {
-    this.root=root;this.contextReady=false;this.root.inert=true;this.send=(type,payload,id)=>this.contextReady?send(type,payload,id):null;this.t=translate;this.state=new TreeState();this.mode='names';this.collapsed=new Set();this.focused=null;this.resultFocus=null;this.rows=[];this.composing=false;this.nameTimer=null;this.scope=null;
+    this.root=root;this.contextReady=false;this.root.inert=true;this.send=(type,payload,id)=>this.contextReady?send(type,payload,id):null;this.t=translate;this.state=new TreeState();this.mode='names';this.collapsed=new Set();this.focused=null;this.resultFocus=null;this.rows=[];this.composing=false;this.nameTimer=null;this.scope=null;this.pendingDirectoryChanges=new Set();
     this.build();this.focusHandler=()=>this.send('focus',{});this.root.addEventListener('focusin',this.focusHandler);
   }
   build() {
@@ -51,16 +51,40 @@ export class Explorer {
     const id=crypto.randomUUID();this.resultFocus=null;this.state.startSearch(id,mode==='names');
     this.send(mode==='names'?'searchNames':'searchContents',mode==='names'?{query:value}:{query:{text:value,...this.flags,includeGlobs,excludeGlobs}},id);this.render();
   }
+  filesystemChanges(payload) {
+    const root=this.scope?.rootDirectory;if(!root||payload.token!==this.scope.token)return;
+    const shown=new Set([root,...this.state.rows().filter(row=>row.isExpandable&&this.state.expanded.has(row.path)).map(row=>row.path)]);
+    const changed=new Set();
+    for(const path of payload.paths??[]) {
+      if(path!==root&&!path.startsWith(root==='/'?'/':root+'/'))continue;
+      if(!this.scope.showsHiddenFiles&&path.slice(root.length).split('/').some(part=>part.startsWith('.')))continue;
+      if(path===root){for(const directory of this.state.directories.keys())changed.add(directory);changed.add(root);}
+      else {
+        changed.add(parentPath(path));
+        for(const directory of this.state.directories.keys())if(directory===path||directory.startsWith(path+'/')) {
+          if(shown.has(directory))this.pendingDirectoryChanges.add(directory);else this.state.directories.delete(directory);
+        }
+      }
+    }
+    for(const directory of payload.rescanDirectories??[])if(directory===root||directory.startsWith(root==='/'?'/':root+'/')) {
+      changed.add(directory);for(const cached of this.state.directories.keys())if(cached.startsWith(directory+'/'))changed.add(cached);
+    }
+    for(const directory of changed) {
+      if(!shown.has(directory)){this.state.directories.delete(directory);continue;}
+      if([...this.state.pending.values()].includes(directory)){this.pendingDirectoryChanges.add(directory);continue;}
+      this.list(directory);
+    }
+  }
   list(path) { const id=crypto.randomUUID();this.state.begin(id,path);this.send('listDirectory',{directoryPath:path},id); }
   refresh() {
-    if(!this.scope)return;this.cancelSearch();this.state.pending.clear();this.state.error=null;this.refreshing=true;
+    if(!this.scope)return;this.cancelSearch();this.pendingDirectoryChanges.clear();this.state.pending.clear();this.state.error=null;this.refreshing=true;
     this.send('refresh',{directoryPath:this.scope.rootDirectory});this.list(this.scope.rootDirectory);
     if((this.mode==='names'?this.names:this.contents).value)this.search(this.mode);this.render();
   }
   reloadExpanded(entries) {
-    for(const row of entries??[])if(row.isExpandable&&this.state.expanded.has(row.path)&&!this.state.directories.has(row.path)&&![...this.state.pending.values()].includes(row.path))this.list(row.path);
+    for(const row of entries??[])if(row.isExpandable&&this.state.expanded.has(row.path)&&![...this.state.pending.values()].includes(row.path)&&(!this.state.directories.has(row.path)||this.pendingDirectoryChanges.delete(row.path)))this.list(row.path);
   }
-  toggle(row) {if(!row.isExpandable)return;this.state.toggle(row.path);if(this.state.expanded.has(row.path)&&!this.state.directories.has(row.path))this.list(row.path);this.render();}
+  toggle(row) {if(!row.isExpandable)return;this.state.toggle(row.path);if(this.state.expanded.has(row.path)&&(!this.state.directories.has(row.path)||this.pendingDirectoryChanges.delete(row.path)))this.list(row.path);this.render();}
   open(row,activation='preview',placement='tab',lineNumber=0,utf16Column=0) { if(row.isDirectory){this.toggle(row);return;}this.send('openFile',{path:row.path,activation,placement,lineNumber,utf16Column}); }
   contextKey(scope) {return scope?.rootDirectory?JSON.stringify([scope.projectIdentifier,scope.worktreeIdentifier,scope.rootDirectory]):null;}
   rememberContext() {
@@ -78,7 +102,7 @@ export class Explorer {
     this.invalidateTransientUI();this.cancelSearch();this.contextReady=false;this.root.inert=true;
   }
   changeContext(payload) {
-    this.invalidateTransientUI();this.cancelSearch();this.rememberContext();this.resultFocus=null;this.scope=payload.rootDirectory?payload:null;
+    this.invalidateTransientUI();this.cancelSearch();this.pendingDirectoryChanges.clear();this.rememberContext();this.resultFocus=null;this.scope=payload.rootDirectory?payload:null;
     const saved=this.recentContexts.get(this.contextKey(this.scope));this.recentContexts.delete(this.contextKey(this.scope));
     this.state=saved?.state??new TreeState();this.state.scope=this.scope;this.state.pending.clear();
     this.title.textContent=payload.title||this.t('selectProject');this.names.value=saved?.names??'';this.contents.value=saved?.contents??'';
@@ -90,8 +114,15 @@ export class Explorer {
   receive(type,payload) {
     if(type==='context') this.changeContext(payload);
     if(type==='refresh') this.refresh();
+    if(type==='filesystemChanges'){this.filesystemChanges(payload);return;}
     if(type==='listing'&&this.refreshing&&payload.token===this.scope?.token&&payload.directoryPath===this.scope.rootDirectory&&this.state.pending.get(payload.requestIdentifier)===payload.directoryPath){this.state.directories.clear();this.refreshing=false;}
-    if(type==='listing'&&this.state.listing(payload.token,payload.requestIdentifier,payload.directoryPath,payload.entries,payload.error)&&!payload.error)this.reloadExpanded(payload.entries);
+    if(type==='listing'&&this.state.listing(payload.token,payload.requestIdentifier,payload.directoryPath,payload.entries,payload.error)) {
+      if(!payload.error)this.reloadExpanded(payload.entries);
+      for(const directory of this.pendingDirectoryChanges)if(directory!==this.scope?.rootDirectory&&!this.state.directories.has(directory)&&!this.state.expanded.has(directory))this.pendingDirectoryChanges.delete(directory);
+      if(this.pendingDirectoryChanges.has(payload.directoryPath)&&![...this.state.pending.values()].includes(parentPath(payload.directoryPath))) {
+        this.pendingDirectoryChanges.delete(payload.directoryPath);this.list(payload.directoryPath);
+      }
+    }
     if(type==='search')this.state.search(payload.token,payload.requestIdentifier,payload);
     if(type==='complete'){if(payload.error)this.state.error=payload.error;if(payload.requestIdentifier===this.formRequest){this.formRequest=null;if(!payload.error){this.form?.remove();this.form=null;}}}
     if(type==='operationState')this.operations=payload;
@@ -106,7 +137,7 @@ export class Explorer {
     } else for(const row of this.state.rows()){this.rows.push({kind:'entry',row,top:height,height:26});height+=26;}
     this.canvas.style.height=`${height}px`;
     this.summary.hidden=this.mode!=='contents'||!this.state.matches.size;const matches=[...this.state.matches.values()].reduce((sum,group)=>sum+group.lines.reduce((count,line)=>count+line.ranges.length,0),0);this.summary.replaceChildren(element('span','',this.t('results')),element('strong','',new Intl.NumberFormat().format(matches)),element('span','',this.t('files')),element('strong','',new Intl.NumberFormat().format(this.state.matches.size)));
-    const s=this.state;const failedDirectory=[...s.directories.entries()].find(([,value])=>value.error);this.status.textContent=s.error||failedDirectory?.[1].error||(!this.scope?this.t('selectProject'):s.searching||s.pending.size?this.t('loading'):s.truncated?this.t('truncated'):s.skipped?this.t('skipped'):this.rows.length?'':this.mode==='contents'?(this.contents.value?this.t('noResults'):this.t('typeSearch')):this.t('empty'));
+    const s=this.state;const failedDirectory=[...s.directories.entries()].find(([,value])=>value.error);this.status.textContent=s.error||failedDirectory?.[1].error||(!this.scope?this.t('selectProject'):s.searching||this.refreshing||[...s.pending.values()].some(path=>!s.directories.has(path))?this.t('loading'):s.truncated?this.t('truncated'):s.skipped?this.t('skipped'):this.rows.length?'':this.mode==='contents'?(this.contents.value?this.t('noResults'):this.t('typeSearch')):this.t('empty'));
     if(failedDirectory){const retry=button(this.t('retry'),()=>{s.directories.delete(failedDirectory[0]);this.list(failedDirectory[0]);this.render();});retry.dataset.retry='true';this.status.append(retry);}this.status.hidden=!this.status.textContent;this.renderRows();
   }
   renderRows() {

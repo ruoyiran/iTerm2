@@ -3,7 +3,7 @@ import AppKit
 @objcMembers final class iTermToolFileTree: NSView, ToolbeltTool {
     var rootDirectory: String?
     var browserContext: iTermFileBrowserContext? {
-        didSet { guard browserContext !== oldValue else { return }; binding.applyContext(browserContext); updateVisibility() }
+        didSet { guard browserContext !== oldValue else { return }; refreshGeneration &+= 1; refreshWork?.cancel(); pendingChanges.removeAll(); binding.applyContext(browserContext); updateVisibility() }
     }
     var activeBrowserContext: iTermFileBrowserContext? { visible && !stopped ? binding.context : nil }
     var openTerminal: ((String, iTermOpenStyle) -> Void)?
@@ -13,6 +13,8 @@ import AppKit
     private var watcher: iTermFileTreeWatcher?
     private var observers = [NSObjectProtocol]()
     private var refreshWork: DispatchWorkItem?
+    private var refreshGeneration: UInt64 = 0
+    private var pendingChanges = Set<String>()
     private var stopped = false
     private var visible = false
     override init(frame: NSRect) {
@@ -20,13 +22,19 @@ import AppKit
         super.init(frame: frame)
         addSubview(binding.controller.view)
         binding.nativeRequest = { [weak self] request in self?.nativeRequest?(request) }
-        watcher = iTermFileTreeWatcher { [weak self] root, _ in
+        watcher = iTermFileTreeWatcher { [weak self] root, paths in
             guard let self, self.visible, self.browserContext?.rootDirectory == root else { return }
-            self.refreshWork?.cancel()
+            self.refreshWork?.cancel(); self.refreshGeneration &+= 1
+            if !self.pendingChanges.contains(root) {
+                self.pendingChanges.formUnion(paths)
+                if self.pendingChanges.count > 2048 { self.pendingChanges = [root] }
+            }
+            let generation = self.refreshGeneration
             let context = self.browserContext
             let work = DispatchWorkItem { [weak self] in
-                guard let self, self.visible, self.browserContext === context else { return }
-                self.binding.refresh()
+                guard let self, self.visible, self.browserContext === context, self.refreshGeneration == generation else { return }
+                let changes = Array(self.pendingChanges); self.pendingChanges.removeAll()
+                self.binding.filesystemChanged(changes)
             }
             self.refreshWork = work
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: work)
@@ -59,7 +67,7 @@ import AppKit
         visible = !stopped && !isHiddenOrHasHiddenAncestor && window?.isVisible == true && window?.isMiniaturized == false && window?.occlusionState.contains(.visible) == true
         binding.setVisible(visible)
         if visible, let root = browserContext?.rootDirectory { watcher?.watch(root: root) }
-        else { watcher?.stop(); refreshWork?.cancel() }
+        else { watcher?.stop(); refreshWork?.cancel(); refreshGeneration &+= 1; pendingChanges.removeAll() }
     }
     func shutdown() {
         guard !stopped else { return }; stopped = true; watcher?.stop(); refreshWork?.cancel(); binding.shutdown()

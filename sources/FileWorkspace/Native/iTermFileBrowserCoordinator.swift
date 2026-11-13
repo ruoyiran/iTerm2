@@ -56,6 +56,42 @@ import AppKit
             }
         }
     }
+    func filesystemChanged(_ paths: [String]) {
+        guard visible, let context else { return }
+        let root = context.rootDirectory, owner = base?.rootDirectory ?? context.rootDirectory
+        let owned = paths.filter { $0 == owner || $0.hasPrefix(owner == "/" ? "/" : owner + "/") }
+        var rescans = Set(owned.filter { root.hasPrefix($0 + "/") }.map { _ in root })
+        for path in owned where !context.showsGitIgnoredFiles {
+            let parts = path.dropFirst(owner.count).split(separator: "/").map(String.init)
+            var prefix: [String]?
+            if parts.last == ".gitignore" { prefix = Array(parts.dropLast()) }
+            else if let index = parts.firstIndex(of: ".git") {
+                let suffix = parts.dropFirst(index + 1).joined(separator: "/")
+                if ["index", "HEAD", "config", "info/exclude", "packed-refs"].contains(suffix) || suffix.hasPrefix("refs/heads/") { prefix = Array(parts.prefix(index)) }
+            }
+            guard let prefix, context.showsHiddenFiles || !prefix.contains(where: { $0.hasPrefix(".") }) else { continue }
+            let directory = prefix.reduce(owner) { ($0 as NSString).appendingPathComponent($1) }
+            if root == directory || root.hasPrefix(directory + "/") { rescans.insert(root) }
+            else if directory.hasPrefix(root + "/") { rescans.insert(directory) }
+        }
+        let scoped = paths.filter { $0 == root || $0.hasPrefix(root == "/" ? "/" : root + "/") }
+        let displayed = scoped.filter { path in
+            context.showsHiddenFiles || !path.dropFirst(root.count).split(separator: "/").contains { $0.hasPrefix(".") }
+        }
+        let directories = Set(displayed.map { $0 == root ? root : ($0 as NSString).deletingLastPathComponent }).union(rescans)
+        backend.invalidate(context, directoryPaths: Array(directories))
+        controller.applyFilesystemChanges(displayed, rescanDirectories: Array(rescans), context: context)
+        guard !native.operationInProgress, !scoped.isEmpty else { return }
+        native.documentStore.allSnapshots { [weak self] values in
+            guard let self, self.context === context, !self.native.operationInProgress else { return }
+            for value in values where scoped.contains(where: { path in
+                value.filePath == path || value.canonicalPath == path ||
+                    value.filePath.hasPrefix(path + "/") || value.canonicalPath.hasPrefix(path + "/")
+            }) {
+                self.native.documentStore.fileDidChange(atPath: value.filePath) { _, _ in }
+            }
+        }
+    }
     private func cancel() { searches.values.forEach { backend.cancel($0) }; searches.removeAll() }
     func shutdown() { stopped = true; cancel(); backend.deactivate(); controller.shutdown(); nativeRequest = nil }
     func fileBrowserDidReceiveFocus(_ controller: iTermFileBrowserViewController) {}

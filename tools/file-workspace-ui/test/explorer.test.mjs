@@ -142,3 +142,49 @@ test('oversized UTF8 queries and filters report errors without a pending request
   assert.equal(f.sent.slice(before).some(message=>message.type==='searchContents'),false);assert.equal(f.explorer.state.searching,false);assert.equal(f.explorer.status.textContent,'searchTooLong');
  }finally{f.close();}
 });
+test('filesystem events refresh only loaded visible directories without clearing rows or showing Loading',()=>{
+ const f=fixture();try {
+  const dir={path:'/r/src',name:'src',isDirectory:true,isExpandable:true};
+  f.listing(f.sent.find(x=>x.type==='listDirectory'),[dir,{path:'/r/Library',name:'Library',isDirectory:true,isExpandable:true}]);
+  f.root.querySelector('[data-path="/r/src"]').click();f.listing(f.sent.findLast(x=>x.type==='listDirectory'),[{path:'/r/src/a',name:'a',isDirectory:false}]);
+  f.root.querySelector('[data-path="/r/src/a"]').click();const stable=f.root.querySelector('[data-path="/r/src/a"]');const start=f.sent.length;
+  f.explorer.receive('filesystemChanges',{token:'scope',paths:['/r/Library/Caches/background.log','/r/.hidden','/other/a']});
+  assert.equal(f.sent.length,start);assert.equal(f.root.querySelector('[data-path="/r/src/a"]'),stable);assert.notEqual(f.explorer.status.textContent,'loading');
+  f.explorer.receive('filesystemChanges',{token:'scope',paths:['/r/src/new','/r/src/a']});
+  assert.deepEqual(f.sent.slice(start).map(x=>[x.type,x.payload.directoryPath]),[['listDirectory','/r/src']]);
+  assert.ok(f.root.querySelector('[data-path="/r/src/a"]'));assert.equal(f.root.querySelector('[data-path="/r/src/a"]').getAttribute('aria-selected'),'true');
+  assert.notEqual(f.explorer.status.textContent,'loading');
+  f.explorer.receive('filesystemChanges',{token:'scope',paths:['/r/src/another']});
+  assert.equal(f.sent.length,start+1);
+  f.listing(f.sent.at(-1),[{path:'/r/src/a',name:'a',isDirectory:false},{path:'/r/src/new',name:'new',isDirectory:false}]);
+  assert.ok(f.root.querySelector('[data-path="/r/src/new"]'));assert.equal(f.sent.length,start+2);
+ }finally{f.close();}
+});
+test('collapsed directory changes evict stale cached contents without fetching until expansion',()=>{
+ const f=fixture();try {
+  const dir={path:'/r/d',name:'d',isDirectory:true,isExpandable:true};f.listing(f.sent.find(x=>x.type==='listDirectory'),[dir]);
+  f.root.querySelector('[data-path="/r/d"]').click();f.listing(f.sent.findLast(x=>x.type==='listDirectory'),[{path:'/r/d/old',name:'old'}]);
+  f.root.querySelector('[data-path="/r/d"]').click();const before=f.sent.length;
+  f.explorer.receive('filesystemChanges',{token:'scope',paths:['/r/d/new']});assert.equal(f.sent.length,before);
+  f.root.querySelector('[data-path="/r/d"]').click();assert.equal(f.sent.at(-1).type,'listDirectory');assert.equal(f.sent.at(-1).payload.directoryPath,'/r/d');
+ }finally{f.close();}
+});
+test('removing an expanded directory rejects its pending and cached child listings',()=>{
+ const f=fixture();try {
+  const dir={path:'/r/src',name:'src',isDirectory:true,isExpandable:true};f.listing(f.sent.find(x=>x.type==='listDirectory'),[dir]);
+  f.root.querySelector('[data-path="/r/src"]').click();f.listing(f.sent.findLast(x=>x.type==='listDirectory'),[{path:'/r/src/a',name:'a'}]);
+  f.explorer.receive('filesystemChanges',{token:'scope',paths:['/r/src/a']});const stale=f.sent.at(-1);
+  f.explorer.receive('filesystemChanges',{token:'scope',paths:['/r/src']});const parent=f.sent.findLast(x=>x.payload.directoryPath==='/r');f.listing(parent,[]);
+  f.explorer.receive('listing',{token:'scope',requestIdentifier:stale.id,directoryPath:'/r/src',entries:[],error:'Missing directory'});
+  assert.equal(f.root.querySelector('[data-path="/r/src"]'),null);assert.notEqual(f.explorer.status.textContent,'Missing directory');assert.equal(f.root.querySelector('[data-retry]'),null);
+ }finally{f.close();}
+});
+test('Git metadata rescans the loaded subtree without refreshing a collapsed parent',()=>{
+ const f=fixture();try {
+  const dir={path:'/r/repo',name:'repo',isDirectory:true,isExpandable:true};f.listing(f.sent.find(x=>x.type==='listDirectory'),[dir]);const before=f.sent.length;
+  f.explorer.receive('filesystemChanges',{token:'scope',paths:[],rescanDirectories:['/r/repo']});assert.equal(f.sent.length,before);
+  f.root.querySelector('[data-path="/r/repo"]').click();f.listing(f.sent.findLast(x=>x.type==='listDirectory'),[{path:'/r/repo/a',name:'a'}]);const expanded=f.sent.length;
+  f.explorer.receive('filesystemChanges',{token:'scope',paths:[],rescanDirectories:['/r/repo']});
+  assert.deepEqual(f.sent.slice(expanded).map(x=>x.payload.directoryPath),['/r/repo']);
+ }finally{f.close();}
+});

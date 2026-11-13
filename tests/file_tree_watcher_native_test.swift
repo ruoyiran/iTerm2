@@ -62,8 +62,8 @@ private final class NativeWatcherProbe {
             finish(success: false, reason: "Obsolete root or off-main event delivered")
             return
         }
-        guard paths.contains(changedFolder.path) else { return }
-        finish(success: true, reason: "Native Unicode directory event reached current root on main")
+        guard paths.contains(changedFolder.appendingPathComponent("new-file").path) else { return }
+        finish(success: true, reason: "Native Unicode file event reached current root on main")
     }
 
     private func finish(success: Bool, reason: String) {

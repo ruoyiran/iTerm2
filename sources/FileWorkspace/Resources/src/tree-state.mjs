@@ -6,7 +6,17 @@ export class TreeState {
   begin(identifier, path) { this.pending.set(identifier, path); }
   listing(token, identifier, path, entries, error) {
     if (token !== this.scope?.token || this.pending.get(identifier) !== path) return false;
-    this.pending.delete(identifier); this.directories.set(path, {entries: entries ?? [], error}); return true;
+    this.pending.delete(identifier);
+    if(!error) {
+      const children=new Set((entries??[]).filter(entry=>entry.isExpandable||entry.isDirectory).map(entry=>entry.path));
+      const removed=(this.directories.get(path)?.entries??[]).filter(entry=>(entry.isExpandable||entry.isDirectory)&&!children.has(entry.path)).map(entry=>entry.path);
+      const orphan=value=>removed.some(root=>value===root||value.startsWith(root+'/'));
+      for(const directory of this.directories.keys())if(orphan(directory))this.directories.delete(directory);
+      for(const [id,directory] of this.pending)if(orphan(directory))this.pending.delete(id);
+      for(const directory of this.expanded)if(orphan(directory))this.expanded.delete(directory);
+      for(const value of this.selected)if(orphan(value))this.selected.delete(value);
+    }
+    this.directories.set(path, {entries: entries ?? [], error}); return true;
   }
   toggle(path) { if (this.expanded.has(path)) this.expanded.delete(path); else this.expanded.add(path); }
   rows() {
