@@ -4,6 +4,91 @@ import CryptoKit
 import Network
 @testable import iTerm2SharedARC
 final class FileUITransportTests: XCTestCase {
+ func testHostOpenAllowsInternalAliasAndRejectsEscapingAlias() throws {
+  let directory=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+  try FileManager.default.createDirectory(at:directory,withIntermediateDirectories:true)
+  let outside=directory.deletingLastPathComponent().appendingPathComponent(UUID().uuidString+".txt")
+  defer {try? FileManager.default.removeItem(at:directory);try? FileManager.default.removeItem(at:outside)}
+  let path=directory.appendingPathComponent("text.txt");try Data("inside".utf8).write(to:path)
+  try Data("outside".utf8).write(to:outside)
+  let store=iTermFileDocumentStore(storageDirectory:directory.appendingPathComponent("drafts"))
+  let opened=expectation(description:"open host fixture");var snapshot:iTermFileDocumentSnapshot?
+  store.openFile(atPath:path.path){value,error in XCTAssertNil(error);snapshot=value;opened.fulfill()}
+  wait(for:[opened],timeout:5)
+  let context=iTermFileBrowserContext(rootDirectory:directory.path,projectIdentifier:"p",worktreeIdentifier:"w",generation:1)
+  let session=FileUIHostSession(context:context,document:try XCTUnwrap(snapshot))
+  let internalAlias=directory.appendingPathComponent("alias.txt"),escape=directory.appendingPathComponent("escape.txt")
+  try FileManager.default.createSymbolicLink(at:internalAlias,withDestinationURL:path)
+  try FileManager.default.createSymbolicLink(at:escape,withDestinationURL:outside)
+  XCTAssertEqual(try session.openPath(internalAlias.path),internalAlias.path)
+  XCTAssertThrowsError(try session.openPath(escape.path))
+  let readScope=try XCTUnwrap(session.readScope(for:internalAlias.path))
+  try FileManager.default.removeItem(at:internalAlias)
+  try FileManager.default.createSymbolicLink(at:internalAlias,withDestinationURL:outside)
+  let refused=expectation(description:"scoped read rechecks alias target")
+  store.openFile(atPath:internalAlias.path,readScope:readScope){value,error in XCTAssertNil(value);XCTAssertNotNil(error);refused.fulfill()}
+  wait(for:[refused],timeout:5)
+  let admitted=expectation(description:"explicit external document")
+  var external:iTermFileDocumentSnapshot?
+  store.openFile(atPath:outside.path){value,error in XCTAssertNil(error);external=value;admitted.fulfill()}
+  wait(for:[admitted],timeout:5)
+  let externalSession=FileUIHostSession(context:context,document:try XCTUnwrap(external))
+  XCTAssertEqual(try externalSession.openPath(outside.path),outside.path)
+  let externalScope=try XCTUnwrap(externalSession.readScope(for:outside.path))
+  try FileManager.default.removeItem(at:outside)
+  try FileManager.default.createSymbolicLink(at:outside,withDestinationURL:path)
+  let replaced=expectation(description:"external grant stays on its canonical target")
+  store.openFile(atPath:outside.path,readScope:externalScope){value,error in XCTAssertNil(value);XCTAssertNotNil(error);replaced.fulfill()}
+  wait(for:[replaced],timeout:5)
+ }
+ func testViewModesMigrateLegacyStateAndRestoreIndependentViewerPosition() {
+  let legacy = iTermFileViewState(dictionary: ["showsMarkdownPreview": true, "selectionStartColumn": 7])
+  XCTAssertEqual(legacy.dictionary["viewMode"] as? String, "preview")
+  XCTAssertEqual(legacy.selectionStartColumn, 7)
+  let source = iTermFileViewState(dictionary: ["showsMarkdownPreview": false])
+  XCTAssertEqual(source.dictionary["viewMode"] as? String, "source")
+  let restored = iTermFileViewState(dictionary: ["schemaVersion": 2, "viewMode": "rich", "viewerState": ["page": 3, "zoom": 1.5]])
+  XCTAssertEqual(restored.dictionary["viewMode"] as? String, "rich")
+  XCTAssertEqual(((restored.dictionary["viewerState"] as? [String: Any])?["page"] as? NSNumber)?.intValue, 3)
+ }
+ func testMediaRangesAreExactAndRevokedWithTheirOwner() throws {
+  let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+  try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+  defer { try? FileManager.default.removeItem(at: directory) }
+  try JSONSerialization.data(withJSONObject: ["version": 1, "files": []]).write(to: directory.appendingPathComponent("manifest.json"))
+  let path = directory.appendingPathComponent("movie.mp4")
+  try Data("0123456789".utf8).write(to: path)
+  let server = try iTermFileUIAssetServer(resourceDirectory: directory)
+  defer { server.stop() }
+  let started = expectation(description: "server ready")
+  server.start { result in XCTAssertNotNil(try? result.get()); started.fulfill() }
+  wait(for: [started], timeout: 5)
+  let granted = expectation(description: "media registered")
+  var url: URL?
+  server.registerMedia(path: path.path, owner: "pane") { result in url = try? result.get(); granted.fulfill() }
+  wait(for: [granted], timeout: 5)
+  let endpoint = try XCTUnwrap(url)
+  func read(_ range: String?) -> (Int, Data, String?) {
+   let completed = expectation(description: "media read")
+   var code = 0, body = Data(), contentRange: String?
+   var request = URLRequest(url: endpoint)
+   if let range { request.setValue(range, forHTTPHeaderField: "Range") }
+   URLSession.shared.dataTask(with: request) { data, response, _ in
+    let http = response as? HTTPURLResponse
+    code = http?.statusCode ?? 0; body = data ?? Data(); contentRange = http?.value(forHTTPHeaderField: "Content-Range")
+    completed.fulfill()
+   }.resume()
+   wait(for: [completed], timeout: 5)
+   return (code, body, contentRange)
+  }
+  let partial = read("bytes=2-5")
+  XCTAssertEqual(partial.0, 206); XCTAssertEqual(partial.1, Data("2345".utf8)); XCTAssertEqual(partial.2, "bytes 2-5/10")
+  XCTAssertEqual(read("bytes=-3").1, Data("789".utf8))
+  XCTAssertEqual(read("bytes=10-").0, 416)
+  XCTAssertEqual(read("bytes=0-1,4-5").0, 416)
+  server.revokeMedia(owner: "pane")
+  XCTAssertEqual(read(nil).0, 404)
+ }
  func testFenceRequiresExactIdentityAndUInt64String() {
   let fence = FileUIMessageFence(epoch: "e", view: "v", token: "t", generation: UInt64.max)
   let valid: [String: Any] = ["protocolVersion": 1, "rendererEpoch": "e", "viewIdentifier": "v", "contextToken": "t", "generation": String(UInt64.max), "type": "focus", "requestIdentifier": "r", "payload": [:]]

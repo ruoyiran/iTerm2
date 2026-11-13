@@ -47,6 +47,9 @@ import AppKit
     static var supportedProfileTypes: ProfileType { .terminal }
     var ownsToolHeader: Bool { true }
     func minimumHeight() -> CGFloat { 100 }
+    func findInFiles(_ query: String, context: iTermFileBrowserContext) {
+        browserContext = context; updateVisibility(); binding.controller.focusQuery(contents: true, query: query)
+    }
     func relayout() { binding.controller.view.frame = bounds }
     override func layout() { super.layout(); relayout() }
     override func viewDidMoveToWindow() {

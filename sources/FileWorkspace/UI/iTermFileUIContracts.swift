@@ -37,6 +37,15 @@ func fileUIInteger(_ value: Any?, minimum: Int = 0, maximum: Int = Int.max) -> I
     let activation: iTermFileActivation
     let lineNumber: Int
     let utf16Column: Int
+    var viewMode: String?
+    var anchor: String?
+    @nonobjc var readScope: FileDocumentReadScope?
+    var initialViewState: iTermFileViewState {
+        var value: [String: Any] = [:]
+        if let viewMode { value["viewMode"] = viewMode }
+        if let anchor { value["viewerState"] = ["anchor": anchor] }
+        return iTermFileViewState(dictionary: value)
+    }
     convenience init(context: iTermFileBrowserContext, path: String, placement: iTermOpenStyle, activation: iTermFileActivation,
                      lineNumber: Int = 0, utf16Column: Int = 0) {
         self.init(context: context, ownerContext: context, path: path, placement: placement, activation: activation,
@@ -122,7 +131,7 @@ func fileUIInteger(_ value: Any?, minimum: Int = 0, maximum: Int = Int.max) -> I
 }
 
 @objcMembers final class iTermFileViewState: NSObject {
-    let schemaVersion = 1
+    let schemaVersion = 2
     let selectionStartLine: Int
     let selectionStartColumn: Int
     let selectionEndLine: Int
@@ -130,6 +139,8 @@ func fileUIInteger(_ value: Any?, minimum: Int = 0, maximum: Int = Int.max) -> I
     let scrollTop: Double
     let scrollLeft: Double
     let showsMarkdownPreview: Bool
+    let viewMode: String
+    let viewerState: [String: Any]
     init(dictionary: [String: Any] = [:]) {
         selectionStartLine = fileUIInteger(dictionary["selectionStartLine"], minimum: 1, maximum: 100000000) ?? 1
         selectionStartColumn = fileUIInteger(dictionary["selectionStartColumn"], minimum: 1, maximum: 100000000) ?? 1
@@ -137,12 +148,21 @@ func fileUIInteger(_ value: Any?, minimum: Int = 0, maximum: Int = Int.max) -> I
         selectionEndColumn = fileUIInteger(dictionary["selectionEndColumn"], minimum: 1, maximum: 100000000) ?? 1
         let top = dictionary["scrollTop"] as? Double ?? 0, left = dictionary["scrollLeft"] as? Double ?? 0
         scrollTop = top.isFinite ? min(1e9, max(0, top)) : 0; scrollLeft = left.isFinite ? min(1e9, max(0, left)) : 0
-        showsMarkdownPreview = dictionary["showsMarkdownPreview"] as? Bool ?? false
+        if let mode = dictionary["viewMode"] as? String, ["default", "source", "rich", "preview", "changes", "edit"].contains(mode) {
+            viewMode = mode
+        } else if let preview = dictionary["showsMarkdownPreview"] as? Bool {
+            viewMode = preview ? "preview" : "source"
+        } else { viewMode = "default" }
+        showsMarkdownPreview = viewMode == "preview"
+        if let state = dictionary["viewerState"] as? [String: Any], JSONSerialization.isValidJSONObject(state),
+           let data = try? JSONSerialization.data(withJSONObject: state), data.count <= 32768 {
+            viewerState = state
+        } else { viewerState = [:] }
     }
     var dictionary: [String: Any] {
-        ["schemaVersion": 1, "selectionStartLine": selectionStartLine, "selectionStartColumn": selectionStartColumn,
+        ["schemaVersion": schemaVersion, "selectionStartLine": selectionStartLine, "selectionStartColumn": selectionStartColumn,
          "selectionEndLine": selectionEndLine, "selectionEndColumn": selectionEndColumn, "scrollTop": scrollTop,
-         "scrollLeft": scrollLeft, "showsMarkdownPreview": showsMarkdownPreview]
+         "scrollLeft": scrollLeft, "showsMarkdownPreview": showsMarkdownPreview, "viewMode": viewMode, "viewerState": viewerState]
     }
 }
 @objcMembers final class iTermFileViewStatus: NSObject {
@@ -179,7 +199,7 @@ extension iTermFileDocumentSnapshot {
     func fileUIDictionary(includeText: Bool) -> [String: Any] {
         var value: [String: Any] = ["documentIdentifier": documentIdentifier, "filePath": filePath, "revision": String(revision),
                                    "isDirty": isDirty, "isReadOnly": isReadOnly, "hasDiskConflict": hasDiskConflict,
-                                   "kind": kind.rawValue, "isTooLarge": isTooLarge]
+                                   "kind": kind.rawValue, "isTooLarge": isTooLarge, "byteCount": byteCount]
         if includeText { value["text"] = text ?? "" }; return value
     }
 }

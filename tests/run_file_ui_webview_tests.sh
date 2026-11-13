@@ -14,10 +14,20 @@ final class MarkdownPortholeRenderer {
 }
 SWIFT
 cat > "$file_ui_tmp/main.swift" <<'SWIFT'
+import AppKit
 import XCTest
-let suite = FileUIWebViewTests.defaultTestSuite
-suite.run()
-exit(suite.testRun!.hasSucceeded ? 0 : 1)
+let app = NSApplication.shared
+app.setActivationPolicy(.accessory)
+let all = FileUIWebViewTests.defaultTestSuite
+let filter = CommandLine.arguments.dropFirst().first ?? ""
+let suite = XCTestSuite(name: filter.isEmpty ? "FileUIWebViewTests" : filter)
+for test in all.tests where filter.isEmpty || test.name.contains(filter) { suite.addTest(test) }
+guard !suite.tests.isEmpty else { exit(2) }
+let timer = Timer.scheduledTimer(withTimeInterval: 0, repeats: false) { _ in
+ suite.run()
+ exit(suite.testRun!.hasSucceeded ? 0 : 1)
+}
+app.run()
 SWIFT
 xcrun swiftc -swift-version 5 -warnings-as-errors \
  -import-objc-header "$file_ui_repo/sources/SessionCreation/iTermOpenStyle.h" \
@@ -26,4 +36,4 @@ xcrun swiftc -swift-version 5 -warnings-as-errors \
  "$file_ui_repo"/sources/FileWorkspace/*.swift "$file_ui_repo"/sources/FileWorkspace/UI/*.swift \
  "$file_ui_tmp/HostDeclarations.swift" "$file_ui_tmp/Tests.swift" "$file_ui_tmp/main.swift" -o "$file_ui_tmp/tests"
 FILE_UI_RESOURCE_DIR="$file_ui_repo/sources/FileWorkspace/Resources/FileWorkspaceUI" \
- DYLD_FRAMEWORK_PATH="$file_ui_developer/Library/PrivateFrameworks" "$file_ui_tmp/tests"
+ DYLD_FRAMEWORK_PATH="$file_ui_developer/Library/PrivateFrameworks" "$file_ui_tmp/tests" "${1:-}"

@@ -18,6 +18,7 @@ import AppKit
     private var surfaceReady = false
     private var operationState: [String: Any] = ["canUndo": false, "canRedo": false]
     private var pendingQueryFocus: Bool?
+    private var pendingQueryText: String?
     private var stopped = false
     private var dismissalMonitor: Any?
     private var resignObserver: NSObjectProtocol?
@@ -103,10 +104,12 @@ import AppKit
         if surfaceReady { renderer?.send("operationState", payload: operationState) }
     }
     func revealPath(_ path: String, context: iTermFileBrowserContext) { guard context === self.context else { return }; renderer?.send("reveal", payload: ["path": path]) }
-    func focusQuery(contents: Bool) { pendingQueryFocus = contents; deliverQueryFocus() }
+    func focusQuery(contents: Bool, query: String? = nil) { pendingQueryFocus = contents; pendingQueryText = query; deliverQueryFocus() }
     private func deliverQueryFocus() {
         guard surfaceReady, let renderer = renderer, let contents = pendingQueryFocus else { return }
-        pendingQueryFocus = nil; renderer.send("focusQuery", payload: ["contents": contents])
+        var payload: [String: Any] = ["contents": contents]
+        if let pendingQueryText { payload["query"] = pendingQueryText }
+        pendingQueryFocus = nil; pendingQueryText = nil; renderer.send("focusQuery", payload: payload)
     }
     func applyFilesystemChanges(_ paths: [String], rescanDirectories: [String], context: iTermFileBrowserContext) {
         guard context === self.context, surfaceReady, visible else { return }

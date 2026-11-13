@@ -32,10 +32,11 @@ final class FileSessionTests: XCTestCase {
         XCTAssertEqual(try evaluate("const find=path=>[...document.querySelectorAll('[data-path]')].find(row=>row.dataset.path===path);window.keptFolder=find(folder);window.keptFile=find(file);window.keptFolder.click();return window.keptFolder===find(folder)&&window.keptFile===find(file)&&document.querySelector('.explorer-status').hidden;", arguments: ["folder": f.root.appendingPathComponent("Library").path, "file": f.file.path]) as? Bool, true)
         XCTAssertNotNil(try evaluate(rows, arguments: ["path": cacheDirectory.path]))
         XCTAssertEqual(try evaluate("const find=path=>[...document.querySelectorAll('[data-path]')].find(row=>row.dataset.path===path);const kept=window.keptFolder===find(folder)&&window.keptFile===find(file);window.keptFolder.click();return kept&&window.keptFile===find(file);", arguments: ["folder": f.root.appendingPathComponent("Library").path, "file": f.file.path]) as? Bool, true)
-        XCTAssertEqual(try evaluate("document.querySelector('.explorer-toolbar > button:last-child').click(); window.nativeDismissSeen=new Promise(resolve=>{const original=window.fileWorkspace.receive;window.fileWorkspace.receive=async function(message){await original.call(this,message);if(message.type==='dismissMenu'){window.fileWorkspace.receive=original;resolve(true);}};});return !!document.querySelector('.context-menu');") as? Bool, true)
+        // Radix opens this menu on pointer-down; a synthetic click does not exercise the trigger.
+        XCTAssertEqual(try evaluate("document.querySelector('button[aria-label=\"More Explorer Actions\"]').dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,button:0,pointerType:'mouse'})); window.nativeDismissSeen=new Promise(resolve=>{const original=window.fileWorkspace.receive;window.fileWorkspace.receive=async function(message){await original.call(this,message);if(message.type==='dismissMenu'){window.fileWorkspace.receive=original;resolve(true);}};});return new Promise(resolve=>{const check=()=>{if(document.querySelector('[data-slot=dropdown-menu-content]')){observer.disconnect();resolve(true);}};const observer=new MutationObserver(check);observer.observe(document.body,{childList:true,subtree:true});check();});") as? Bool, true)
         browser.controller.dismissMenus()
         XCTAssertEqual(try evaluate("return window.nativeDismissSeen;") as? Bool, true)
-        XCTAssertEqual(try evaluate("return document.querySelector('.context-menu')===null;") as? Bool, true)
+        XCTAssertEqual(try evaluate("return new Promise(resolve=>{const check=()=>{if(!document.querySelector('[data-slot=dropdown-menu-content]')){observer.disconnect();resolve(true);}};const observer=new MutationObserver(check);observer.observe(document.body,{childList:true,subtree:true});check();});") as? Bool, true)
         _ = try evaluate("window.stableRow=document.querySelector('[data-path]'); window.quietChangeSeen=new Promise(resolve => { const original=window.fileWorkspace.receive; window.fileWorkspace.receive=async function(message) { await original.call(this,message); if(message.type==='filesystemChanges') { window.fileWorkspace.receive=original; resolve(true); } }; }); return true;")
         let backgroundFile = cacheDirectory.appendingPathComponent("background.log")
         try Data("background".utf8).write(to: backgroundFile)
@@ -123,6 +124,47 @@ final class FileSessionTests: XCTestCase {
             XCTAssertEqual(first.documentIdentifier, installed.last?.documentIdentifier)
             XCTAssertNotEqual(first.viewIdentifier, installed.last?.viewIdentifier)
         }
+    }
+
+    func testStandaloneMarkdownPreviewKeepsDistinctPaneAndSharedDocument() throws {
+        let fixture = try Fixture(fileName: "note.md"); defer { fixture.cleanup() }
+        let main = fixture.open("main")
+        let context = iTermFileBrowserContext(rootDirectory: fixture.root.path, projectIdentifier: "project", worktreeIdentifier: "", generation: 1)
+        let policy = iTermFileOpenCoordinator(coordinator: fixture.coordinator)
+        let preview = iTermFileOpenRequest(context: context, path: fixture.file.path, placement: .tab, activation: .pinned)
+        preview.viewMode = "preview"
+        var installed = [iTermFileSessionPane]()
+        var activated: iTermFileSessionPane?
+        let insert: (iTermFileSessionPane, @escaping (Bool) -> Void) -> Void = { pane, done in
+            installed.append(pane); fixture.panes.append(pane); done(true)
+        }
+        fixture.wait { done in policy.open(preview, candidates: [main], isCurrent: { true }, install: insert,
+            activate: { activated = $0 }) { success in XCTAssertTrue(success); done() } }
+        let separate = try XCTUnwrap(installed.first)
+        XCTAssertFalse(main.controller.cachedViewState.showsMarkdownPreview)
+        XCTAssertTrue(separate.controller.cachedViewState.showsMarkdownPreview)
+        XCTAssertEqual(main.documentIdentifier, separate.documentIdentifier)
+        XCTAssertNotEqual(main.viewIdentifier, separate.viewIdentifier)
+        fixture.wait { done in policy.open(preview, candidates: [main, separate], isCurrent: { true }, install: insert,
+            activate: { activated = $0 }) { success in XCTAssertTrue(success); done() } }
+        XCTAssertTrue(activated === separate); XCTAssertEqual(installed.count, 1)
+        let source = iTermFileOpenRequest(context: context, path: fixture.file.path, placement: .tab, activation: .pinned)
+        fixture.wait { done in policy.open(source, candidates: [main, separate], isCurrent: { true }, install: insert,
+            activate: { activated = $0 }) { success in XCTAssertTrue(success); done() } }
+        XCTAssertTrue(activated === main); XCTAssertEqual(installed.count, 1)
+    }
+
+    func testReloadConfirmationPreservesOrDiscardsAllSharedViews() throws {
+        let fixture = try Fixture(); defer { fixture.cleanup() }
+        let first = fixture.open("first"), copy = fixture.open("copy")
+        fixture.edit(first, "unsaved")
+        fixture.wait { done in fixture.coordinator.reload(copy, confirmDiscard: { false }) { error in XCTAssertNotNil(error); done() } }
+        XCTAssertEqual(fixture.snapshot(first)?.text, "unsaved")
+        XCTAssertFalse(fixture.coordinator.operationInProgress)
+        fixture.wait { done in fixture.coordinator.reload(copy, confirmDiscard: { true }) { error in XCTAssertNil(error); done() } }
+        XCTAssertEqual(fixture.snapshot(first)?.text, "original")
+        XCTAssertFalse(fixture.snapshot(copy)?.isDirty ?? true)
+        XCTAssertFalse(fixture.coordinator.operationInProgress)
     }
 
     func testWorkspaceRapidDifferentOpensWaitForActualDocumentRelease() throws {
@@ -831,12 +873,13 @@ final class FileSessionTests: XCTestCase {
         web.fileDelegate?.fileUIWebView(web, received: "status", payload: ["isComposing": false], identifier: "composition")
     }
 
-    func testNativePreviewMenuResolvesDocumentHistory() throws {
+    func testMarkdownPreviewMenuResolvesDocumentHistory() throws {
         let fixture = try Fixture(fileName: "preview.md"); defer { fixture.cleanup() }
         let pane = fixture.open("preview"), copy = fixture.open("copy")
         fixture.edit(pane, "changed markdown")
         pane.controller.restoreViewState(iTermFileViewState(dictionary: ["showsMarkdownPreview": true]))
         pane.controller.setVisible(true)
+        _ = try makeVisible(pane, fixture: fixture)
         let actions = iTermFileMenuActions(pane: pane)
         iTermFileMenuActions.register(actions, rootView: pane.controller.view)
         let preview = pane.controller.preferredFirstResponder

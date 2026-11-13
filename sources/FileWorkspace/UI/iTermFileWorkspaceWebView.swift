@@ -19,6 +19,7 @@ final class iTermFileWorkspaceWebView: WKWebView, WKNavigationDelegate, WKUIDele
     private var purpose = "explorer"
     private var assetURL: URL?
     private let incomingChunks = FileUIChunkAssembler()
+    private var documentTransferGeneration: UInt64 = 0
 
     init(dataStore: WKWebsiteDataStore) {
         proxy = FileUIWeakMessageHandler()
@@ -39,27 +40,59 @@ final class iTermFileWorkspaceWebView: WKWebView, WKNavigationDelegate, WKUIDele
     }
     private func configure() {
         var message = fence.dictionary; message["type"] = "configure"; message["requestIdentifier"] = UUID().uuidString
-        message["payload"] = ["purpose": purpose, "labels": FileUIStrings.labels]; deliver(message)
+        message["payload"] = ["purpose": purpose, "labels": FileUIStrings.labels,
+                              "locale": Bundle.main.preferredLocalizations.first ?? "en"]; deliver(message)
     }
     func send(_ type: String, payload: [String: Any] = [:], identifier: String = UUID().uuidString) {
         guard bound else { return }
         var message = fence.dictionary; message["type"] = type; message["payload"] = payload; message["requestIdentifier"] = identifier
-        guard let data = try? JSONSerialization.data(withJSONObject: message), data.count <= 64 * 1024 * 1024,
+        guard let data = try? JSONSerialization.data(withJSONObject: message), data.count <= 300 * 1024 * 1024,
               let string = String(data: data, encoding: .utf8) else { fileDelegate?.fileUIWebView(self, failed: fileUIError(4)); return }
         if string.utf16.count <= 262144 { deliver(message); return }
         let chunks = fileUIChunks(string), transfer = UUID().uuidString
-        guard chunks.count <= 256 else { fileDelegate?.fileUIWebView(self, failed: fileUIError(4)); return }
+        guard chunks.count <= 4096 else { fileDelegate?.fileUIWebView(self, failed: fileUIError(4)); return }
         for (index, text) in chunks.enumerated() {
             var chunk = fence.dictionary; chunk["type"] = "chunk"; chunk["requestIdentifier"] = identifier
             chunk["payload"] = ["identifier": transfer, "index": index, "total": chunks.count, "text": text]; deliver(chunk)
         }
     }
 
-    private func deliver(_ message: [String: Any]) {
+    func sendDocument(_ payload: [String: Any]) {
+        documentTransferGeneration &+= 1
+        guard var snapshot = payload["snapshot"] as? [String: Any], let text = snapshot["text"] as? String,
+              text.utf16.count > 262144, payload["edits"] == nil else { send("document", payload: payload); return }
+        let string = text as NSString, transfer = UUID().uuidString, generation = documentTransferGeneration, epoch = fence.epoch
+        var ranges = [NSRange](), offset = 0
+        while offset < string.length {
+            var count = min(131072, string.length - offset)
+            if offset + count < string.length, (0xd800...0xdbff).contains(string.character(at: offset + count - 1)),
+               (0xdc00...0xdfff).contains(string.character(at: offset + count)) { count -= 1 }
+            ranges.append(NSRange(location: offset, length: count)); offset += count
+        }
+        guard ranges.count <= 4096 else { fileDelegate?.fileUIWebView(self, failed: fileUIError(4)); return }
+        snapshot.removeValue(forKey: "text")
+        func message(_ type: String, _ payload: [String: Any]) -> [String: Any] {
+            var result = fence.dictionary; result["type"] = type; result["payload"] = payload; result["requestIdentifier"] = transfer
+            return result
+        }
+        func next(_ index: Int) {
+            guard bound, fence.epoch == epoch, documentTransferGeneration == generation else { return }
+            if index == ranges.count { deliver(message("documentEnd", ["transferIdentifier": transfer])); return }
+            deliver(message("documentText", ["transferIdentifier": transfer, "index": index, "text": string.substring(with: ranges[index])])) { accepted in
+                if accepted { next(index + 1) }
+            }
+        }
+        deliver(message("documentStart", ["snapshot": snapshot, "transferIdentifier": transfer, "total": ranges.count])) { accepted in
+            if accepted { next(0) }
+        }
+    }
+
+    private func deliver(_ message: [String: Any], completion: ((Bool) -> Void)? = nil) {
         let epoch = fence.epoch
         callAsyncJavaScript("return window.fileWorkspace.receive(message)", arguments: ["message": message], in: nil, in: .page) { [weak self] result in
-            guard let self = self, self.bound, self.fence.epoch == epoch else { return }
-            if case .failure(let error) = result { self.fileDelegate?.fileUIWebView(self, failed: error as NSError) }
+            guard let self = self, self.bound, self.fence.epoch == epoch else { completion?(false); return }
+            if case .failure(let error) = result { self.fileDelegate?.fileUIWebView(self, failed: error as NSError); completion?(false) }
+            else { completion?(true) }
         }
     }
     fileprivate func receive(_ message: WKScriptMessage) {
@@ -77,7 +110,7 @@ final class iTermFileWorkspaceWebView: WKWebView, WKNavigationDelegate, WKUIDele
         fileDelegate?.fileUIWebView(self, received: type, payload: payload, identifier: id)
     }
 
-    func unbind() { bound = false; fileDelegate = nil; incomingChunks.reset(); removeFromSuperview() }
+    func unbind() { bound = false; documentTransferGeneration &+= 1; fileDelegate = nil; incomingChunks.reset(); removeFromSuperview() }
     func shutdown() { unbind(); stopLoading(); configuration.userContentController.removeScriptMessageHandler(forName: "fileWorkspace"); navigationDelegate = nil; uiDelegate = nil }
     func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
         decisionHandler(navigationAction.targetFrame?.isMainFrame == true && navigationAction.request.url == assetURL ? .allow : .cancel)

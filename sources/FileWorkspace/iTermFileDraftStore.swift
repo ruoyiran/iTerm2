@@ -28,7 +28,7 @@ struct FileDocumentDraft: Codable {
         guard version == 1, UUID(uuidString: identifier)?.uuidString == identifier,
               filename == identifier + ".json", path.hasPrefix("/"), canonicalPath.hasPrefix("/"),
               !path.utf8.contains(0), !canonicalPath.utf8.contains(0),
-              kind == iTermFileDocumentKind.text.rawValue || kind == iTermFileDocumentKind.markdown.rawValue,
+              iTermFileDocumentKind(rawValue: kind)?.isEditable == true,
               format.data(text).count <= iTermFileDocumentStore.maximumFileBytes,
               baseline.size <= UInt64(iTermFileDocumentStore.maximumFileBytes),
               baseline.hash?.count == 64, baseline.hash?.allSatisfy({ $0.isHexDigit }) == true else { throw fileDocumentError(11) }

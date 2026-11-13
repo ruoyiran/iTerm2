@@ -46,6 +46,38 @@ final class FileDocumentTests: XCTestCase {
         return result
     }
 
+    func testStructuredDocumentsRemainEditableAndRecoverTheirDrafts() throws {
+        let fixtures: [(String, String, Int)] = [
+            ("drawing.svg", "<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>", 5),
+            ("diagram.mmd", "graph TD\nA-->B\n", 6),
+            ("table.csv", "name,value\r\none,2\r\n", 7),
+            ("table.tsv", "name\tvalue\none\t2\n", 7),
+            ("book.ipynb", "{\"cells\":[],\"metadata\":{},\"nbformat\":4,\"nbformat_minor\":5}", 8)
+        ]
+        for (name, text, kind) in fixtures {
+            let path = try fixture(name, Data(text.utf8))
+            let initial = try XCTUnwrap(open(path))
+            XCTAssertEqual(initial.kind.rawValue, kind, name)
+            XCTAssertFalse(initial.isReadOnly, name)
+            XCTAssertEqual(initial.text, text)
+            let changed = try XCTUnwrap(replace(initial, text + "\n"))
+            persist(changed.documentIdentifier)
+        }
+        store = iTermFileDocumentStore(storageDirectory: root.appendingPathComponent("drafts"))
+        let drafts = recover()
+        XCTAssertEqual(drafts.count, 5)
+        XCTAssertEqual(Set(drafts.map { $0.kind.rawValue }), [5, 6, 7, 8])
+    }
+
+    func testOrdinaryTextAboveTenMegabytesCanBeOpenedForEditing() throws {
+        let text = String(repeating: "x", count: 11 * 1024 * 1024)
+        let path = try fixture("large.log", Data(text.utf8))
+        let document = try XCTUnwrap(open(path))
+        XCTAssertFalse(document.isTooLarge)
+        XCTAssertFalse(document.isReadOnly)
+        XCTAssertEqual(document.text?.utf8.count, 11 * 1024 * 1024)
+    }
+
     func testCommittedDirectoryMappingUpdatesEveryRecoveredDraftAndUndoPath() throws {
         let directory = root.appendingPathComponent("folder")
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -244,7 +276,7 @@ final class FileDocumentTests: XCTestCase {
             XCTAssertTrue(snapshot.isReadOnly)
             XCTAssertEqual(save(snapshot.documentIdentifier), .readOnly)
         }
-        let path = try fixture("large.txt", Data(repeating: 65, count: 10 * 1024 * 1024 + 1))
+        let path = try fixture("large.txt", Data(repeating: 65, count: 50 * 1024 * 1024 + 1))
         let large = try XCTUnwrap(open(path))
         XCTAssertTrue(large.isTooLarge)
         XCTAssertNil(large.text)
@@ -534,11 +566,11 @@ final class FileDocumentTests: XCTestCase {
         XCTAssertEqual(save(initial.documentIdentifier), .stale)
         gate.signal()
         wait(for: [saved, released], timeout: 10)
-        let maximumPath = try fixture("maximum.txt", Data(repeating: 65, count: 10 * 1024 * 1024))
+        let maximumPath = try fixture("maximum.txt", Data(repeating: 65, count: 50 * 1024 * 1024))
         let maximum = try XCTUnwrap(open(maximumPath))
         XCTAssertFalse(maximum.isReadOnly)
         XCTAssertFalse(maximum.isTooLarge)
-        XCTAssertEqual(maximum.text?.utf16.count, 10 * 1024 * 1024)
+        XCTAssertEqual(maximum.text?.utf16.count, 50 * 1024 * 1024)
         _ = edit(maximum, [iTermFileTextEdit(range: NSRange(location: 0, length: 0), replacement: "B")], fails: true)
         XCTAssertEqual(fetch(maximum.documentIdentifier)?.revision, maximum.revision)
     }

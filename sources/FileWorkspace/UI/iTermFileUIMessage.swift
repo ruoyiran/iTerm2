@@ -50,12 +50,12 @@ final class FileUIChunkAssembler {
     func accept(_ payload: [String: Any]) -> [String: Any]? {
         if Date().timeIntervalSince(started) > 5 { reset() }
         guard let id = payload["identifier"] as? String, id.utf8.count <= 128,
-              let index = fileUIInteger(payload["index"], maximum: 255),
-              let count = fileUIInteger(payload["total"], minimum: 1, maximum: 256),
+              let index = fileUIInteger(payload["index"], maximum: 4095),
+              let count = fileUIInteger(payload["total"], minimum: 1, maximum: 4096),
               let text = payload["text"] as? String, text.utf16.count <= 131072 else { reset(); return nil }
         if index == 0 { reset(); identifier = id; total = count; started = Date() }
         guard identifier == id, total == count, index == parts.count else { reset(); return nil }
-        bytes += text.utf8.count; guard bytes <= 64 * 1024 * 1024 else { reset(); return nil }
+        bytes += text.utf8.count; guard bytes <= 300 * 1024 * 1024 else { reset(); return nil }
         parts.append(text)
         guard parts.count == total else { return nil }
         let data = Data(parts.joined().utf8); reset()

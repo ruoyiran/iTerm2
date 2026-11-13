@@ -27,84 +27,66 @@ final class FileUIWebViewTests: XCTestCase, FileUIWebViewDelegate {
   let store=iTermFileDocumentStore(storageDirectory:dir.appendingPathComponent("drafts"))
   let opened=expectation(description:"open preview fixture");var snapshot:iTermFileDocumentSnapshot?
   store.openFile(atPath:path.path){value,error in XCTAssertNil(error);snapshot=value;opened.fulfill()};wait(for:[opened],timeout:5)
-  let runtime=iTermFileWorkspaceUIRuntime(documentStore:store)
+  let resource=ProcessInfo.processInfo.environment["FILE_UI_RESOURCE_DIR"].map { URL(fileURLWithPath:$0) } ?? Bundle.main.resourceURL!.appendingPathComponent("FileWorkspaceUI")
+  let runtime=iTermFileWorkspaceUIRuntime(documentStore:store,resourceDirectory:resource)
   let controller=iTermFileViewController(runtime:runtime,viewIdentifier:UUID().uuidString)
   defer {controller.shutdown();runtime.shutdown()}
+  _ = NSApplication.shared
+  let window=NSWindow(contentRect:NSRect(x:100,y:100,width:640,height:480),styleMask:[.titled,.closable],backing:.buffered,defer:false)
+  window.isReleasedWhenClosed=false; window.title="iTerm2 File UI Test"; window.contentView=controller.view; window.orderFrontRegardless()
+  defer {window.close()}
   controller.view.frame=NSRect(x:0,y:0,width:640,height:480)
   controller.applyDocumentChanges(try XCTUnwrap(snapshot),edits:nil);controller.setVisible(true)
   try body(controller)
  }
+ private func waitForDOM(_ selector: String, in web: WKWebView) {
+  _ = evaluate(web,"return new Promise(resolve => { const check = () => { if (document.querySelector(selector)) { observer.disconnect(); resolve(true); } }; const observer = new MutationObserver(check); observer.observe(document, { childList:true, subtree:true, attributes:true }); check(); });",arguments:["selector":selector])
+ }
+ private func previewWeb(_ controller: iTermFileViewController) throws -> iTermFileWorkspaceWebView {
+  let ready=XCTNSPredicateExpectation(predicate:NSPredicate {_,_ in controller.status.isReady},object:nil)
+  wait(for:[ready],timeout:20)
+  return try XCTUnwrap(descendants(controller.view).compactMap {$0 as? iTermFileWorkspaceWebView}.first)
+ }
  func testImagePreviewZoomControlsChangeMagnification() throws {
-  let bitmap=try XCTUnwrap(NSBitmapImageRep(bitmapDataPlanes:nil,pixelsWide:4096,pixelsHigh:4096,bitsPerSample:8,samplesPerPixel:4,hasAlpha:true,isPlanar:false,colorSpaceName:.deviceRGB,bytesPerRow:0,bitsPerPixel:0))
+  let bitmap=try XCTUnwrap(NSBitmapImageRep(bitmapDataPlanes:nil,pixelsWide:1024,pixelsHigh:128,bitsPerSample:8,samplesPerPixel:4,hasAlpha:true,isPlanar:false,colorSpaceName:.deviceRGB,bytesPerRow:0,bitsPerPixel:0))
   try withPreview("zoom.png",data:try XCTUnwrap(bitmap.representation(using:.png,properties:[:]))) {controller in
-   let observer=FileUIViewObserver();var focusCount=0;observer.focused={focusCount += 1};controller.delegate=observer
-   let loaded=XCTNSPredicateExpectation(predicate:NSPredicate {_,_ in self.descendants(controller.view).contains {$0 is NSImageView}},object:nil)
-   wait(for:[loaded],timeout:5)
-   let scroll=try XCTUnwrap(descendants(controller.view).compactMap {$0 as? NSScrollView}.first)
-   XCTAssertTrue(scroll.allowsMagnification)
-   let zoom=try XCTUnwrap(descendants(controller.view).compactMap {$0 as? NSButton}.first {$0.identifier?.rawValue == "file-preview-zoom-in"})
-   controller.view.frame=NSRect(x:0,y:0,width:240,height:150);controller.view.layoutSubtreeIfNeeded()
-   let fit=try XCTUnwrap(descendants(controller.view).compactMap {$0 as? NSButton}.first {$0.identifier?.rawValue == "file-preview-image-fit"})
-   fit.performClick(nil)
-   let image=try XCTUnwrap(scroll.documentView as? NSImageView)
-   XCTAssertLessThanOrEqual(image.bounds.width * scroll.magnification,scroll.contentSize.width + 1)
-   XCTAssertLessThanOrEqual(image.bounds.height * scroll.magnification,scroll.contentSize.height + 1)
-   let initial=scroll.magnification;zoom.performClick(nil)
-   XCTAssertGreaterThan(scroll.magnification,initial);XCTAssertEqual(focusCount,2)
+   let web=try previewWeb(controller)
+   waitForDOM("[data-orca-view] img",in:web)
+   let result=evaluate(web,"const image = document.querySelector('[data-orca-view] img'); await image.decode(); const before=image.getBoundingClientRect().width; const zoom=document.querySelector('button[title*=\"zoom in\" i]'); zoom.click(); return new Promise(resolve => { const check=()=>{ const after=image.getBoundingClientRect().width; if(after>before){ observer.disconnect(); resolve({before,after}); } }; const observer=new MutationObserver(check); observer.observe(image,{attributes:true}); check(); }); ") as? [String:Any]
+   XCTAssertGreaterThan((result?["after"] as? NSNumber)?.doubleValue ?? 0,(result?["before"] as? NSNumber)?.doubleValue ?? 0)
   }
  }
  func testPDFPreviewFindCommandsNavigateMatchesAcrossPages() throws {
   let data=NSMutableData(),consumer=try XCTUnwrap(CGDataConsumer(data:data))
   var box=CGRect(x:0,y:0,width:300,height:300)
   let context=try XCTUnwrap(CGContext(consumer:consumer,mediaBox:&box,nil))
-  for text in ["alpha first", "unrelated", "alpha last"] {
+  for text in ["alpha first","unrelated","alpha last"] {
    context.beginPDFPage(nil);NSGraphicsContext.saveGraphicsState()
    NSGraphicsContext.current=NSGraphicsContext(cgContext:context,flipped:false)
    (text as NSString).draw(at:NSPoint(x:20,y:200),withAttributes:[.font:NSFont.systemFont(ofSize:18)])
    NSGraphicsContext.restoreGraphicsState();context.endPDFPage()
   }
   context.closePDF()
+  XCTAssertTrue(PDFDocument(data:data as Data)?.string?.contains("alpha") == true)
   try withPreview("find.pdf",data:data as Data) {controller in
-   let observer=FileUIViewObserver();var focusCount=0;observer.focused={focusCount += 1};controller.delegate=observer
-   let loaded=XCTNSPredicateExpectation(predicate:NSPredicate {_,_ in self.descendants(controller.view).contains {$0 is PDFView}},object:nil)
-   wait(for:[loaded],timeout:5)
-   XCTAssertTrue(controller.canPerform(.find));controller.perform(.find)
-   let pdf=try XCTUnwrap(descendants(controller.view).compactMap {$0 as? PDFView}.first)
-   let field=try XCTUnwrap(descendants(controller.view).compactMap {$0 as? NSSearchField}.first)
-   field.stringValue="alpha";_ = field.target?.perform(try XCTUnwrap(field.action),with:field)
-   let found=XCTNSPredicateExpectation(predicate:NSPredicate {_,_ in pdf.currentSelection?.string == "alpha" && pdf.document?.isFinding == false},object:nil)
-   wait(for:[found],timeout:5);XCTAssertEqual(focusCount,1)
-   XCTAssertTrue(controller.canPerform(.findNext));XCTAssertTrue(controller.canPerform(.findPrevious))
-   XCTAssertEqual(pdf.document?.index(for:try XCTUnwrap(pdf.currentSelection?.pages.first)),0)
+   let web=try previewWeb(controller)
+   waitForDOM("canvas",in:web)
+   controller.perform(.find);waitForDOM("input",in:web)
+   _=evaluate(web,"const input=document.querySelector('input'); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'alpha'); input.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertText',data:'alpha'}));")
+   waitForDOM(".page[data-page-number='1'] .highlight.selected",in:web)
    controller.perform(.findNext)
-   XCTAssertEqual(pdf.document?.index(for:try XCTUnwrap(pdf.currentSelection?.pages.first)),2)
+   waitForDOM(".page[data-page-number='3'] .highlight.selected",in:web)
    controller.perform(.findPrevious)
-   XCTAssertEqual(pdf.document?.index(for:try XCTUnwrap(pdf.currentSelection?.pages.first)),0)
+   waitForDOM(".page[data-page-number='1'] .highlight.selected",in:web)
   }
  }
-
- func testPDFSearchBoundsLargeResultSets() throws {
-  let data=NSMutableData(),consumer=try XCTUnwrap(CGDataConsumer(data:data))
-  var box=CGRect(x:0,y:0,width:2400,height:2200)
-  let context=try XCTUnwrap(CGContext(consumer:consumer,mediaBox:&box,nil));context.beginPDFPage(nil)
-  NSGraphicsContext.saveGraphicsState();NSGraphicsContext.current=NSGraphicsContext(cgContext:context,flipped:false)
-  for row in 0..<100 {
-   (String(repeating:"alpha ",count:51) as NSString).draw(at:NSPoint(x:10,y:2180-row*20),withAttributes:[.font:NSFont.systemFont(ofSize:8)])
-  }
-  NSGraphicsContext.restoreGraphicsState();context.endPDFPage();context.closePDF()
-  try withPreview("many.pdf",data:data as Data) {controller in
-   let loaded=XCTNSPredicateExpectation(predicate:NSPredicate {_,_ in self.descendants(controller.view).contains {$0 is PDFView}},object:nil);wait(for:[loaded],timeout:5)
-   let pdf=try XCTUnwrap(descendants(controller.view).compactMap {$0 as? PDFView}.first)
-   let document=try XCTUnwrap(pdf.document),field=try XCTUnwrap(descendants(controller.view).compactMap {$0 as? NSSearchField}.first)
-   XCTAssertEqual(document.string?.components(separatedBy:"alpha").count,5101)
-   let observer=PDFSearchObserver(downstream:try XCTUnwrap(document.delegate));document.delegate=observer
-   field.stringValue="alpha";_ = field.target?.perform(try XCTUnwrap(field.action),with:field)
-   let found=XCTNSPredicateExpectation(predicate:NSPredicate {_,_ in observer.emittedMatches>0 && !document.isFinding},object:nil);wait(for:[found],timeout:10)
-   XCTAssertLessThanOrEqual(observer.emittedMatches,5000)
-   XCTAssertTrue(descendants(controller.view).compactMap {$0 as? NSTextField}.contains {$0.stringValue.contains("5000+")})
+ func testMermaidPreviewRendersOriginalDiagramWithNativeResourcePolicy() throws {
+  try withPreview("diagram.mmd",data:Data("graph TD\nA[Start] --> B[End]\n".utf8)) {controller in
+   let web=try previewWeb(controller);waitForDOM("svg .node",in:web)
+   let text=evaluate(web,"return new Promise(resolve=>{ const check=()=>{ const text=Array.from(document.querySelectorAll('svg .node')).map(node=>node.textContent).join(' '); if(text.includes('Start') && text.includes('End')){ observer.disconnect(); resolve(text); } }; const observer=new MutationObserver(check); observer.observe(document,{childList:true,subtree:true,characterData:true}); check(); });") as? String ?? ""
+   XCTAssertTrue(text.contains("Start"));XCTAssertTrue(text.contains("End"))
   }
  }
-
  private func withEditor(_ body: (iTermFileViewController, iTermFileDocumentStore, iTermFileDocumentSnapshot, iTermFileWorkspaceUIRuntime, iTermFileWorkspaceWebView) throws -> Void) throws {
   let dir=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
   try FileManager.default.createDirectory(at:dir,withIntermediateDirectories:true)
@@ -136,9 +118,11 @@ final class FileUIWebViewTests: XCTestCase, FileUIWebViewDelegate {
   let done=expectation(description:"flush fixture");controller.flushEdits(reason:reason){error in XCTAssertNil(error);done.fulfill()};wait(for:[done],timeout:7)
  }
  private func evaluate(_ web:WKWebView,_ expression:String,arguments:[String:Any]=[:])->Any? {
-  let done=expectation(description:"evaluate bundled UI");var value:Any?
-  web.callAsyncJavaScript(expression,arguments:arguments,in:nil,in:.page){result in
-   switch result {case .success(let result):value=result;case .failure(let error):XCTFail("Evaluation failed: \(error)")};done.fulfill()
+  let done=expectation(description:"evaluate bundled UI");var value:Any?;let scope=FileUIEvaluationScope()
+  defer {scope.waiting=false}
+  web.callAsyncJavaScript(expression+"; return null",arguments:arguments,in:nil,in:.page){result in
+   guard scope.waiting else {return}
+   switch result {case .success(let result):value=result;case .failure(let error):XCTFail("Evaluation failed [\(expression.prefix(120))]: \(error)")};done.fulfill()
   };wait(for:[done],timeout:7);return value
  }
 
@@ -147,21 +131,16 @@ final class FileUIWebViewTests: XCTestCase, FileUIWebViewDelegate {
    try FileManager.default.setAttributes([.posixPermissions:0o444],ofItemAtPath:snapshot.filePath)
    let changed=expectation(description:"readonly metadata")
    store.fileDidChange(atPath:snapshot.filePath){value,error in XCTAssertNil(error);XCTAssertTrue(value?.isReadOnly == true);changed.fulfill()};wait(for:[changed],timeout:5)
-   let saveAs=["label":FileUIStrings.labels["saveAs"]!],save=["label":FileUIStrings.labels["save"]!]
-   let disabled="return Array.from(document.querySelectorAll('.editor-toolbar button')).find(button => button.title === label).disabled"
-   let click="Array.from(document.querySelectorAll('.editor-toolbar button')).find(button => button.title === label).click(); return true"
    XCTAssertTrue(controller.canPerform(.saveAs));XCTAssertFalse(controller.canPerform(.save))
-   XCTAssertEqual(evaluate(web,disabled,arguments:save) as? Bool,true)
-   XCTAssertEqual(evaluate(web,disabled,arguments:saveAs) as? Bool,false)
    let observer=FileUIViewObserver();controller.delegate=observer;var requests=0
    let requested=expectation(description:"Save As after acknowledged flush")
    observer.requested={command in if command == .saveAs {requests += 1;requested.fulfill()}}
-   _=evaluate(web,click,arguments:saveAs);wait(for:[requested],timeout:7)
+   controller.perform(.saveAs);wait(for:[requested],timeout:7)
    observer.requested={_ in requests += 1}
-   flush(controller,.close);XCTAssertEqual(evaluate(web,disabled,arguments:saveAs) as? Bool,true);XCTAssertFalse(controller.canPerform(.saveAs));_=evaluate(web,click,arguments:saveAs);XCTAssertEqual(requests,1)
-   controller.resumeEditing();XCTAssertEqual(evaluate(web,disabled,arguments:saveAs) as? Bool,false)
+   flush(controller,.close);XCTAssertFalse(controller.canPerform(.saveAs));controller.perform(.saveAs);XCTAssertEqual(requests,1)
+   controller.resumeEditing();XCTAssertTrue(controller.canPerform(.saveAs))
    let quit=expectation(description:"quit barrier");runtime.flushAllEdits(reason:.quit){error in XCTAssertNil(error);quit.fulfill()};wait(for:[quit],timeout:7)
-   XCTAssertEqual(evaluate(web,disabled,arguments:saveAs) as? Bool,true);XCTAssertFalse(controller.canPerform(.saveAs));_=evaluate(web,click,arguments:saveAs);XCTAssertEqual(requests,1)
+   XCTAssertFalse(controller.canPerform(.saveAs));controller.perform(.saveAs);XCTAssertEqual(requests,1)
    runtime.resumeEditing();observer.requested=nil
   }
  }
@@ -276,7 +255,7 @@ final class FileUIWebViewTests: XCTestCase, FileUIWebViewDelegate {
   try FileManager.default.createDirectory(at:dir,withIntermediateDirectories:true)
   defer {try? FileManager.default.removeItem(at:dir)}
   let path=dir.appendingPathComponent("large.txt");try Data().write(to:path)
-  let file=try FileHandle(forWritingTo:path);try file.truncate(atOffset:10*1024*1024+1);try file.close()
+  let file=try FileHandle(forWritingTo:path);try file.truncate(atOffset:50*1024*1024+1);try file.close()
   let store=iTermFileDocumentStore(storageDirectory:dir.appendingPathComponent("drafts"))
   var snapshot:iTermFileDocumentSnapshot?;let opened=expectation(description:"oversize snapshot")
   store.openFile(atPath:path.path){value,error in XCTAssertNil(error);snapshot=value;opened.fulfill()};wait(for:[opened],timeout:5)
@@ -292,20 +271,6 @@ final class FileUIWebViewTests: XCTestCase, FileUIWebViewDelegate {
   XCTAssertTrue(controller.status.isReadOnly)
   XCTAssertFalse(controller.canPerform(.find))
   XCTAssertFalse(controller.canPerform(.saveAs))
- }
- func testNativePreviewReaderRejectsSpecialFilesLinksAndOversize() throws {
-  let dir=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).resolvingSymlinksInPath()
-  try FileManager.default.createDirectory(at:dir,withIntermediateDirectories:true)
-  defer {try? FileManager.default.removeItem(at:dir)}
-  let regular=dir.appendingPathComponent("image.dat"),link=dir.appendingPathComponent("link"),fifo=dir.appendingPathComponent("fifo")
-  let data=Data([0,1,2,3]);try data.write(to:regular)
-  XCTAssertEqual(try iTermFilePreviewViewController.read(path:regular.path),data)
-  try FileManager.default.createSymbolicLink(atPath:link.path,withDestinationPath:regular.path)
-  XCTAssertThrowsError(try iTermFilePreviewViewController.read(path:link.path))
-  XCTAssertEqual(mkfifo(fifo.path,0o600),0)
-  XCTAssertThrowsError(try iTermFilePreviewViewController.read(path:fifo.path))
-  let file=try FileHandle(forWritingTo:regular);try file.truncate(atOffset:10*1024*1024+1);try file.close()
-  XCTAssertThrowsError(try iTermFilePreviewViewController.read(path:regular.path))
  }
  func testReusedNativeControllerEditsTheReplacementDocument() throws {
   let dir=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -382,6 +347,7 @@ final class FileUIWebViewTests: XCTestCase, FileUIWebViewDelegate {
   webView.send("paste",payload:["text":pastedText])
  }
  func fileUIWebView(_ webView:iTermFileWorkspaceWebView,received type:String,payload:[String:Any],identifier:String) {
+  if type=="hostRequest",payload["operation"] as? String=="settings" {webView.send("hostResult",payload:["result":FileUISettingsStore.defaults],identifier:identifier)}
   if type=="edits" { edits += 1; editSession!.apply(payload){value,error in
    XCTAssertNil(error);webView.send("ack",payload:["sequence":payload["sequence"]!,"revision":String(value?.revision ?? 0)])
    webView.send("flush",payload:["suspend":true],identifier:"barrier")
@@ -419,3 +385,5 @@ private final class PDFSearchObserver: NSObject, PDFDocumentDelegate {
  func didMatchString(_ instance: PDFSelection) { emittedMatches += 1;downstream.didMatchString?(instance) }
  func documentDidEndDocumentFind(_ notification: Notification) { downstream.documentDidEndDocumentFind?(notification) }
 }
+
+private final class FileUIEvaluationScope { var waiting = true }

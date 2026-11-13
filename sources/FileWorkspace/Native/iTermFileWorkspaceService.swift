@@ -8,7 +8,19 @@ import AppKit
     let coordinator: iTermFileSessionCoordinator
     private init(directory: URL) {
         documentStore = iTermFileDocumentStore(storageDirectory: directory.appendingPathComponent("FileWorkspaceDrafts", isDirectory: true))
-        runtime = iTermFileWorkspaceUIRuntime(documentStore: documentStore)
+        let preferences = iTermUserDefaults.userDefaults()
+        let settings = FileUISettingsStore(read: {
+            var values = preferences.dictionary(forKey: "FileWorkspaceUISettings") ?? [:]
+            values["viewerPreferences"] = preferences.dictionary(forKey: "NoSyncFileWorkspaceViewerPreferences") ?? [:]
+            return values
+        }, write: { values in
+            var configuration = values; configuration.removeValue(forKey: "viewerPreferences")
+            preferences.set(configuration, forKey: "FileWorkspaceUISettings")
+            preferences.set(values["viewerPreferences"] ?? [:], forKey: "NoSyncFileWorkspaceViewerPreferences")
+        }, readAnnotations: { preferences.dictionary(forKey: "NoSyncFileWorkspaceAnnotations") ?? [:] },
+           writeAnnotations: { preferences.set($0, forKey: "NoSyncFileWorkspaceAnnotations") })
+        runtime = iTermFileWorkspaceUIRuntime(documentStore: documentStore,
+            resourceDirectory: Bundle.main.resourceURL?.appendingPathComponent("FileWorkspaceUI"), settings: settings)
         coordinator = iTermFileSessionCoordinator(documentStore: documentStore, runtime: runtime)
         super.init()
     }

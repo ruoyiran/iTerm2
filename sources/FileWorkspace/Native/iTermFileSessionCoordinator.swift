@@ -41,12 +41,13 @@ import AppKit
         self.original = descriptor; self.viewIdentifier = viewIdentifier; self.kind = descriptor.kind
         controller = iTermFileViewController(runtime: runtime, viewIdentifier: viewIdentifier)
         super.init()
-        controller.delegate = self; controller.applyContext(descriptor.context)
+        controller.delegate = self; controller.applyOwnerContext(descriptor.context); controller.applyContext(descriptor.context)
         controller.restoreViewState(descriptor.viewState); controller.setPreview(descriptor.preview)
     }
     fileprivate func rebind(descriptor: iTermFileSessionDescriptor, context: iTermFileBrowserContext,
                             snapshot: iTermFileDocumentSnapshot?, error: NSError?) {
         original = descriptor
+        controller.applyOwnerContext(descriptor.context)
         controller.applyContext(context)
         if let snapshot { kind = snapshot.kind.rawValue; controller.applyDocumentChanges(snapshot, edits: nil) }
         else { controller.showOpenFailure(path: descriptor.filePath, documentIdentifier: descriptor.documentIdentifier,
@@ -118,6 +119,10 @@ import AppKit
     }
     func restore(_ descriptor: iTermFileSessionDescriptor, viewIdentifier: String, context: iTermFileBrowserContext?,
                  completion: @escaping (iTermFileSessionPane?, NSError?) -> Void) {
+        restore(descriptor, viewIdentifier: viewIdentifier, context: context, readScope: nil, completion: completion)
+    }
+    @nonobjc func restore(_ descriptor: iTermFileSessionDescriptor, viewIdentifier: String, context: iTermFileBrowserContext?,
+                         readScope: FileDocumentReadScope?, completion: @escaping (iTermFileSessionPane?, NSError?) -> Void) {
         guard !operation, releasePending.isEmpty, !reservedViewIdentifiers.contains(viewIdentifier), !panes.contains(where: { $0.viewIdentifier == viewIdentifier }) else {
             completion(nil, Self.error(1)); return
         }
@@ -137,9 +142,9 @@ import AppKit
             if let identifier = descriptor.documentIdentifier {
                 documentStore.snapshot(documentIdentifier: identifier) { [self] snapshot in
                     if let snapshot { finish(snapshot, nil) }
-                    else { documentStore.openFile(atPath: descriptor.filePath, completion: finish) }
+                    else { documentStore.openFile(atPath: descriptor.filePath, readScope: readScope, completion: finish) }
                 }
-            } else { documentStore.openFile(atPath: descriptor.filePath, completion: finish) }
+            } else { documentStore.openFile(atPath: descriptor.filePath, readScope: readScope, completion: finish) }
         }
     }
     private func afterRecovery(_ action: @escaping () -> Void) {
@@ -185,6 +190,18 @@ import AppKit
             else { documentStore.undo(documentIdentifier: id, completion: done) }
         }
     }
+    func reload(_ pane: iTermFileSessionPane, confirmDiscard: @escaping () -> Bool, completion: @escaping (NSError?) -> Void) {
+        guard !pane.closed, pane.coordinator === self, let identifier = pane.documentIdentifier else { completion(Self.error(2)); return }
+        beginOperation { [self] error in
+            guard error == nil else { completion(error); return }
+            let generation = operationGeneration
+            guard !pane.closed, pane.documentIdentifier == identifier, confirmDiscard() else { cancelOperation(); completion(Self.error(1)); return }
+            documentStore.discardChanges(documentIdentifier: identifier) { [self] _, error in
+                guard operation, operationGeneration == generation else { completion(Self.error(1)); return }
+                finishOperation { finishError in completion(error ?? finishError) }
+            }
+        }
+    }
     func rebind(_ pane: iTermFileSessionPane, descriptor: iTermFileSessionDescriptor,
                 context: iTermFileBrowserContext, completion: @escaping (NSError?) -> Void) {
         guard !pane.closed, pane.coordinator === self else { completion(Self.error(1)); return }
@@ -216,7 +233,7 @@ import AppKit
             }
             let generation = operationGeneration
             let old = pane.documentIdentifier
-            documentStore.openFile(atPath: request.path) { [self] snapshot, error in
+            documentStore.openFile(atPath: request.path, readScope: request.readScope) { [self] snapshot, error in
                 guard operation, generation == operationGeneration else { completion(false, Self.error(1)); return }
                 guard isCurrent(), !pane.closed else {
                     if let id = snapshot?.documentIdentifier { cleanup.insert(id) }
@@ -224,7 +241,7 @@ import AppKit
                 }
                 let descriptor = iTermFileSessionDescriptor(filePath: request.path, documentIdentifier: snapshot?.documentIdentifier,
                     rootDirectory: request.ownerContext.rootDirectory, projectIdentifier: request.ownerContext.projectIdentifier,
-                    worktreeIdentifier: request.ownerContext.worktreeIdentifier, preview: request.activation == .preview, viewState: iTermFileViewState())
+                    worktreeIdentifier: request.ownerContext.worktreeIdentifier, preview: request.activation == .preview, viewState: request.initialViewState)
                 pane.rebind(descriptor: descriptor, context: request.context, snapshot: snapshot, error: error)
                 if let old, old != pane.documentIdentifier { cleanup.insert(old) }
                 cancelOperation(); completion(true, error)
