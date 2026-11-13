@@ -1,4 +1,46 @@
-Orca file explorer presentation and Monaco patch adapted from stablyai/orca (MIT, Lovecast Inc.), reference commit 729f757b592244176420a86114c1ea23911eeeba, version 1.4.214. No Electron or application store code included.
-Monaco 0.55.1; exact Orca patch SHA256 53b71f7d8a7c00b76ffdb73ce83d18e31692f193f5fafa6a390e48f5b3fdd636; DOMPurify overridden to 3.4.17.
-Lucide SVG subset from lucide-static 0.577.0. Geist font and matching OFL from geist 1.9.2 npm package, dist/fonts/geist-sans/Geist-Variable.woff2. Font SHA256 3626eba547294501c8a4d662c7d9ea3b49734409a4c5a1ccf12fa86429b1687e.
-Package tarball integrity values and all transitive versions are recorded in tools/file-workspace-ui/package-lock.json. Resources are bundled for offline operation.
+Orca portable local file workspace
+Upstream: https://github.com/stablyai/orca
+Reference commit: 729f757b592244176420a86114c1ea23911eeeba (MIT, Lovecast Inc.)
+
+Orca-SOURCE-PROVENANCE.json records every copied source path, original SHA256,
+and shipped SHA256. The build does not access an Orca checkout. Adaptations are
+recorded as a reconstructible unified diff in tools/file-workspace-ui/patches/
+orca-local.patch.json. They replace platform/store APIs with the typed native
+host bridge, disable remote/plugin/Notebook execution and review-note sending,
+retain native document edit authority, and adapt worker URLs and local storage.
+The broad global settings constants module is reduced to its two used exports.
+
+Imported presentation includes MonacoEditor, EditorPanelHeader, EditorViewToggle,
+EditorMarkdownFileSurface, rich Markdown and preview, frontmatter, TOC, local
+review notes, SVG/Mermaid, image/PDF, CSV/paged CSV, notebooks, audio/video,
+combined diff sections/file tree/toolbar/binary viewers, FileExplorerToolbar,
+QueryStrip/ViewSwitch/NameFilter, SearchQueryRow/SearchFilters/result rows, and
+FileExplorerRow. Original UI primitives and styles are included. The Explorer
+controller preserves the native filesystem/search/action backend.
+
+All 11 pinned upstream locale catalogs are filtered to imported UI keys; source
+catalog hashes and selected keys are in Orca-SOURCE-PROVENANCE.json. Orca exposes
+12 language choices including System. Native explorer/host labels are supplied
+by iTerm2 localization. Missing translated entries use the English fallback.
+
+Monaco 0.55.1 retains the exact Orca patch; SHA256:
+53b71f7d8a7c00b76ffdb73ce83d18e31692f193f5fafa6a390e48f5b3fdd636.
+DOMPurify is overridden to 3.4.17. All package versions and tarball integrity
+values are locked in tools/file-workspace-ui/package-lock.json.
+THIRD-PARTY-NOTICES.txt contains bundled package license notices; supplementary
+notices accompany it where npm packages omit standalone license files.
+
+Geist font/OFL: geist 1.9.2, dist/fonts/geist-sans/Geist-Variable.woff2.
+Font SHA256: 3626eba547294501c8a4d662c7d9ea3b49734409a4c5a1ccf12fa86429b1687e.
+Lucide SVG subset: lucide-static 0.577.0.
+
+Resources include all syntax/Mermaid/CSV/Markdown/Monaco/PDF workers, fonts,
+PDF CMaps and standard fonts. Worker Promise/Array shims and compiled Safari16
+CSS fallbacks are local build adaptations for the macOS13 WebKit baseline.
+
+PDF.js is pinned to Orca’s 6.3.289; its same-version legacy distribution supplies
+its maintained browser polyfills (including core-js3.50.0). The exact Orca PDF
+viewer patch also applies to legacy/web/pdf_viewer.mjs. PDF wasm assets are local.
+Orca’s exact Tiptap list/Markdown and ProseMirror view patches are also retained;
+source hashes, pristine/patched package-file hashes, and patch bytes are recorded
+in tools/file-workspace-ui/patches/orca-packages.json and verified during builds.

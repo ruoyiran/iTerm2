@@ -18,8 +18,20 @@ final class iTermFileUIAssetServer {
         var timer: DispatchWorkItem?
         var descriptor: Int32 = -1
         var remaining = 0
+        var position: Int64 = 0
+        var mediaOwner: String?
         init(_ connection: NWConnection) { self.connection = connection }
         deinit { if descriptor >= 0 { Darwin.close(descriptor) } }
+    }
+    private final class Media {
+        let descriptor: Int32
+        let size: Int
+        let mime: String
+        let owner: String
+        init(descriptor: Int32, size: Int, mime: String, owner: String) {
+            self.descriptor = descriptor; self.size = size; self.mime = mime; self.owner = owner
+        }
+        deinit { Darwin.close(descriptor) }
     }
     private let queue = DispatchQueue(label: "com.iterm2.file-ui.assets", qos: .utility)
     private let assets: [String: Asset]
@@ -28,6 +40,7 @@ final class iTermFileUIAssetServer {
     private var clients = [UUID: Client]()
     private var port: UInt16 = 0
     private var stopped = false
+    private var media = [String: Media]()
 
     init(resourceDirectory: URL) throws {
         let root = resourceDirectory.resolvingSymlinksInPath().standardizedFileURL
@@ -103,7 +116,35 @@ final class iTermFileUIAssetServer {
             guard let self = self else { return }
             self.stopped = true; self.listener?.cancel(); self.listener = nil
             for id in Array(self.clients.keys) { self.finish(id) }
+            self.media.removeAll()
         }
+    }
+    func registerMedia(path: String, owner: String, completion: @escaping (Result<URL, Error>) -> Void) {
+        queue.async { [weak self] in
+            guard let self, !self.stopped, self.port != 0 else {
+                DispatchQueue.main.async { completion(.failure(fileUIError(2))) }; return
+            }
+            do {
+                let url = URL(fileURLWithPath: path).standardizedFileURL
+                let content = try FileContentService(rootDirectory: url.deletingLastPathComponent().path)
+                let item = try content.withFile(url.path) { descriptor, info -> Media in
+                    let duplicate = dup(descriptor)
+                    guard duplicate >= 0 else { throw fileUIError(7) }
+                    _ = fcntl(duplicate, F_SETFD, FD_CLOEXEC)
+                    return Media(descriptor: duplicate, size: Int(info.st_size), mime: FileContentService.mimeType(path), owner: owner)
+                }
+                self.revokeMediaOnQueue(owner: owner)
+                let key = "media/" + UUID().uuidString
+                self.media[key] = item
+                let endpoint = URL(string: "http://127.0.0.1:\(self.port)/\(self.token)/\(key)")!
+                DispatchQueue.main.async { completion(.success(endpoint)) }
+            } catch { DispatchQueue.main.async { completion(.failure(error)) } }
+        }
+    }
+    func revokeMedia(owner: String) { queue.async { [weak self] in self?.revokeMediaOnQueue(owner: owner) } }
+    private func revokeMediaOnQueue(owner: String) {
+        for key in media.keys.filter({ media[$0]?.owner == owner }) { media.removeValue(forKey: key) }
+        for id in clients.keys.filter({ clients[$0]?.mediaOwner == owner }) { finish(id) }
     }
     deinit { listener?.cancel(); clients.values.forEach { $0.timer?.cancel(); $0.connection.cancel() } }
     private static func safePath(_ path: String) -> Bool {
@@ -149,12 +190,14 @@ final class iTermFileUIAssetServer {
             headers[key] = line[line.index(after: colon)...].trimmingCharacters(in: .whitespaces)
         }
         guard headers["host"] == "127.0.0.1:\(port)" else { respond(id, code: 403); return }
-        guard headers["transfer-encoding"] == nil, headers["upgrade"] == nil, headers["range"] == nil,
+        guard headers["transfer-encoding"] == nil, headers["upgrade"] == nil,
               headers["content-length"] == nil || headers["content-length"] == "0" else { respond(id, code: 400); return }
         let raw = String(first[1].split(separator: "?", maxSplits: 1)[0])
         guard !raw.lowercased().contains("%2f"), !raw.lowercased().contains("%5c"),
               let path = raw.removingPercentEncoding, path.hasPrefix("/\(token)/") else { respond(id, code: 404); return }
         let key = String(path.dropFirst(token.count + 2))
+        if let item = media[key] { serveMedia(id, item: item, method: method, range: headers["range"]); return }
+        guard headers["range"] == nil else { respond(id, code: 400); return }
         guard Self.safePath(key), let asset = assets[key] else { respond(id, code: 404); return }
         let fd = Darwin.open(asset.url.path, O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC)
         var info = stat()
@@ -164,10 +207,36 @@ final class iTermFileUIAssetServer {
         deadline(id, seconds: 15)
         respond(id, code: 200, length: asset.bytes, mime: asset.mime, body: method != "HEAD")
     }
-    private func respond(_ id: UUID, code: Int, length: Int = 0, mime: String = "text/plain", body: Bool = false) {
+    private func serveMedia(_ id: UUID, item: Media, method: String, range: String?) {
         guard let client = clients[id] else { return }
-        let csp = "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'"
-        let header = "HTTP/1.1 \(code) Response\r\nContent-Length: \(length)\r\nContent-Type: \(mime)\r\nConnection: close\r\nX-Content-Type-Options: nosniff\r\nContent-Security-Policy: \(csp)\r\nCache-Control: no-store\r\n\r\n"
+        let start: Int, end: Int
+        if let range {
+            let parts = range.hasPrefix("bytes=") ? String(range.dropFirst(6)).split(separator: "-", omittingEmptySubsequences: false) : []
+            guard parts.count == 2, !range.contains(","), item.size > 0 else { respond(id, code: 416, extra: "Content-Range: bytes */\(item.size)\r\n"); return }
+            if parts[0].isEmpty {
+                guard let suffix = Int(parts[1]), suffix > 0 else { respond(id, code: 416); return }
+                start = max(0, item.size - suffix); end = item.size - 1
+            } else {
+                guard let first = Int(parts[0]), first >= 0, first < item.size,
+                      parts[1].isEmpty || Int(parts[1]) != nil else { respond(id, code: 416, extra: "Content-Range: bytes */\(item.size)\r\n"); return }
+                start = first; end = min(item.size - 1, Int(parts[1]) ?? item.size - 1)
+                guard end >= start else { respond(id, code: 416); return }
+            }
+        } else { start = 0; end = item.size - 1 }
+        let descriptor = dup(item.descriptor)
+        guard descriptor >= 0 else { respond(id, code: 404); return }
+        _ = fcntl(descriptor, F_SETFD, FD_CLOEXEC)
+        client.descriptor = descriptor; client.position = Int64(start); client.mediaOwner = item.owner
+        let length = max(0, end - start + 1)
+        client.remaining = method == "HEAD" ? 0 : length
+        let extra = "Accept-Ranges: bytes\r\n" + (range == nil ? "" : "Content-Range: bytes \(start)-\(end)/\(item.size)\r\n")
+        deadline(id, seconds: 60)
+        respond(id, code: range == nil ? 200 : 206, length: length, mime: item.mime, body: method != "HEAD", extra: extra)
+    }
+    private func respond(_ id: UUID, code: Int, length: Int = 0, mime: String = "text/plain", body: Bool = false, extra: String = "") {
+        guard let client = clients[id] else { return }
+        let csp = "default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self'; connect-src 'self'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'"
+        let header = "HTTP/1.1 \(code) Response\r\nContent-Length: \(length)\r\nContent-Type: \(mime)\r\nConnection: close\r\nX-Content-Type-Options: nosniff\r\nContent-Security-Policy: \(csp)\r\nCache-Control: no-store\r\n" + extra + "\r\n"
         client.connection.send(content: Data(header.utf8), completion: .contentProcessed { [weak self] error in
             guard error == nil, body else { self?.finish(id); return }; self?.sendBody(id)
         })
@@ -176,9 +245,10 @@ final class iTermFileUIAssetServer {
         guard let client = clients[id] else { return }
         guard client.remaining > 0 else { finish(id); return }
         var buffer = [UInt8](repeating: 0, count: min(65536, client.remaining))
-        let count = Darwin.read(client.descriptor, &buffer, buffer.count)
+        let count = Darwin.pread(client.descriptor, &buffer, buffer.count, client.position)
         guard count > 0 else { finish(id); return }
         client.remaining -= count
+        client.position += Int64(count)
         client.connection.send(content: Data(buffer.prefix(count)), completion: .contentProcessed { [weak self] error in
             if error != nil { self?.finish(id) } else { self?.sendBody(id) }
         })

@@ -1,3 +1,5 @@
+import {createExplorerChrome,createExplorerMenu} from './portable/explorer-chrome.tsx';
+import {createExplorerRow,createSearchResult} from './portable/explorer-row.tsx';
 import {TreeState,snippetParts} from './tree-state.mjs';
 export function element(tag, className, text) { const node=document.createElement(tag); if(className)node.className=className;if(text!==undefined)node.textContent=text;return node; }
 export function icon(name) { const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.setAttribute('viewBox','0 0 24 24');svg.setAttribute('aria-hidden','true');const use=document.createElementNS(svg.namespaceURI,'use');use.setAttribute('href',`./icons/lucide.svg#${name}`);svg.append(use);return svg; }
@@ -10,34 +12,25 @@ export class Explorer {
   }
   build() {
     const t=this.t;this.root.className='explorer';
-    const activity=element('div','activity');const active=button(t('files'),()=>this.names.focus(),'files');active.classList.add('active');activity.append(active);
-    const pane=element('div','explorer-pane');const toolbar=element('div','explorer-toolbar');this.title=element('span','root-title',t('selectProject'));
-    toolbar.append(this.title,button(t('collapseAll'),()=>{this.state.expanded.clear();this.render();},'list-collapse'),button(t('refresh'),()=>this.refresh(),'refresh-cw'),button(t('more'),event=>this.more(event),'ellipsis'));
-    const strip=element('div','query-strip');const modes=element('div','segments');
-    for(const mode of ['names','contents']) { const b=button(t(mode),()=>this.setMode(mode));b.dataset.mode=mode;b.setAttribute('aria-pressed',String(this.mode===mode));modes.append(b); }
-    this.names=this.query('names','list-filter');this.contents=this.query('contents','search');
-    this.names.placeholder=t('findFiles');this.contents.placeholder=t('search');
-    this.nameRow=this.names.parentElement;this.contentRow=this.contents.parentElement;this.contentRow.hidden=true;
+    const pane=element('div','explorer-pane');const chrome=element('div','explorer-chrome');
     this.flags={caseSensitive:false,wholeWord:false,regularExpression:false};
-    for(const [key,symbol] of [['caseSensitive','case-sensitive'],['wholeWord','whole-word'],['regularExpression','regex']]) {
-      const b=button(t(key),()=>{this.flags[key]=!this.flags[key];b.setAttribute('aria-pressed',String(this.flags[key]));},symbol);b.dataset.flag=key;b.setAttribute('aria-pressed','false');this.contentRow.append(b);
-    }
-    this.filters=element('details','filters');const summary=element('summary','',t('searchDetails'));this.include=element('input');this.exclude=element('input');
-    for(const [input,label] of [[this.include,'include'],[this.exclude,'exclude']]) {input.placeholder=t(label);input.setAttribute('aria-label',t(label));}
-    this.filters.append(summary,this.include,this.exclude);this.filters.hidden=true;
-    strip.append(modes,this.nameRow,this.contentRow,this.filters);this.status=element('div','explorer-status');this.status.setAttribute('role','status');
-    this.viewport=element('div','tree-viewport');this.viewport.tabIndex=0;this.viewport.setAttribute('role','tree');this.viewport.setAttribute('aria-multiselectable','true');
+    this.chrome=createExplorerChrome(chrome,this);
+    this.names=chrome.querySelector('[data-explorer-query-input="files"]');this.contents=chrome.querySelector('[data-explorer-query-input="search"]');
+    this.nameRow=chrome.querySelector('[data-name-row]');this.contentRow=chrome.querySelector('[data-content-row]');this.filters=chrome.querySelector('[data-search-filters]');
+    [this.include,this.exclude]=this.filters.querySelectorAll('input');
+    for(const [input,mode] of [[this.names,'names'],[this.contents,'contents']])this.bindQuery(input,mode);
+    this.status=element('div','explorer-status');this.status.setAttribute('role','status');
+    this.viewport=element('div','tree-viewport scrollbar-sleek');this.viewport.tabIndex=0;this.viewport.setAttribute('role','tree');this.viewport.setAttribute('aria-multiselectable','true');
     this.summary=element('div','search-summary');this.summary.hidden=true;
     this.canvas=element('div','tree-canvas');this.viewport.append(this.canvas);this.viewport.addEventListener('scroll',()=>this.renderRows());this.viewport.addEventListener('keydown',e=>this.key(e));
     this.viewport.addEventListener('contextmenu',e=>{if(e.target===this.viewport||e.target===this.canvas){e.preventDefault();this.menu(e,null);}});
-    pane.append(toolbar,strip,this.summary,this.status,this.viewport);this.root.replaceChildren(activity,pane);
+    pane.append(chrome,this.summary,this.status,this.viewport);this.root.replaceChildren(pane);
   }
-  query(mode,symbol) {
-    const row=element('div','query-row');row.append(icon(symbol));const input=element('input');input.type='text';input.spellcheck=false;input.dataset.query=mode;input.setAttribute('aria-label',this.t(mode));
+  bindQuery(input,mode) {
+    input.dataset.query=mode;
     input.addEventListener('compositionstart',()=>this.composing=true);input.addEventListener('compositionend',()=>{this.composing=false;if(mode==='names')this.scheduleNames();});
-    input.addEventListener('input',()=>{if(mode==='names'&&!this.composing)this.scheduleNames();});
+    input.addEventListener('input',()=>{if(mode==='names'&&!this.composing)this.scheduleNames();this.chrome.render();});
     input.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.isComposing&&!this.composing){e.preventDefault();this.search(mode);}if(e.key==='Escape'){input.value='';this.search(mode);}});
-    row.append(input,button(this.t('clear'),()=>{input.value='';this.search(mode);input.focus();},'x'));return input;
   }
   setMode(mode) { const hadFocus=document.activeElement===this.names||document.activeElement===this.contents;this.mode=mode;this.nameRow.hidden=mode!=='names';this.contentRow.hidden=mode!=='contents';this.filters.hidden=mode!=='contents';for(const b of this.root.querySelectorAll('[data-mode]'))b.setAttribute('aria-pressed',String(b.dataset.mode===mode));this.cancelSearch();this.state.nameResults=null;this.render();if(hadFocus)(mode==='names'?this.names:this.contents).focus();if(mode==='names'&&this.names.value)this.search(mode); }
   scheduleNames() {clearTimeout(this.nameTimer);this.nameTimer=setTimeout(()=>this.search('names'),180);}
@@ -105,7 +98,7 @@ export class Explorer {
     this.invalidateTransientUI();this.cancelSearch();this.pendingDirectoryChanges.clear();this.entryNodes.clear();this.rememberContext();this.resultFocus=null;this.scope=payload.rootDirectory?payload:null;
     const saved=this.recentContexts.get(this.contextKey(this.scope));this.recentContexts.delete(this.contextKey(this.scope));
     this.state=saved?.state??new TreeState();this.state.scope=this.scope;this.state.pending.clear();
-    this.title.textContent=payload.title||this.t('selectProject');this.names.value=saved?.names??'';this.contents.value=saved?.contents??'';
+    this.repoTitle=payload.title||this.t('selectProject');this.names.value=saved?.names??'';this.contents.value=saved?.contents??'';
     this.include.value=saved?.include??'';this.exclude.value=saved?.exclude??'';this.flags=saved?.flags??{caseSensitive:false,wholeWord:false,regularExpression:false};
     for(const b of this.contentRow.querySelectorAll('[data-flag]'))b.setAttribute('aria-pressed',String(this.flags[b.dataset.flag]));
     this.contextReady=true;this.root.inert=false;
@@ -128,10 +121,11 @@ export class Explorer {
     if(type==='complete'){if(payload.error)this.state.error=payload.error;if(payload.requestIdentifier===this.formRequest){this.formRequest=null;if(!payload.error){this.form?.remove();this.form=null;}}}
     if(type==='operationState')this.operations=payload;
     if(type==='reveal') {this.focused=payload.path;this.state.select(payload.path,'replace');const root=this.scope?.rootDirectory;let path=parentPath(payload.path);while(root&&path.startsWith(root)&&path!==root){this.state.expanded.add(path);if(!this.state.directories.has(path))this.list(path);path=parentPath(path);}}
-    if(type==='focusQuery'){const mode=payload.contents?'contents':'names';if(this.mode!==mode)this.setMode(mode);(payload.contents?this.contents:this.names).focus();}
+    if(type==='focusQuery'){const mode=payload.contents?'contents':'names';if(this.mode!==mode)this.setMode(mode);const input=payload.contents?this.contents:this.names;if(typeof payload.query==='string'){input.value=payload.query;this.search(mode)}input.focus();}
     this.render();
   }
   render() {
+    this.chrome?.render();
     this.rows=[];let height=0;
     if(this.mode==='contents') {
       for(const group of this.state.matches.values()) {this.rows.push({kind:'group',key:JSON.stringify(['group',group.path]),group,top:height,height:28});height+=28;if(!this.collapsed.has(group.path))for(const line of group.lines){this.rows.push({kind:'match',key:JSON.stringify(['match',group.path,line.lineNumber,line.ranges[0]?.location??0]),group,line,top:height,height:22});height+=22;}}
@@ -152,10 +146,10 @@ export class Explorer {
         this.entryNodes.set(row.path,{signature,node});
         node.setAttribute('aria-level',String(row.depth+1));node.setAttribute('aria-selected',String(this.state.selected.has(row.path)));node.style.paddingLeft=`${row.depth*16+8}px`;
         const loading=[...this.state.pending.values()].includes(row.path);node.setAttribute('aria-busy',String(loading));
-        if(row.isExpandable){node.setAttribute('aria-expanded',String(this.state.expanded.has(row.path)));node.querySelector('svg use').setAttribute('href',`./icons/lucide.svg#${this.state.expanded.has(row.path)?'chevron-down':'chevron-right'}`);}
+        if(row.isExpandable){node.setAttribute('aria-expanded',String(this.state.expanded.has(row.path)));const expanded=this.state.expanded.has(row.path);if(node.dataset.presentation!==`${expanded}:${loading}`){const presentation=createExplorerRow(row,expanded,this.state.selected.has(row.path),loading);node.replaceChildren(...presentation.childNodes);node.dataset.presentation=`${expanded}:${loading}`;}}
       }
-      else if(item.kind==='group') {node=button(item.group.relativePath,()=>{if(this.collapsed.has(item.group.path))this.collapsed.delete(item.group.path);else this.collapsed.add(item.group.path);this.render();});node.className='result-group';node.prepend(icon(this.collapsed.has(item.group.path)?'chevron-right':'chevron-down'));}
-      else {node=element('button','result-match');node.type='button';node.append(element('span','line-number',String(item.line.lineNumber)));for(const part of snippetParts(item.line.snippet,item.line.ranges,item.line.snippetColumn))node.append(element(part.match?'mark':'span','',part.text));node.addEventListener('click',()=>this.open({path:item.group.path},'preview','tab',item.line.lineNumber,(item.line.ranges[0]?.location??0)+1));node.addEventListener('dblclick',()=>this.open({path:item.group.path},'pinned','tab',item.line.lineNumber,(item.line.ranges[0]?.location??0)+1));}
+      else if(item.kind==='group') {node=createSearchResult(item,this.collapsed.has(item.group.path));node.classList.add('result-group');node.addEventListener('click',()=>{if(this.collapsed.has(item.group.path))this.collapsed.delete(item.group.path);else this.collapsed.add(item.group.path);this.render();});}
+      else {node=createSearchResult(item,false);node.classList.add('result-match');node.addEventListener('click',()=>this.open({path:item.group.path},'preview','tab',item.line.lineNumber,(item.line.ranges[0]?.location??0)+1));node.addEventListener('dblclick',()=>this.open({path:item.group.path},'pinned','tab',item.line.lineNumber,(item.line.ranges[0]?.location??0)+1));}
       if(item.kind!=='entry'){node.dataset.resultIndex=String(index);node.dataset.resultKey=item.key;node.addEventListener('focus',()=>{this.resultFocus={key:item.key,path:item.group.path};});}
       node.style.top=`${item.top}px`;node.style.height=`${item.height}px`;children.push(node);
     }
@@ -172,8 +166,8 @@ export class Explorer {
     }
   }
   entry(row) {
-    const node=element('button','tree-row');node.type='button';node.dataset.path=row.path;node.setAttribute('role','treeitem');node.setAttribute('aria-level',String(row.depth+1));node.setAttribute('aria-selected',String(this.state.selected.has(row.path)));if(row.isExpandable)node.setAttribute('aria-expanded',String(this.state.expanded.has(row.path)));node.style.paddingLeft=`${row.depth*16+8}px`;
-    node.append(icon(row.isExpandable?(this.state.expanded.has(row.path)?'chevron-down':'chevron-right'):row.isSymbolicLink?'link':'file'),icon(row.isDirectory?'folder':'file-text'),element('span','filename',row.name));node.title=row.relativePath||row.path;
+    const node=createExplorerRow(row,this.state.expanded.has(row.path),this.state.selected.has(row.path));node.type='button';node.dataset.path=row.path;node.setAttribute('role','treeitem');node.setAttribute('aria-level',String(row.depth+1));node.setAttribute('aria-selected',String(this.state.selected.has(row.path)));if(row.isExpandable)node.setAttribute('aria-expanded',String(this.state.expanded.has(row.path)));node.style.paddingLeft=`${row.depth*16+8}px`;
+    node.title=row.relativePath||row.path;
     node.addEventListener('click',event=>{this.focused=row.path;this.state.select(row.path,event.shiftKey?(event.metaKey?'additive-range':'range'):event.metaKey?'toggle':'replace');for(const visible of this.canvas.querySelectorAll('[data-path]'))visible.setAttribute('aria-selected',String(this.state.selected.has(visible.dataset.path)));if(!event.shiftKey&&!event.metaKey)this.open(row);this.viewport.focus();});
     node.addEventListener('dblclick',()=>{if(!row.isDirectory)this.open(row,'pinned');});
     node.addEventListener('contextmenu',event=>{event.preventDefault();if(!this.state.selected.has(row.path))this.state.select(row.path,'replace');this.focused=row.path;this.renderRows();this.menu(event,row);});
@@ -223,11 +217,18 @@ export class Explorer {
   more(event) {
     this.closeMenu();const menu=element('div','context-menu');for(const [key,label] of [['showsHiddenFiles','showHidden'],['showsGitIgnoredFiles','showIgnored']]) {const b=button(this.t(label),()=>{this.send('setVisibility',{showsHiddenFiles:!!this.scope?.showsHiddenFiles,showsGitIgnoredFiles:!!this.scope?.showsGitIgnoredFiles,[key]:!this.scope?.[key]});this.closeMenu();});b.prepend(document.createTextNode(this.scope?.[key]?'✓ ':''));menu.append(b);}menu.append(button(this.t('returnToRoot'),()=>{this.send('returnToRoot',{});this.closeMenu();}));this.showMenu(menu,event);
   }
-  showMenu(menu,event) {const scope=this.scope,generation=this.transientGeneration;const fence=event=>{if(this.scope!==scope||this.transientGeneration!==generation||this.menuNode!==menu){event.preventDefault();event.stopImmediatePropagation();}};menu.addEventListener('click',fence,true);menu.addEventListener('keydown',fence,true);this.menuNode=menu;menu.style.left=`${Math.min(event.clientX||0,Math.max(0,window.innerWidth-220))}px`;menu.style.top=`${Math.min(event.clientY||32,Math.max(0,window.innerHeight-400))}px`;this.root.append(menu);menu.addEventListener('keydown',e=>{if(e.key==='Escape')this.closeMenu();});const close=e=>{if(!menu.contains(e.target))this.closeMenu();};this.menuCloser=close;document.addEventListener('pointerdown',close,true);document.addEventListener('mousedown',close,true);menu.querySelector('button')?.focus();}
-  closeMenu(){if(this.menuCloser){document.removeEventListener('pointerdown',this.menuCloser,true);document.removeEventListener('mousedown',this.menuCloser,true);}this.menuCloser=null;this.menuNode?.remove();this.menuNode=null;}
+  showMenu(menu,event) {
+    const scope=this.scope,generation=this.transientGeneration;
+    const item=node=>({label:node.textContent,action:()=>{if(this.scope===scope&&this.transientGeneration===generation&&this.menuNode===menu)node.click();}});
+    const items=[...menu.children].map(node=>node.tagName==='DETAILS'?{label:node.querySelector('summary').textContent,children:[...node.querySelectorAll('button')].map(item)}:item(node));
+    menu.replaceChildren();menu.className='';menu.removeAttribute('role');this.menuNode=menu;this.root.append(menu);
+    this.menuView=createExplorerMenu(menu,items,{x:event.clientX||0,y:event.clientY||32},()=>this.closeMenu());
+    const close=e=>{if(!menu.contains(e.target))this.closeMenu();};this.menuCloser=close;document.addEventListener('pointerdown',close,true);document.addEventListener('mousedown',close,true);
+  }
+  closeMenu(){if(this.toolbarMenuOpen){this.toolbarMenuOpen=false;this.chrome?.render();}if(this.menuCloser){document.removeEventListener('pointerdown',this.menuCloser,true);document.removeEventListener('mousedown',this.menuCloser,true);}this.menuCloser=null;this.menuView?.dispose();this.menuView=null;this.menuNode?.remove();this.menuNode=null;}
   inline(kind,row) {
     this.closeMenu();this.form?.remove();const scope=this.scope,generation=this.transientGeneration;const form=element('form','inline-input');const current=()=>this.scope===scope&&this.transientGeneration===generation&&this.form===form;const input=element('input');input.setAttribute('aria-label',this.t(kind==='rename'?'rename':'name'));input.value=kind==='rename'?row.name:'';form.append(icon(kind==='createFolder'?'folder-plus':'file-plus'),input,button(this.t('cancel'),()=>form.remove(),'x'));this.viewport.before(form);this.form=form;
     form.addEventListener('submit',event=>{event.preventDefault();if(!current()||this.composing||!input.value)return;const directoryPath=row?.isDirectory?row.path:row?parentPath(row.path):this.scope?.rootDirectory;this.formRequest=this.send(kind,{paths:row?[row.path]:[],directoryPath,name:input.value});});input.addEventListener('compositionstart',()=>{if(current())this.composing=true;});input.addEventListener('compositionend',()=>{if(current())this.composing=false;});input.addEventListener('keydown',event=>{if(current()&&event.key==='Escape')form.remove();});input.focus();input.select();
   }
-  dispose() {this.entryNodes.clear();window.removeEventListener('blur',this.blurHandler);this.beginContextTransition();this.root.removeEventListener('focusin',this.focusHandler);clearTimeout(this.nameTimer);this.cancelSearch();this.closeMenu();this.root.replaceChildren();this.root.inert=false;}
+  dispose() {this.entryNodes.clear();window.removeEventListener('blur',this.blurHandler);this.beginContextTransition();this.root.removeEventListener('focusin',this.focusHandler);clearTimeout(this.nameTimer);this.cancelSearch();this.closeMenu();this.chrome?.dispose();this.root.replaceChildren();this.root.inert=false;}
 }

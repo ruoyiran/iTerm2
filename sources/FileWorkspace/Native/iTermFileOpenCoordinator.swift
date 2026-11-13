@@ -18,7 +18,7 @@ import Foundation
               install: @escaping (iTermFileSessionPane, @escaping (Bool) -> Void) -> Void,
               activate: @escaping (iTermFileSessionPane) -> Void, completion: @escaping (Bool) -> Void) {
         if let pending, !pending.superseded, isCurrent(), request.placement == .tab, pending.request.placement == .tab,
-           request.context === pending.request.context, request.path == pending.request.path {
+           request.context === pending.request.context, request.path == pending.request.path, request.viewMode == pending.request.viewMode {
             pending.pinned = pending.pinned || request.activation == .pinned
             if pending.pinned { pending.admittedPane?.pin() }; completion(true); return
         }
@@ -43,11 +43,17 @@ import Foundation
         let finish: (iTermFileSessionPane) -> Void = { pane in
             guard current() else { pane.controller.cancelPendingFocus(); ended(false); return }
             intent.admittedPane = pane
+            if let viewMode = request.viewMode {
+                var state = pane.controller.cachedViewState.dictionary; state["viewMode"] = viewMode
+                if let anchor = request.anchor { state["viewerState"] = ["anchor": anchor] }
+                pane.controller.restoreViewState(iTermFileViewState(dictionary: state))
+            }
             if intent.pinned { pane.pin() }
             activate(pane); ended(true)
         }
         if request.placement == .tab,
-           let pane = candidates.first(where: { !$0.closed && $0.descriptor.filePath == request.path }) {
+           let pane = candidates.first(where: { !$0.closed && $0.descriptor.filePath == request.path &&
+               $0.controller.cachedViewState.showsMarkdownPreview == (request.viewMode == "preview") }) {
             finish(pane); return
         }
         let admit = { [weak self] in
@@ -55,8 +61,8 @@ import Foundation
             let owner = request.ownerContext
             let descriptor = iTermFileSessionDescriptor(filePath: request.path, documentIdentifier: nil,
                 rootDirectory: owner.rootDirectory, projectIdentifier: owner.projectIdentifier,
-                worktreeIdentifier: owner.worktreeIdentifier, preview: !intent.pinned, viewState: iTermFileViewState())
-            self.coordinator.restore(descriptor, viewIdentifier: StableSessionID.generate(), context: request.context) { pane, error in
+                worktreeIdentifier: owner.worktreeIdentifier, preview: !intent.pinned, viewState: request.initialViewState)
+            self.coordinator.restore(descriptor, viewIdentifier: StableSessionID.generate(), context: request.context, readScope: request.readScope) { pane, error in
                 guard let pane else {
                     if current(), let error { self.coordinator.delegate?.fileSessionCoordinator(self.coordinator, didFail: error) }
                     ended(false); return
@@ -64,7 +70,8 @@ import Foundation
                 guard current() else { self.coordinator.abandon(pane); ended(false); return }
                 // Canonical aliases still share one default view in this workspace/group.
                 if request.placement == .tab, let existing = candidates.first(where: {
-                    !$0.closed && $0.documentIdentifier != nil && $0.documentIdentifier == pane.documentIdentifier
+                    !$0.closed && $0.documentIdentifier != nil && $0.documentIdentifier == pane.documentIdentifier &&
+                    $0.controller.cachedViewState.showsMarkdownPreview == (request.viewMode == "preview")
                 }) { self.coordinator.abandon(pane); finish(existing); return }
                 install(pane) { installed in
                     guard installed else { self.coordinator.abandon(pane); ended(false); return }

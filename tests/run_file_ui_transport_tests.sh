@@ -20,5 +20,6 @@ xcrun swiftc -swift-version 5 -warnings-as-errors \
  "$file_ui_repo/sources/FileWorkspace/UI/iTermFileUIEditSession.swift" \
  "$file_ui_repo/sources/FileWorkspace/UI/iTermFileUIMessage.swift" \
  "$file_ui_repo/sources/FileWorkspace/UI/iTermFileUIAssetServer.swift" \
+ "$file_ui_repo/sources/FileWorkspace/UI/iTermFileUIHostSession.swift" \
  "$file_ui_tmp/Tests.swift" "$file_ui_tmp/main.swift" -o "$file_ui_tmp/tests"
 DYLD_FRAMEWORK_PATH="$file_ui_developer/Library/PrivateFrameworks" "$file_ui_tmp/tests"

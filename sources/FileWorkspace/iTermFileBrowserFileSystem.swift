@@ -164,8 +164,9 @@ func fileBrowserGit(_ arguments: [String], root: String, input: Data? = nil,
     process.executableURL = FileBrowserFaultGate.gitExecutable ?? process.executableURL
 #endif
     process.arguments = ["-c", "core.fsmonitor=false", "-C", root] + arguments
-    var environment = ProcessInfo.processInfo.environment
+    var environment = ProcessInfo.processInfo.environment.filter { !$0.key.hasPrefix("GIT_") }
     environment["GIT_OPTIONAL_LOCKS"] = "0"
+    environment["GIT_TERMINAL_PROMPT"] = "0"
     process.environment = environment; process.standardError = FileHandle.nullDevice
     let output = Pipe(); let stdin = Pipe()
     process.standardOutput = output; process.standardInput = stdin

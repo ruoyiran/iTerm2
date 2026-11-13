@@ -57,6 +57,9 @@ TOP-LEVEL keys
   NoSyncWorkgroupCodeReviewModelRecents .. code review model name recents
   WorkgroupCodeReviewDefaultModel ........ default code review model name
   NoSyncProjectDirectories ............... local roots and Git common/worktree metadata (removed)
+  NoSyncFileWorkspaceAnnotations ........ local file paths and review notes (removed)
+  NoSyncFileWorkspaceViewerPreferences .. owner/path keys and viewer state (removed)
+  viewerState .......................... per-pane selection/anchor/viewer state (removed)
   ProjectFileTreeRoot .................... toolbelt restoration root path
   ProjectFileTreeExpandedPaths ........... expansion paths keyed by project root (removed)
   NoSyncRecentArchives ................... archive file paths
@@ -192,6 +195,9 @@ def is_profile_boolean_parameter(value):
 CONTENT_KEYS = {
     # project catalog and file tree restoration (dictionary keys can contain paths)
     "NoSyncProjectDirectories": REMOVE,
+    "NoSyncFileWorkspaceAnnotations": REMOVE,
+    "NoSyncFileWorkspaceViewerPreferences": REMOVE,
+    "viewerState": REMOVE,
     "ProjectFileTreeRoot": REDACT_V,
     "ProjectFileTreeExpandedPaths": REMOVE,
     # commands / coprocesses

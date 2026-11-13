@@ -29,6 +29,50 @@ import AppKit
         }
         iTermFileMenuActions.register(actions, rootView: pane.controller.view)
         session.view?.fileViewController = pane.controller
+        pane.controller.onSave = { [weak actions] completion in
+            guard let actions else { completion(iTermFileSessionCoordinator.error(2)); return }
+            actions.perform(.save, completion: completion)
+        }
+        pane.controller.onFindInFiles = { [weak session] query in
+            guard let session, let parent = session.delegate?.realParentWindow as? PseudoTerminal else { return false }
+            return parent.find(inWorkspaceFiles: query, from: session)
+        }
+        let fileOperations = iTermFileBrowserService()
+        pane.controller.onRename = { [weak pane, weak coordinator = pane.coordinator] request, completion in
+            guard let pane, let coordinator, !pane.closed else { completion(iTermFileSessionCoordinator.error(2)); return }
+            let current = { [weak pane] in pane?.closed == false && pane?.controller.hasContext(request.context) == true }
+            fileOperations.activate(request.context)
+            coordinator.prepareFileMutation(paths: request.paths, preservingChanges: true, isCurrent: current) { allowed in
+                guard allowed else { completion(iTermFileSessionCoordinator.error(1)); return }
+                fileOperations.rename(request.paths[0], newName: request.name!, context: request.context) { result in
+                    coordinator.applyCommittedPathMappings(result.mappings, completionWithError: { mappingError in
+                        coordinator.finishOperation { error in completion(result.error ?? mappingError ?? error) }
+                    })
+                }
+            }
+        }
+        pane.controller.onOpenFile = { [weak session] request in
+            guard let session, let parent = session.delegate?.realParentWindow as? PseudoTerminal,
+                  parent.currentSession() === session else { return false }
+            parent.openWorkspaceFile(request, from: session); return true
+        }
+        pane.controller.onBrowserPreview = { [weak session] path in
+            guard let session, let parent = session.delegate?.realParentWindow as? PseudoTerminal,
+                  parent.currentSession() === session else { return false }
+            return parent.openTab(with: URL(fileURLWithPath: path), baseProfile: session.profile,
+                nearSessionGuid: session.guid, configuration: nil) != nil
+        }
+        pane.controller.onReload = { [weak pane] completion in
+            guard let pane, let coordinator = pane.coordinator else { completion(iTermFileSessionCoordinator.error(2)); return }
+            coordinator.reload(pane, confirmDiscard: {
+                if !pane.controller.status.isDirty { return true }
+                let selection = iTermWarning.show(withTitle: String(localized: "FileWorkspace.ReloadDiscard",
+                    defaultValue: "Discard the edited file contents and reload from disk?", comment: "Explicit reload confirmation for a dirty file"),
+                    actions: [String(localized: "FileWorkspace.Reload", defaultValue: "Reload", comment: "Reload a file from disk"), iTermLocalizedCancel()],
+                    accessory: nil, identifier: nil, silenceable: .kiTermWarningTypePersistent, heading: nil, window: pane.controller.view.window)
+                return selection == .kiTermWarningSelection0
+            }, completion: completion)
+        }
         host.fileSessionPaneDidChange(pane)
         host.updateVisibility()
     }

@@ -16,10 +16,10 @@ final class FileUIEditSession {
               let raw = payload["edits"] as? [[String: Any]], !raw.isEmpty, raw.count <= 65536 else { completion(nil, fileUIError(3)); return }
         var edits = [iTermFileTextEdit](), bytes = 0
         for edit in raw {
-            guard let location = fileUIInteger(edit["location"], maximum: 20 * 1024 * 1024),
-                  let length = fileUIInteger(edit["length"], maximum: 20 * 1024 * 1024),
+            guard let location = fileUIInteger(edit["location"], maximum: 100 * 1024 * 1024),
+                  let length = fileUIInteger(edit["length"], maximum: 100 * 1024 * 1024),
                   let text = edit["replacement"] as? String else { completion(nil, fileUIError(3)); return }
-            bytes += text.utf8.count; guard bytes <= 40 * 1024 * 1024 else { completion(nil, fileUIError(3)); return }
+            bytes += text.utf8.count; guard bytes <= 150 * 1024 * 1024 else { completion(nil, fileUIError(3)); return }
             edits.append(iTermFileTextEdit(range: NSRange(location: location, length: length), replacement: text))
         }
         pending = true

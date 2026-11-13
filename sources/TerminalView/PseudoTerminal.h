@@ -1,5 +1,6 @@
 #import <Cocoa/Cocoa.h>
 @class iTermFileSessionPane;
+@class iTermFileOpenRequest;
 
 #import "Autocomplete.h"
 #import "FutureMethods.h"
@@ -577,6 +578,8 @@ deferringExpansion:(BOOL)deferExpansion;
 - (BOOL)activateFileSession:(PTYSession *)session lineNumber:(NSInteger)lineNumber utf16Column:(NSInteger)column;
 - (BOOL)canInstallFilePaneWithStyle:(iTermOpenStyle)style targetSession:(PTYSession *)target;
 - (PTYSession *)installFilePane:(iTermFileSessionPane *)pane style:(iTermOpenStyle)style targetSession:(PTYSession *)target;
+- (void)openWorkspaceFile:(iTermFileOpenRequest *)request fromSession:(PTYSession *)session;
+- (BOOL)findInWorkspaceFiles:(NSString *)query fromSession:(PTYSession *)session;
 + (void)openWindowForFilePane:(iTermFileSessionPane *)pane profile:(NSDictionary *)profile shouldOpen:(BOOL (^)(void))shouldOpen completion:(void (^)(PTYSession *))completion;
 
 // `groupID` is the tab group the drop landed inside (the tab joins it), or

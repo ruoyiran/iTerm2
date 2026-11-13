@@ -5281,8 +5281,27 @@ hidingToolbeltShouldResizeWindow:(BOOL)hidingToolbeltShouldResizeWindow
 }
 
 - (void)openWorkspaceFile:(iTermFileOpenRequest *)request {
+    [self openWorkspaceFile:request fromSession:nil];
+}
+
+- (BOOL)findInWorkspaceFiles:(NSString *)query fromSession:(PTYSession *)session {
+    if (_closing || session != self.currentSession || !session.fileSessionPane) { return NO; }
+    if (![_contentView.toolbelt showingToolWithName:kFileTreeToolName]) {
+        [_contentView.toolbelt toggleToolWithName:kFileTreeToolName];
+    }
+    if (!_contentView.shouldShowToolbelt) { [self rootTerminalViewToggleFileTree]; }
+    iTermFileBrowserContext *context = session.fileSessionPane.descriptor.context;
+    [_contentView.toolbelt.fileTreeView findInFiles:query context:context];
+    return YES;
+}
+
+- (void)openWorkspaceFile:(iTermFileOpenRequest *)request fromSession:(PTYSession *)fileSource {
+    if (fileSource && (fileSource != self.currentSession || ![fileSource.fileSessionPane.controller hasContext:request.context])) {
+        return;
+    }
     if (!_fileOpenCoordinator) { _fileOpenCoordinator = [[iTermFileOpenCoordinator alloc] initWithCoordinator:[iTermFileWorkspaceService bootstrap].coordinator]; }
     PTYSession *source = self.currentSession;
+    iTermFileSessionPane *originPane = fileSource.fileSessionPane;
     PTYTab *sourceTab = self.currentTab;
     NSWindow *originKeyWindow = NSApp.keyWindow;
     const BOOL originAppActive = NSApp.isActive;
@@ -5305,7 +5324,8 @@ hidingToolbeltShouldResizeWindow:(BOOL)hidingToolbeltShouldResizeWindow
             NSApp.keyWindow == originKeyWindow && NSApp.isActive == originAppActive && term.currentSession == source && term.currentTab == sourceTab &&
             (!source || (!source.exited && [term.allSessions containsObject:source])) &&
             term->_projectController.selectionGeneration == generation && term->_contentView.toolbelt.fileBrowserContext == base &&
-            term->_contentView.toolbelt.fileTreeView.activeBrowserContext == request.context;
+            (originPane ? source.fileSessionPane == originPane && [originPane.controller hasContext:request.context] :
+                          term->_contentView.toolbelt.fileTreeView.activeBrowserContext == request.context);
     };
     [_fileOpenCoordinator open:request candidates:candidates isCurrent:current
         install:^(iTermFileSessionPane *pane, void (^done)(BOOL)) {

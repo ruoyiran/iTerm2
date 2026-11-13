@@ -3,6 +3,7 @@ import WebKit
 
 @objcMembers final class iTermFileWorkspaceUIRuntime: NSObject {
     @nonobjc let documentStore: iTermFileDocumentStore
+    @nonobjc let settings: FileUISettingsStore
     private let makeRenderer: (WKWebsiteDataStore) -> iTermFileWorkspaceWebView
     private let dataStore = WKWebsiteDataStore.nonPersistent()
     private var server: iTermFileUIAssetServer?
@@ -21,8 +22,9 @@ import WebKit
         self.init(documentStore: documentStore, resourceDirectory: Bundle.main.resourceURL?.appendingPathComponent("FileWorkspaceUI"))
     }
     @nonobjc init(documentStore: iTermFileDocumentStore, resourceDirectory: URL?,
-                  makeRenderer: @escaping (WKWebsiteDataStore) -> iTermFileWorkspaceWebView = { iTermFileWorkspaceWebView(dataStore: $0) }) {
-        self.makeRenderer = makeRenderer; self.documentStore = documentStore; super.init()
+                  makeRenderer: @escaping (WKWebsiteDataStore) -> iTermFileWorkspaceWebView = { iTermFileWorkspaceWebView(dataStore: $0) },
+                  settings: FileUISettingsStore = FileUISettingsStore()) {
+        self.makeRenderer = makeRenderer; self.documentStore = documentStore; self.settings = settings; super.init()
         observer = NotificationCenter.default.addObserver(forName: NSNotification.Name(iTermFileDocumentStore.didChangeNotification), object: documentStore, queue: .main) { [weak self] note in
             guard let snapshot = note.userInfo?["snapshot"] as? iTermFileDocumentSnapshot else { return }
             for controller in self?.controllers.allObjects ?? [] where controller.documentIdentifier == snapshot.documentIdentifier {
@@ -48,6 +50,15 @@ import WebKit
             } }
         }
     }
+    @nonobjc func registerMedia(path: String, owner: String, completion: @escaping (Result<URL, Error>) -> Void) {
+        let ready: (URL?, NSError?) -> Void = { [weak self] url, error in
+            guard let self, !self.stopped, url != nil, let server = self.server else { completion(.failure(error ?? fileUIError(2))); return }
+            server.registerMedia(path: path, owner: owner, completion: completion)
+        }
+        if assetURL != nil || startupError != nil { ready(assetURL, startupError) } else { waiting.append(ready) }
+    }
+    @nonobjc func revokeMedia(owner: String) { server?.revokeMedia(owner: owner) }
+    func settingsDidChange() { controllers.allObjects.forEach { $0.settingsDidChange(settings.snapshot) } }
     @nonobjc @discardableResult func acquire(owner: AnyObject, completion: @escaping (iTermFileWorkspaceWebView?, NSError?) -> Void) -> FileUIAcquisition {
         let acquisition = FileUIAcquisition(owner: owner)
         guard !stopped else { acquisition.cancel(); completion(nil, fileUIError(2)); return acquisition }

@@ -1,0 +1,1 @@
+import{a as t}from"./chunk-EWWMMUA7.js";t();var p=/[ \t\n\f\r]/g;function c(e){return typeof e=="object"?e.type==="text"?r(e.value):!1:r(e)}function r(e){return e.replace(p,"")===""}t();export{c as a};

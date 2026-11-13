@@ -5,7 +5,9 @@ Major New Features:
   with reusable terminals and a File Tree. Open
   it with the button in the upper-left corner.
   Click files in the File Tree to view or edit
-  them in tabs or split panes.
+  them in tabs or split panes. It supports rich
+  Markdown, tables, notebooks, images, PDFs,
+  audio, video, and local Git changes.
 - Grok is now a built-in AI provider. Pick it
   in Settings > General > AI and enter an xAI
   API key to chat with grok-4.7.

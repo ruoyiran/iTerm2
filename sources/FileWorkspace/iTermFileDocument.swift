@@ -4,6 +4,29 @@ import CryptoKit
 
 @objc enum iTermFileDocumentKind: Int {
     case text = 0, markdown = 1, image = 2, pdf = 3, unsupported = 4
+    case svg = 5, mermaid = 6, csv = 7, notebook = 8, audio = 9, video = 10
+
+    var isEditable: Bool { [.text, .markdown, .svg, .mermaid, .csv, .notebook].contains(self) }
+
+    static func forExtension(_ ext: String) -> iTermFileDocumentKind? {
+        switch ext.lowercased() {
+        case "md", "markdown", "mdown": return .markdown
+        case "svg": return .svg
+        case "mmd", "mermaid": return .mermaid
+        case "csv", "tsv": return .csv
+        case "ipynb": return .notebook
+        case "pdf": return .pdf
+        case "png", "jpg", "jpeg", "gif", "webp", "bmp", "tif", "tiff", "heic", "heif", "ico", "avif": return .image
+        case "mp3", "wav", "ogg", "oga", "m4a", "aac", "flac", "opus": return .audio
+        case "mp4", "m4v", "mov", "webm": return .video
+        default: return nil
+        }
+    }
+}
+
+struct FileDocumentReadScope {
+    let root: FileBrowserRoot
+    let canonicalPath: String?
 }
 
 @objc enum iTermFileSaveOutcome: Int {

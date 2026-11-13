@@ -8,7 +8,7 @@ func fileDocumentError(_ code: Int) -> NSError {
 }
 
 @objcMembers final class iTermFileDocumentStore: NSObject {
-    static let maximumFileBytes = 10 * 1024 * 1024
+    static let maximumFileBytes = 50 * 1024 * 1024
     static let didChangeNotification = "iTermFileDocumentStoreDidChange"
     private let storageDirectory: URL
     private let state = DispatchQueue(label: "com.iterm2.file-document-state")
@@ -22,9 +22,12 @@ func fileDocumentError(_ code: Int) -> NSError {
     }
 
     func openFile(atPath path: String, completion: @escaping (iTermFileDocumentSnapshot?, NSError?) -> Void) {
+        openFile(atPath: path, readScope: nil, completion: completion)
+    }
+    @nonobjc func openFile(atPath path: String, readScope: FileDocumentReadScope?, completion: @escaping (iTermFileDocumentSnapshot?, NSError?) -> Void) {
         io.async {
             do {
-                let loaded = try Self.read(path)
+                let loaded = try Self.read(path, readScope: readScope)
                 self.state.async {
                     let document = self.documents.values.first { $0.canonicalPath == loaded.canonicalPath } ?? loaded
                     self.documents[document.identifier] = document
@@ -47,13 +50,14 @@ func fileDocumentError(_ code: Int) -> NSError {
         return URL(fileURLWithPath: path).standardizedFileURL
     }
 
-    @nonobjc private static func read(_ path: String) throws -> FileDocument {
+    @nonobjc private static func read(_ path: String, readScope: FileDocumentReadScope? = nil) throws -> FileDocument {
         let url = try validatePath(path)
+        if let readScope { _ = try scopedDisplayPath(url.resolvingSymlinksInPath().standardizedFileURL.path, scope: readScope) }
         try validateRegularTarget(url, allowMissing: false)
         var result: Result<FileDocument, Error>?
         var error: NSError?
         NSFileCoordinator().coordinate(readingItemAt: url, options: [], error: &error) { coordinated in
-            result = Result { try readUncoordinated(coordinated, originalPath: url.path) }
+            result = Result { try readUncoordinated(coordinated, originalPath: url.path, readScope: readScope) }
         }
         if let error = error { throw error }
         guard let result = result else { throw fileDocumentError(2) }
@@ -71,17 +75,33 @@ func fileDocumentError(_ code: Int) -> NSError {
         guard info.st_mode & S_IFMT == S_IFREG else { throw fileDocumentError(3) }
     }
 
-    @nonobjc private static func readUncoordinated(_ url: URL, originalPath: String) throws -> FileDocument {
+    private static func scopedDisplayPath(_ canonical: String, scope: FileDocumentReadScope) throws -> String {
+        let root = scope.root
+        if let target = scope.canonicalPath, canonical != target { throw fileBrowserError(2) }
+        let prefix = root.canonical == "/" ? "/" : root.canonical + "/"
+        guard canonical.hasPrefix(prefix) else { throw fileBrowserError(2) }
+        return (root.display as NSString).appendingPathComponent(String(canonical.dropFirst(prefix.count)))
+    }
+    @nonobjc private static func readUncoordinated(_ url: URL, originalPath: String, readScope: FileDocumentReadScope? = nil) throws -> FileDocument {
         let canonical = url.resolvingSymlinksInPath().standardizedFileURL
-        let fd = Darwin.open(canonical.path, O_RDONLY | O_NOFOLLOW | O_NONBLOCK)
+        let fd: Int32
+        if let readScope {
+            let path = try scopedDisplayPath(canonical.path, scope: readScope)
+            fd = try readScope.root.withParent(path) { parent, name in
+                openat(parent, name, O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC)
+            }
+        } else { fd = Darwin.open(canonical.path, O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC) }
         guard fd >= 0 else { throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno)) }
         defer { Darwin.close(fd) }
         var info = stat()
         guard fstat(fd, &info) == 0, (info.st_mode & S_IFMT) == S_IFREG,
               info.st_mode & 0o444 != 0, info.st_size >= 0 else { throw fileDocumentError(3) }
-        let tooLarge = UInt64(info.st_size) > UInt64(maximumFileBytes)
+        let ext = canonical.pathExtension.lowercased()
+        let extensionKind = iTermFileDocumentKind.forExtension(ext)
+        let streams = extensionKind == .audio || extensionKind == .video
+        let tooLarge = !streams && UInt64(info.st_size) > UInt64(maximumFileBytes)
         var data = Data()
-        if !tooLarge {
+        if !tooLarge && !streams {
             var buffer = [UInt8](repeating: 0, count: 64 * 1024)
             while true {
                 let count = Darwin.read(fd, &buffer, min(buffer.count, maximumFileBytes + 1 - data.count))
@@ -95,21 +115,19 @@ func fileDocumentError(_ code: Int) -> NSError {
                   after.st_mtimespec.tv_sec == info.st_mtimespec.tv_sec,
                   after.st_mtimespec.tv_nsec == info.st_mtimespec.tv_nsec else { throw fileDocumentError(5) }
         }
-        let ext = canonical.pathExtension.lowercased()
         let decoded = tooLarge ? nil : FileTextFormat.decode(data)
         let kind: iTermFileDocumentKind
-        if ext == "pdf" || data.starts(with: Data("%PDF-".utf8)) { kind = .pdf }
+        if streams { kind = extensionKind! }
+        else if ext == "pdf" || data.starts(with: Data("%PDF-".utf8)) { kind = .pdf }
         else if data.starts(with: [0x89, 0x50, 0x4e, 0x47, 13, 10, 26, 10]) ||
                     data.starts(with: [0xff, 0xd8, 0xff]) || data.starts(with: Data("GIF8".utf8)) ||
                     data.starts(with: [0x49, 0x49, 0x2a, 0]) || data.starts(with: [0x4d, 0x4d, 0, 0x2a]) ||
                     (data.starts(with: Data("RIFF".utf8)) && data.dropFirst(8).starts(with: Data("WEBP".utf8))) ||
-                    ["png", "jpg", "jpeg", "gif", "webp", "bmp", "tif", "tiff", "heic", "ico"].contains(ext) { kind = .image }
-        else if tooLarge && ["md", "markdown", "mdown", "txt", "text"].contains(ext) {
-            kind = ["md", "markdown", "mdown"].contains(ext) ? .markdown : .text
-        }
-        else if decoded != nil { kind = ["md", "markdown", "mdown"].contains(ext) ? .markdown : .text }
+                    extensionKind == .image { kind = .image }
+        else if tooLarge { kind = extensionKind ?? .text }
+        else if decoded != nil { kind = extensionKind ?? .text }
         else { kind = .unsupported }
-        let editable = kind == .text || kind == .markdown
+        let editable = kind.isEditable
         return FileDocument(path: originalPath, canonicalPath: canonical.path, kind: kind,
                             text: editable ? decoded?.0 : nil, format: editable ? decoded?.1 : nil,
                             baseline: FileSignature(device: UInt64(UInt32(bitPattern: info.st_dev)), inode: info.st_ino,
@@ -270,7 +288,7 @@ func fileDocumentError(_ code: Int) -> NSError {
                         document.canonicalPath = written.canonicalPath
                         document.baseline = written.baseline
                         document.readOnly = written.readOnly
-                        if written.kind == .text || written.kind == .markdown { document.kind = written.kind }
+                        if written.kind.isEditable { document.kind = written.kind }
                         document.conflict = false
                         outcome = .saved
                         self.scheduleDraft(id)

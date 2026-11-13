@@ -1,0 +1,156 @@
+Bundled license information:
+
+react/cjs/react.production.js:
+  /**
+   * @license React
+   * react.production.js
+   *
+   * Copyright (c) Meta Platforms, Inc. and affiliates.
+   *
+   * This source code is licensed under the MIT license found in the
+   * LICENSE file in the root directory of this source tree.
+   */
+
+react/cjs/react-jsx-runtime.production.js:
+  /**
+   * @license React
+   * react-jsx-runtime.production.js
+   *
+   * Copyright (c) Meta Platforms, Inc. and affiliates.
+   *
+   * This source code is licensed under the MIT license found in the
+   * LICENSE file in the root directory of this source tree.
+   */
+
+react-dom/cjs/react-dom.production.js:
+  /**
+   * @license React
+   * react-dom.production.js
+   *
+   * Copyright (c) Meta Platforms, Inc. and affiliates.
+   *
+   * This source code is licensed under the MIT license found in the
+   * LICENSE file in the root directory of this source tree.
+   */
+
+lucide-react/dist/esm/shared/src/utils/mergeClasses.js:
+lucide-react/dist/esm/shared/src/utils/toKebabCase.js:
+lucide-react/dist/esm/shared/src/utils/toCamelCase.js:
+lucide-react/dist/esm/shared/src/utils/toPascalCase.js:
+lucide-react/dist/esm/defaultAttributes.js:
+lucide-react/dist/esm/shared/src/utils/hasA11yProp.js:
+lucide-react/dist/esm/Icon.js:
+lucide-react/dist/esm/createLucideIcon.js:
+lucide-react/dist/esm/icons/image.js:
+lucide-react/dist/esm/icons/maximize-2.js:
+lucide-react/dist/esm/icons/rotate-ccw.js:
+lucide-react/dist/esm/icons/zoom-in.js:
+lucide-react/dist/esm/icons/zoom-out.js:
+lucide-react/dist/esm/icons/arrow-down-to-line.js:
+lucide-react/dist/esm/icons/arrow-down.js:
+lucide-react/dist/esm/icons/arrow-left.js:
+lucide-react/dist/esm/icons/arrow-right.js:
+lucide-react/dist/esm/icons/arrow-up-to-line.js:
+lucide-react/dist/esm/icons/arrow-up.js:
+lucide-react/dist/esm/icons/case-sensitive.js:
+lucide-react/dist/esm/icons/check.js:
+lucide-react/dist/esm/icons/chevron-down.js:
+lucide-react/dist/esm/icons/chevron-right.js:
+lucide-react/dist/esm/icons/chevron-up.js:
+lucide-react/dist/esm/icons/circle-alert.js:
+lucide-react/dist/esm/icons/circle-slash.js:
+lucide-react/dist/esm/icons/circle.js:
+lucide-react/dist/esm/icons/code.js:
+lucide-react/dist/esm/icons/columns-2.js:
+lucide-react/dist/esm/icons/columns-3.js:
+lucide-react/dist/esm/icons/copy.js:
+lucide-react/dist/esm/icons/corner-down-left.js:
+lucide-react/dist/esm/icons/database.js:
+lucide-react/dist/esm/icons/ellipsis.js:
+lucide-react/dist/esm/icons/external-link.js:
+lucide-react/dist/esm/icons/eye.js:
+lucide-react/dist/esm/icons/file-archive.js:
+lucide-react/dist/esm/icons/file-axis-3d.js:
+lucide-react/dist/esm/icons/file-box.js:
+lucide-react/dist/esm/icons/file-braces.js:
+lucide-react/dist/esm/icons/file-chart-column.js:
+lucide-react/dist/esm/icons/file-code.js:
+lucide-react/dist/esm/icons/file-cog.js:
+lucide-react/dist/esm/icons/file-diff.js:
+lucide-react/dist/esm/icons/file-down.js:
+lucide-react/dist/esm/icons/file-image.js:
+lucide-react/dist/esm/icons/file-key.js:
+lucide-react/dist/esm/icons/file-lock.js:
+lucide-react/dist/esm/icons/file-music.js:
+lucide-react/dist/esm/icons/file-play.js:
+lucide-react/dist/esm/icons/file-sliders.js:
+lucide-react/dist/esm/icons/file-spreadsheet.js:
+lucide-react/dist/esm/icons/file-terminal.js:
+lucide-react/dist/esm/icons/file-text.js:
+lucide-react/dist/esm/icons/file-type.js:
+lucide-react/dist/esm/icons/file.js:
+lucide-react/dist/esm/icons/folder-open.js:
+lucide-react/dist/esm/icons/folder.js:
+lucide-react/dist/esm/icons/funnel.js:
+lucide-react/dist/esm/icons/git-compare-arrows.js:
+lucide-react/dist/esm/icons/grip-horizontal.js:
+lucide-react/dist/esm/icons/grip-vertical.js:
+lucide-react/dist/esm/icons/heading-1.js:
+lucide-react/dist/esm/icons/heading-2.js:
+lucide-react/dist/esm/icons/heading-3.js:
+lucide-react/dist/esm/icons/heading-4.js:
+lucide-react/dist/esm/icons/heading-5.js:
+lucide-react/dist/esm/icons/info.js:
+lucide-react/dist/esm/icons/lightbulb.js:
+lucide-react/dist/esm/icons/link.js:
+lucide-react/dist/esm/icons/list-collapse.js:
+lucide-react/dist/esm/icons/list-filter.js:
+lucide-react/dist/esm/icons/list-ordered.js:
+lucide-react/dist/esm/icons/list-todo.js:
+lucide-react/dist/esm/icons/list-tree.js:
+lucide-react/dist/esm/icons/list.js:
+lucide-react/dist/esm/icons/loader-circle.js:
+lucide-react/dist/esm/icons/maximize.js:
+lucide-react/dist/esm/icons/message-square-warning.js:
+lucide-react/dist/esm/icons/message-square.js:
+lucide-react/dist/esm/icons/minus.js:
+lucide-react/dist/esm/icons/move-down.js:
+lucide-react/dist/esm/icons/move-up.js:
+lucide-react/dist/esm/icons/notebook-text.js:
+lucide-react/dist/esm/icons/octagon-alert.js:
+lucide-react/dist/esm/icons/panel-left-close.js:
+lucide-react/dist/esm/icons/panel-left-open.js:
+lucide-react/dist/esm/icons/pen-tool.js:
+lucide-react/dist/esm/icons/pencil.js:
+lucide-react/dist/esm/icons/pilcrow.js:
+lucide-react/dist/esm/icons/plus.js:
+lucide-react/dist/esm/icons/quote.js:
+lucide-react/dist/esm/icons/refresh-cw.js:
+lucide-react/dist/esm/icons/regex.js:
+lucide-react/dist/esm/icons/replace-all.js:
+lucide-react/dist/esm/icons/replace.js:
+lucide-react/dist/esm/icons/rows-2.js:
+lucide-react/dist/esm/icons/rows-3.js:
+lucide-react/dist/esm/icons/save.js:
+lucide-react/dist/esm/icons/search.js:
+lucide-react/dist/esm/icons/sigma.js:
+lucide-react/dist/esm/icons/space.js:
+lucide-react/dist/esm/icons/sparkles.js:
+lucide-react/dist/esm/icons/table-2.js:
+lucide-react/dist/esm/icons/table.js:
+lucide-react/dist/esm/icons/terminal.js:
+lucide-react/dist/esm/icons/text-wrap.js:
+lucide-react/dist/esm/icons/trash-2.js:
+lucide-react/dist/esm/icons/trash.js:
+lucide-react/dist/esm/icons/triangle-alert.js:
+lucide-react/dist/esm/icons/unlink.js:
+lucide-react/dist/esm/icons/whole-word.js:
+lucide-react/dist/esm/icons/workflow.js:
+lucide-react/dist/esm/icons/x.js:
+lucide-react/dist/esm/lucide-react.js:
+  /**
+   * @license lucide-react v0.577.0 - ISC
+   *
+   * This source code is licensed under the ISC license.
+   * See the LICENSE file in the root directory of this source tree.
+   */

@@ -1,7 +1,8 @@
 import test from 'node:test';import assert from 'node:assert/strict';import {Window} from 'happy-dom';
-import {Explorer} from '../../../sources/FileWorkspace/Resources/src/explorer.mjs';
+import {loadModule} from './module-loader.mjs';
+const {Explorer}=await loadModule(new URL('../../../sources/FileWorkspace/Resources/src/explorer.mjs',import.meta.url));
 test('file activation emits preview/pin intents with literal filenames; contents submit respects IME',()=>{
- const w=new Window();globalThis.document=w.document;globalThis.window=w;globalThis.requestAnimationFrame=fn=>fn();
+ const w=new Window();globalThis.document=w.document;globalThis.window=w;globalThis.requestAnimationFrame=fn=>w.requestAnimationFrame(fn);
  const root=document.createElement('div');document.body.append(root);let n=0;const sent=[];
  const explorer=new Explorer(root,(type,payload,requestIdentifier)=>{const id=requestIdentifier??String(++n);sent.push({type,payload,id});return id;},key=>key);
  explorer.receive('context',{token:'x',rootDirectory:'/r',title:'repo'});
@@ -16,15 +17,15 @@ test('file activation emits preview/pin intents with literal filenames; contents
  explorer.dispose();w.happyDOM.abort();
 });
 test('a directory error offers retry and does not masquerade as an empty folder',()=>{
- const w=new Window();globalThis.document=w.document;globalThis.window=w;globalThis.requestAnimationFrame=fn=>fn();const root=document.createElement('div');document.body.append(root);const sent=[];
+ const w=new Window();globalThis.document=w.document;globalThis.window=w;globalThis.requestAnimationFrame=fn=>w.requestAnimationFrame(fn);const root=document.createElement('div');document.body.append(root);const sent=[];
  const explorer=new Explorer(root,(type,payload,id)=>{sent.push({type,payload,id});return id;},key=>key);
  explorer.receive('context',{token:'a',rootDirectory:'/r',title:'repo'});const request=sent.find(x=>x.type==='listDirectory');
  explorer.receive('listing',{token:'a',requestIdentifier:request.id,directoryPath:'/r',entries:[],error:'Cannot read folder'});
- assert.match(root.querySelector('[role="status"]').textContent,/Cannot read folder/);
+ assert.match(explorer.status.textContent,/Cannot read folder/);
  root.querySelector('[data-retry]').click();assert.equal(sent.at(-1).type,'listDirectory');assert.equal(sent.at(-1).payload.directoryPath,'/r');explorer.dispose();w.happyDOM.abort();
 });
 function fixture() {
- const w=new Window();globalThis.document=w.document;globalThis.window=w;globalThis.requestAnimationFrame=fn=>fn();
+ const w=new Window();globalThis.document=w.document;globalThis.window=w;globalThis.requestAnimationFrame=fn=>w.requestAnimationFrame(fn);
  const root=document.createElement('div');document.body.append(root);const sent=[];
  const explorer=new Explorer(root,(type,payload,id=crypto.randomUUID())=>{sent.push({type,payload,id});return id;},key=>key);
  const listing=(request,entries)=>explorer.receive('listing',{token:'scope',requestIdentifier:request.id,directoryPath:request.payload.directoryPath,entries});
@@ -71,9 +72,9 @@ test('result group activation retains focus for the next navigation key',()=>{
   f.root.querySelector('[data-mode="contents"]').click();const query=f.root.querySelector('[data-query="contents"]');query.value='match';query.dispatchEvent(new f.w.KeyboardEvent('keydown',{key:'Enter',bubbles:true}));
   const search=f.sent.findLast(x=>x.type==='searchContents');f.explorer.receive('search',{token:'scope',requestIdentifier:search.id,matches:['a','b'].map(name=>({path:'/r/'+name,relativePath:name,lines:[{lineNumber:1,snippet:name,snippetColumn:0,ranges:[{location:0,length:1}]}]})),isComplete:true});
   f.root.querySelector('.result-group').focus();document.activeElement.dispatchEvent(new f.w.KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true}));
-  assert.equal(document.activeElement.isConnected,true);assert.equal(document.activeElement.classList.contains('result-group'),true);assert.equal(document.activeElement.textContent,'a');
-  document.activeElement.dispatchEvent(new f.w.KeyboardEvent('keydown',{key:'ArrowDown',bubbles:true,cancelable:true}));assert.equal(document.activeElement.textContent,'b');
-  document.activeElement.dispatchEvent(new f.w.KeyboardEvent('keydown',{key:' ',bubbles:true,cancelable:true}));assert.equal(document.activeElement.textContent,'b');
+  assert.equal(document.activeElement.isConnected,true);assert.equal(document.activeElement.classList.contains('result-group'),true);assert.equal(document.activeElement.dataset.resultKey,JSON.stringify(['group','/r/a']));
+  document.activeElement.dispatchEvent(new f.w.KeyboardEvent('keydown',{key:'ArrowDown',bubbles:true,cancelable:true}));assert.equal(document.activeElement.dataset.resultKey,JSON.stringify(['group','/r/b']));
+  document.activeElement.dispatchEvent(new f.w.KeyboardEvent('keydown',{key:' ',bubbles:true,cancelable:true}));assert.equal(document.activeElement.dataset.resultKey,JSON.stringify(['group','/r/b']));
  }finally{f.close();}
 });
 test('a real scroll rerender preserves the PageDown target for subsequent keys',()=>{
@@ -82,13 +83,13 @@ test('a real scroll rerender preserves the PageDown target for subsequent keys',
   const search=f.sent.findLast(x=>x.type==='searchContents');f.explorer.receive('search',{token:'scope',requestIdentifier:search.id,matches:[{path:'/r/b',relativePath:'b',lines:Array.from({length:100},(_,index)=>({lineNumber:index+1,snippet:'match',snippetColumn:0,ranges:[{location:0,length:5}]}))}],isComplete:true});
   f.root.querySelector('.result-match').focus();document.activeElement.dispatchEvent(new f.w.KeyboardEvent('keydown',{key:'PageDown',bubbles:true,cancelable:true}));
   assert.ok(f.explorer.viewport.scrollTop>0);f.explorer.viewport.dispatchEvent(new f.w.Event('scroll'));
-  assert.equal(document.activeElement.isConnected,true);assert.equal(document.activeElement.classList.contains('result-match'),true);assert.equal(document.activeElement.querySelector('.line-number').textContent,'11');
+  assert.equal(document.activeElement.isConnected,true);assert.equal(document.activeElement.classList.contains('result-match'),true);assert.equal(document.activeElement.dataset.resultKey,JSON.stringify(['match','/r/b',11,0]));
   document.activeElement.dispatchEvent(new f.w.KeyboardEvent('keydown',{key:'ArrowDown',bubbles:true,cancelable:true}));document.activeElement.dispatchEvent(new f.w.KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true}));
   const opened=f.sent.findLast(x=>x.type==='openFile');assert.equal(opened.payload.path,'/r/b');assert.equal(opened.payload.lineNumber,12);
  }finally{f.close();}
 });
 test('recent owner contexts retain queries and expansions with bounded RAM cache',()=>{
- const w=new Window();globalThis.document=w.document;globalThis.window=w;globalThis.requestAnimationFrame=fn=>fn();const root=document.createElement('div');document.body.append(root);const sent=[];
+ const w=new Window();globalThis.document=w.document;globalThis.window=w;globalThis.requestAnimationFrame=fn=>w.requestAnimationFrame(fn);const root=document.createElement('div');document.body.append(root);const sent=[];
  const e=new Explorer(root,(type,payload,id)=>{sent.push({type,payload,id});return id;},key=>key);
  e.receive('context',{token:'a',rootDirectory:'/a',projectIdentifier:'p',worktreeIdentifier:'w'});e.names.value='needle';e.state.expanded.add('/a/dir');
  e.receive('context',{token:'b',rootDirectory:'/b',projectIdentifier:'p',worktreeIdentifier:'w'});
@@ -104,7 +105,7 @@ test('context changes invalidate retained create forms and detached menu callbac
    f.explorer.receive('context',{token:'next',rootDirectory:sameRoot?'/r':'/other',projectIdentifier:'new-owner',worktreeIdentifier:'new-tree'});
    const before=f.sent.length;form.dispatchEvent(new f.w.Event('submit',{bubbles:true,cancelable:true}));
    assert.equal(f.sent.slice(before).some(message=>message.type===kind),false);assert.equal(f.root.querySelector('.inline-input'),null);
-   f.explorer.menu(new f.w.MouseEvent('contextmenu'),null);const menu=f.explorer.menuNode;const button=menu.querySelector('button');
+   f.explorer.menu(new f.w.MouseEvent('contextmenu'),null);const menu=f.explorer.menuNode;const button=menu.querySelector('[role="menuitem"]');
    f.explorer.receive('context',{token:'third',rootDirectory:sameRoot?'/r':'/third',projectIdentifier:'third-owner',worktreeIdentifier:'new-tree'});
    button.click();assert.equal(f.root.querySelector('.inline-input'),null);assert.equal(f.explorer.menuNode===null,true);
   }finally{f.close();}
