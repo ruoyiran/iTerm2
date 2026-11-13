@@ -548,6 +548,9 @@ deferringExpansion:(BOOL)deferExpansion;
 
 - (IBAction)toggleToolbeltVisibility:(id)sender;
 
+// Claims directory-opening shortcuts only while the Projects list has keyboard focus.
+- (BOOL)handleProjectSidebarTerminalShortcut:(NSEvent *)event;
+
 - (void)setupSession:(PTYSession *)aSession
             withSize:(NSSize *)size;
 

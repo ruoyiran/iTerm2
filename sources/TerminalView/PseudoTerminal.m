@@ -5377,6 +5377,11 @@ hidingToolbeltShouldResizeWindow:(BOOL)hidingToolbeltShouldResizeWindow
     }];
 }
 
+- (BOOL)handleProjectSidebarTerminalShortcut:(NSEvent *)event {
+    if (_closing || _deallocing || self.window != NSApp.keyWindow) { return NO; }
+    return [_contentView.projectSidebar performKeyEquivalent:event];
+}
+
 - (void)toggleProjectSidebar:(id)sender {
     iTermProjectWindowController *controller = [self projectController];
     controller.sidebarVisible = !controller.sidebarVisible;

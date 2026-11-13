@@ -8,6 +8,9 @@ Major New Features:
   them in tabs or split panes. It supports rich
   Markdown, tables, notebooks, images, PDFs,
   audio, video, and local Git changes.
+  Select a folder in the project sidebar and
+  use the New Tab, New Window, or Split Pane
+  shortcuts to open a terminal in that folder.
 - Grok is now a built-in AI provider. Pick it
   in Settings > General > AI and enter an xAI
   API key to chat with grok-4.7.

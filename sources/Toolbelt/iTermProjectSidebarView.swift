@@ -37,7 +37,7 @@ import AppKit
     private var expandedRepositories = Set<String>()
     private var refreshTimer: Timer?
     private var observers = [NSObjectProtocol]()
-    private var terminalMenuNode: iTermProjectSidebarNode?
+    private var terminalMenuIsTracking = false
     private var preferredRepositoryIdentifier: String?
     private var handlingSidebarSelection = false
 
@@ -172,8 +172,14 @@ import AppKit
     }
     func outlineViewSelectionDidChange(_ notification: Notification) {
         guard !updatingSelection, let node = selectedNode else { return }
+        let keepOutlineFocus = window?.firstResponder === outline
         updateRemoveButton()
         select(node, openIfNeeded: false)
+        // Selecting an existing project terminal restores that pane's focus. Keep keyboard
+        // navigation in the list until the user explicitly opens or focuses a terminal.
+        if keepOutlineFocus, !isHiddenOrHasHiddenAncestor, let window, window.isKeyWindow {
+            window.makeFirstResponder(outline)
+        }
     }
     @objc private func openSelection(_ sender: Any?) {
         guard let node = outline.item(atRow: outline.clickedRow) as? iTermProjectSidebarNode else { return }
@@ -200,20 +206,42 @@ import AppKit
 
     func menuNeedsUpdate(_ menu: NSMenu) {
         let row = outline.clickedRow >= 0 ? outline.clickedRow : outline.selectedRow
-        terminalMenuNode = outline.item(atRow: row) as? iTermProjectSidebarNode
         menu.removeAllItems()
-        guard let node = terminalMenuNode else { return }
-        let worktree = node.worktree ?? node.repository?.rootWorktree
+        guard let node = outline.item(atRow: row) as? iTermProjectSidebarNode else { return }
         let item = NSMenuItem(title: String(localized: "Projects.OpenTerminal", defaultValue: "Open Terminal", comment: "Project/worktree context menu for explicit terminal opening"), action: nil, keyEquivalent: "")
-        item.submenu = iTermProjectTerminalMenu.make(target: self, action: #selector(openTerminalWithStyle(_:))) { [weak self] style in
-            guard let self, worktree?.available != false else { return false }
-            return self.delegate?.projectSidebar(self, canOpenTerminalWithStyle: style) == true
+        let submenu = iTermProjectTerminalMenu.make(target: self, action: #selector(openTerminalWithStyle(_:)), includeShortcuts: true) { [weak self] style in
+            self?.canOpenTerminal(node, style: style) == true
         }
+        for choice in submenu.items { choice.representedObject = node }
+        item.submenu = submenu
         menu.addItem(item)
     }
 
+    func menuWillOpen(_ menu: NSMenu) { terminalMenuIsTracking = true }
+    func menuDidClose(_ menu: NSMenu) { terminalMenuIsTracking = false }
+
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        guard !terminalMenuIsTracking, !isHiddenOrHasHiddenAncestor, let window, window.isKeyWindow,
+              window.firstResponder === outline, let style = iTermProjectTerminalMenu.style(for: event) else { return false }
+        if let node = selectedNode { openTerminal(node, style: style) }
+        // A disabled mode or empty selection must not fall through and open in a different directory.
+        return true
+    }
+
     @objc private func openTerminalWithStyle(_ item: NSMenuItem) {
-        guard item.tag >= 0, let style = iTermOpenStyle(rawValue: UInt(item.tag)), let node = terminalMenuNode else { return }
+        guard item.isEnabled, item.tag >= 0, let style = iTermOpenStyle(rawValue: UInt(item.tag)),
+              let node = item.representedObject as? iTermProjectSidebarNode else { return }
+        openTerminal(node, style: style)
+    }
+
+    private func canOpenTerminal(_ node: iTermProjectSidebarNode, style: iTermOpenStyle) -> Bool {
+        let worktree = node.worktree ?? node.repository?.rootWorktree
+        return worktree?.available != false && delegate?.projectSidebar(self, canOpenTerminalWithStyle: style) == true
+    }
+
+    private func openTerminal(_ node: iTermProjectSidebarNode, style: iTermOpenStyle) {
+        guard canOpenTerminal(node, style: style) else { return }
+        DLog("Open project sidebar node \(node.identifier) with style \(style.rawValue)")
         if let worktree = node.worktree { delegate?.projectSidebar(self, openWorktree: worktree, style: style) }
         else if let project = node.project { delegate?.projectSidebar(self, openProject: project, style: style) }
         else if let repository = node.repository { delegate?.projectSidebar(self, openRepository: repository, style: style) }

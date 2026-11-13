@@ -676,6 +676,11 @@ static void iTermInstallCrashOnExceptionHook(void) {
         if ([self handleWorkgroupToolbarShortcut:event inWindowController:currentTerminal]) {
             return YES;
         }
+        // User mappings retain priority. Claim focused Projects-list shortcuts before
+        // AppKit invokes the ordinary New Tab/Window/Split menu actions.
+        if ([currentTerminal handleProjectSidebarTerminalShortcut:event]) {
+            return YES;
+        }
         if ([[self sessionOfFirstResponder] handleKeyDownWithBuckyBits:event]) {
             return YES;
         }
