@@ -110,7 +110,7 @@ enum AppleIntelligenceRunner {
         try checkAllowed()
         let session = LanguageModelSession(model: .default,
                                            instructions: system ?? "")
-        let options = GenerationOptions(samplingMode: .greedy)
+        let options = GenerationOptions(sampling: .greedy)
         return try await session.respond(to: user,
                                          generating: type,
                                          options: options).content
@@ -249,7 +249,7 @@ enum AppleIntelligenceRunner {
         // window, throwing exceededContextWindowSize (caught as .produced(nil), which
         // stamps the screen as permanently untitleable). A 2-to-4-word title needs far
         // fewer than 256 tokens, so this never truncates a real title.
-        let options = GenerationOptions(samplingMode: .greedy, maximumResponseTokens: outputReserve)
+        let options = GenerationOptions(sampling: .greedy, maximumResponseTokens: outputReserve)
         // The whole-line fit search keeps only whole lines from the tail, so if the
         // single last visible line alone exceeds the budget (a soft-wrapped logical
         // line spanning most of a large grid, e.g. a pasted minified blob) it
