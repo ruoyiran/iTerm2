@@ -884,7 +884,7 @@ final class TmuxWorkgroupLiveHarness: XCTestCase {
         var outcomes = [TmuxWorkgroupRepairer.Outcome]()
         let done = expectation(description: "both")
         done.expectedFulfillmentCount = 2
-        let pair = [a, b].map { client in
+        let pair = [a, b].map { (client: TmuxTestClient) in
             TmuxWorkgroupRepairer(gatewayProvider: { [weak client] in client?.gateway },
                                   sessionID: client.sessionID, instanceID: instance,
                                   identity: client.identity!)
