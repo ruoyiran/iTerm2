@@ -11,6 +11,9 @@ Major New Features:
   Select a folder in the project sidebar and
   use the New Tab, New Window, or Split Pane
   shortcuts to open a terminal in that folder.
+  Right-click a project to open its folder in
+  Finder, copy its path, or remove it from the
+  sidebar while keeping its files.
 - Grok is now a built-in AI provider. Pick it
   in Settings > General > AI and enter an xAI
   API key to chat with grok-4.7.
