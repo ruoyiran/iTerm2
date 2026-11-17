@@ -21,7 +21,11 @@ import AppKit
     var selectedProjectIdentifier: String? { didSet { if oldValue != selectedProjectIdentifier { updateSelection(reveal: true) } } }
     var selectedWorktreeIdentifier: String? { didSet { if oldValue != selectedWorktreeIdentifier { updateSelection(reveal: true) } } }
     var canAddCurrentDirectory = false { didSet { if oldValue != canAddCurrentDirectory { currentButton.isEnabled = canAddCurrentDirectory } } }
-    private let outline = NSOutlineView()
+    @nonobjc var directoryOpener: (URL) -> Bool = {
+        NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: $0.path)
+    }
+    var pathPasteboard = NSPasteboard.general
+    private let outline = iTermProjectSidebarOutlineView()
     private let scroll = NSScrollView()
     private let addButton = NSButton()
     private let currentButton = NSButton()
@@ -58,7 +62,7 @@ import AppKit
         outline.target = self
         outline.doubleAction = #selector(openSelection(_:))
         outline.backgroundColor = .controlBackgroundColor
-        let menu = NSMenu(); menu.delegate = self; outline.menu = menu
+        let menu = NSMenu(); menu.delegate = self; menu.autoenablesItems = false; outline.menu = menu
         outline.setAccessibilityLabel(title.stringValue)
         scroll.documentView = outline
         scroll.hasVerticalScroller = true
@@ -215,6 +219,49 @@ import AppKit
         for choice in submenu.items { choice.representedObject = node }
         item.submenu = submenu
         menu.addItem(item)
+        menu.addItem(.separator())
+        let openDirectory = addMenuItem(to: menu, title: String(localized: "ProjectSidebar.OpenDirectory", defaultValue: "Open Directory in Finder", comment: "Open the clicked project, repository, or worktree directory in Finder"), action: #selector(openDirectory(_:)), node: node)
+        let worktree = node.worktree ?? node.repository?.rootWorktree
+        openDirectory.isEnabled = worktree?.available != false
+        addMenuItem(to: menu, title: String(localized: "ProjectSidebar.CopyFullPath", defaultValue: "Copy Full Path", comment: "Copy the absolute directory path of the clicked sidebar item"), action: #selector(copyFullPath(_:)), node: node)
+        if node.kind == .folder || node.kind == .repository {
+            menu.addItem(.separator())
+            let title = node.kind == .repository
+                ? String(localized: "ProjectSidebar.RemoveRepository", defaultValue: "Remove Repository from Sidebar", comment: "Remove repository registration without deleting worktrees")
+                : String(localized: "ProjectSidebar.Remove", defaultValue: "Remove Project", comment: "Remove selected project from the list")
+            addMenuItem(to: menu, title: title, action: #selector(removeFromSidebar(_:)), node: node)
+        }
+    }
+
+    @discardableResult private func addMenuItem(to menu: NSMenu, title: String, action: Selector, node: iTermProjectSidebarNode) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
+        item.target = self
+        item.representedObject = node
+        menu.addItem(item)
+        return item
+    }
+
+    private func directoryPath(for node: iTermProjectSidebarNode) -> String? {
+        node.worktree?.rootDirectory ?? node.repository?.rootDirectory ?? node.project?.rootDirectory
+    }
+
+    @objc private func openDirectory(_ item: NSMenuItem) {
+        guard item.isEnabled, let node = item.representedObject as? iTermProjectSidebarNode,
+              let path = directoryPath(for: node) else { return }
+        DLog("Open project sidebar directory \(path) in Finder")
+        if !directoryOpener(URL(fileURLWithPath: path, isDirectory: true)) { NSSound.beep() }
+    }
+
+    @objc private func copyFullPath(_ item: NSMenuItem) {
+        guard item.isEnabled, let node = item.representedObject as? iTermProjectSidebarNode,
+              let path = directoryPath(for: node) else { return }
+        pathPasteboard.clearContents()
+        pathPasteboard.setString(path, forType: .string)
+    }
+
+    @objc private func removeFromSidebar(_ item: NSMenuItem) {
+        guard item.isEnabled, let node = item.representedObject as? iTermProjectSidebarNode else { return }
+        removeNode(node)
     }
 
     func menuWillOpen(_ menu: NSMenu) { terminalMenuIsTracking = true }
@@ -289,7 +336,25 @@ import AppKit
     @objc private func addCurrent(_ sender: Any?) { delegate?.projectSidebarAddCurrentDirectory(self) }
     @objc private func refresh(_ sender: Any?) { delegate?.projectSidebar(self, refreshRepositories: nil) }
     @objc private func remove(_ sender: Any?) {
-        if let project = selectedNode?.project { delegate?.projectSidebar(self, removeProject: project) }
-        else if selectedNode?.kind == .repository, let repository = selectedNode?.repository { delegate?.projectSidebar(self, removeRepository: repository) }
+        guard let node = selectedNode else { return }
+        removeNode(node)
+    }
+    private func removeNode(_ node: iTermProjectSidebarNode) {
+        DLog("Remove project sidebar node \(node.identifier)")
+        if node.kind == .folder, let project = node.project { delegate?.projectSidebar(self, removeProject: project) }
+        else if node.kind == .repository, let repository = node.repository { delegate?.projectSidebar(self, removeRepository: repository) }
+    }
+}
+
+private final class iTermProjectSidebarOutlineView: NSOutlineView {
+    override func menu(for event: NSEvent) -> NSMenu? {
+        // Mouse context menus must target a row. Keyboard menus can use the selection.
+        switch event.type {
+        case .leftMouseDown, .rightMouseDown:
+            guard row(at: convert(event.locationInWindow, from: nil)) >= 0 else { return nil }
+        default:
+            break
+        }
+        return super.menu(for: event)
     }
 }

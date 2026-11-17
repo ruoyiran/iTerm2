@@ -17,6 +17,8 @@ final class ProjectSidebarTerminalShortcutTests: XCTestCase {
         var opened = [(directory: String, style: iTermOpenStyle)]()
         var disabled = Set<UInt>()
         var didSelect: (() -> Void)?
+        var removedProjects = [String]()
+        var removedRepositories = [String]()
         func projectSidebar(_ sidebar: iTermProjectSidebarView, didSelectProject project: iTermProjectDirectory, openIfNeeded: Bool) { didSelect?() }
         func projectSidebar(_ sidebar: iTermProjectSidebarView, didSelectWorktree worktree: iTermGitWorktree, openIfNeeded: Bool) { didSelect?() }
         func projectSidebar(_ sidebar: iTermProjectSidebarView, didSelectRepository repository: iTermGitRepositorySnapshot, openIfNeeded: Bool) { didSelect?() }
@@ -26,8 +28,8 @@ final class ProjectSidebarTerminalShortcutTests: XCTestCase {
         func projectSidebar(_ sidebar: iTermProjectSidebarView, canOpenTerminalWithStyle style: iTermOpenStyle) -> Bool { !disabled.contains(UInt(style.rawValue)) }
         func projectSidebarAddFolder(_ sidebar: iTermProjectSidebarView) {}
         func projectSidebarAddCurrentDirectory(_ sidebar: iTermProjectSidebarView) {}
-        func projectSidebar(_ sidebar: iTermProjectSidebarView, removeProject project: iTermProjectDirectory) {}
-        func projectSidebar(_ sidebar: iTermProjectSidebarView, removeRepository repository: iTermGitRepositorySnapshot) {}
+        func projectSidebar(_ sidebar: iTermProjectSidebarView, removeProject project: iTermProjectDirectory) { removedProjects.append(project.identifier) }
+        func projectSidebar(_ sidebar: iTermProjectSidebarView, removeRepository repository: iTermGitRepositorySnapshot) { removedRepositories.append(repository.identifier) }
         func projectSidebar(_ sidebar: iTermProjectSidebarView, refreshRepositories identifiers: [String]?) {}
     }
 
@@ -41,6 +43,9 @@ final class ProjectSidebarTerminalShortcutTests: XCTestCase {
             ["identifier": "22222222-2222-2222-2222-222222222222", "rootDirectory": "/var"]
         ], forKey: iTermProjectCatalog.defaultsKey)
         let sidebar = iTermProjectSidebarView(frame: NSRect(x: 0, y: 0, width: 240, height: 300))
+        let pasteboard = NSPasteboard(name: .init(name))
+        sidebar.pathPasteboard = pasteboard
+        addTeardownBlock { pasteboard.releaseGlobally() }
         sidebar.tree = iTermProjectSidebarTree(catalog: iTermProjectCatalog(defaults: defaults))
         sidebar.selectedProjectIdentifier = "11111111-1111-1111-1111-111111111111"
         let outline = sidebar.subviews.compactMap { ($0 as? NSScrollView)?.documentView as? NSOutlineView }.first!
@@ -89,6 +94,82 @@ final class ProjectSidebarTerminalShortcutTests: XCTestCase {
         XCTAssertEqual(delegate.opened.last?.directory, "/tmp")
         XCTAssertTrue(sidebar.performKeyEquivalent(with: key("t")))
         XCTAssertEqual(delegate.opened.last?.directory, "/var")
+    }
+
+    func testDirectoryActionsCaptureTheMenuProject() throws {
+        let (window, sidebar, outline, _) = fixture()
+        defer { window.close() }
+        var openedURLs = [URL]()
+        sidebar.directoryOpener = { openedURLs.append($0); return true }
+        sidebar.pathPasteboard.setString("previous clipboard contents", forType: .string)
+        let menu = try XCTUnwrap(outline.menu)
+        sidebar.menuNeedsUpdate(menu)
+        let items = menu.items
+        sidebar.selectedProjectIdentifier = "22222222-2222-2222-2222-222222222222"
+        sidebar.menuNeedsUpdate(menu)
+        for selector in ["openDirectory:", "copyFullPath:", "removeFromSidebar:"] {
+            let item = try XCTUnwrap(items.first { $0.action == NSSelectorFromString(selector) })
+            XCTAssertTrue(item.isEnabled)
+            let node = try XCTUnwrap(item.representedObject as? iTermProjectSidebarNode)
+            XCTAssertEqual(node.project?.rootDirectory, "/tmp")
+            if selector != "removeFromSidebar:" {
+                XCTAssertTrue(NSApp.sendAction(try XCTUnwrap(item.action), to: item.target, from: item))
+            }
+        }
+        XCTAssertEqual(openedURLs, [URL(fileURLWithPath: "/tmp", isDirectory: true)])
+        XCTAssertEqual(sidebar.pathPasteboard.string(forType: .string), "/tmp")
+    }
+
+    func testRemoveFromContextMenuUsesCapturedProjectAfterSelectionChanges() throws {
+        let (window, sidebar, outline, delegate) = fixture()
+        defer { window.close() }
+        let menu = try XCTUnwrap(outline.menu)
+        sidebar.menuNeedsUpdate(menu)
+        let remove = try XCTUnwrap(menu.items.first { $0.action == NSSelectorFromString("removeFromSidebar:") })
+        sidebar.selectedProjectIdentifier = "22222222-2222-2222-2222-222222222222"
+        sidebar.menuNeedsUpdate(menu)
+        XCTAssertTrue(NSApp.sendAction(try XCTUnwrap(remove.action), to: remove.target, from: remove))
+        XCTAssertEqual(delegate.removedProjects, ["11111111-1111-1111-1111-111111111111"])
+        XCTAssertTrue(delegate.removedRepositories.isEmpty)
+    }
+
+    func testContextMenuIsEmptyWithoutADirectorySelection() throws {
+        let (window, sidebar, outline, _) = fixture()
+        defer { window.close() }
+        outline.deselectAll(nil)
+        let menu = try XCTUnwrap(outline.menu)
+        sidebar.menuNeedsUpdate(menu)
+        XCTAssertTrue(menu.items.isEmpty)
+    }
+
+    func testRightClickMenuUsesClickedDirectoryInsteadOfSelection() throws {
+        let (window, sidebar, outline, delegate) = fixture()
+        defer { window.close() }
+        sidebar.layoutSubtreeIfNeeded()
+        let rect = outline.rect(ofRow: 1)
+        let location = outline.convert(NSPoint(x: rect.midX, y: rect.midY), to: nil)
+        let event = try XCTUnwrap(NSEvent.mouseEvent(with: .rightMouseDown, location: location,
+            modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber, context: nil,
+            eventNumber: 0, clickCount: 1, pressure: 0))
+        let menu = try XCTUnwrap(outline.menu(for: event))
+        sidebar.menuNeedsUpdate(menu)
+        let remove = try XCTUnwrap(menu.items.first { $0.action == NSSelectorFromString("removeFromSidebar:") })
+        XCTAssertTrue(NSApp.sendAction(try XCTUnwrap(remove.action), to: remove.target, from: remove))
+        XCTAssertEqual(delegate.removedProjects, ["22222222-2222-2222-2222-222222222222"])
+    }
+
+    func testRightClickOnBackgroundDoesNotOfferActionsForSelectedProject() throws {
+        let (window, sidebar, outline, _) = fixture()
+        defer { window.close() }
+        sidebar.layoutSubtreeIfNeeded()
+        let location = outline.convert(NSPoint(x: 20, y: 150), to: nil)
+        let event = try XCTUnwrap(NSEvent.mouseEvent(with: .rightMouseDown, location: location,
+            modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber, context: nil,
+            eventNumber: 0, clickCount: 1, pressure: 0))
+        if let menu = outline.menu(for: event) {
+            sidebar.menuNeedsUpdate(menu)
+            XCTAssertTrue(menu.items.isEmpty)
+        }
     }
 
     func testSingleSelectionKeepsOutlineFocusAfterSwitchingTerminal() {
@@ -147,7 +228,7 @@ final class ProjectSidebarTerminalShortcutTests: XCTestCase {
         defer { window.close() }
         let base = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).resolvingSymlinksInPath()
         let main = base.appendingPathComponent("main")
-        let linked = base.appendingPathComponent("linked")
+        let linked = base.appendingPathComponent("linked worktree 中文")
         try FileManager.default.createDirectory(at: main.appendingPathComponent("sub"), withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: linked, withIntermediateDirectories: true)
         addTeardownBlock { try FileManager.default.removeItem(at: base) }
@@ -170,6 +251,8 @@ final class ProjectSidebarTerminalShortcutTests: XCTestCase {
         sidebar.tree = tree
         let repository = try XCTUnwrap(tree.roots.first)
         let worktree = try XCTUnwrap(repository.children.first { $0.worktree?.rootDirectory == linked.path })
+        var openedURLs = [URL]()
+        sidebar.directoryOpener = { openedURLs.append($0); return true }
         outline.expandItem(repository)
         for (node, path) in [(repository, main.path), (worktree, linked.path)] {
             outline.selectRowIndexes(IndexSet(integer: outline.row(forItem: node)), byExtendingSelection: false)
@@ -178,6 +261,28 @@ final class ProjectSidebarTerminalShortcutTests: XCTestCase {
                 XCTAssertTrue(sidebar.performKeyEquivalent(with: event))
                 XCTAssertEqual(delegate.opened.last?.directory, path)
                 XCTAssertEqual(delegate.opened.last?.style, style)
+            }
+            let menu = try XCTUnwrap(outline.menu)
+            sidebar.menuNeedsUpdate(menu)
+            let open = try XCTUnwrap(menu.items.first { $0.action == NSSelectorFromString("openDirectory:") })
+            let copy = try XCTUnwrap(menu.items.first { $0.action == NSSelectorFromString("copyFullPath:") })
+            let remove = menu.items.first { $0.action == NSSelectorFromString("removeFromSidebar:") }
+            outline.deselectAll(nil)
+            for item in [open, copy] {
+                XCTAssertTrue(NSApp.sendAction(try XCTUnwrap(item.action), to: item.target, from: item))
+            }
+            XCTAssertEqual(openedURLs.last?.path, path)
+            XCTAssertEqual(openedURLs.last?.isFileURL, true)
+            XCTAssertEqual(sidebar.pathPasteboard.string(forType: .string), path)
+            if node.kind == .repository {
+                let remove = try XCTUnwrap(remove)
+                XCTAssertTrue(NSApp.sendAction(try XCTUnwrap(remove.action), to: remove.target, from: remove))
+                XCTAssertEqual(delegate.removedRepositories, [main.path + "/.git"])
+                XCTAssertTrue(delegate.removedProjects.isEmpty)
+                XCTAssertTrue(FileManager.default.fileExists(atPath: main.path))
+                XCTAssertTrue(FileManager.default.fileExists(atPath: linked.path))
+            } else {
+                XCTAssertNil(remove)
             }
         }
         XCTAssertEqual(delegate.opened.count, 8)
@@ -191,6 +296,14 @@ final class ProjectSidebarTerminalShortcutTests: XCTestCase {
         outline.selectRowIndexes(IndexSet(integer: 0), byExtendingSelection: false)
         sidebar.menuNeedsUpdate(outline.menu!)
         XCTAssertTrue(outline.menu!.items[0].submenu!.items.allSatisfy { !$0.isEnabled })
+        let unavailableOpen = try XCTUnwrap(outline.menu!.items.first { $0.action == NSSelectorFromString("openDirectory:") })
+        XCTAssertFalse(unavailableOpen.isEnabled)
+        XCTAssertTrue(NSApp.sendAction(try XCTUnwrap(unavailableOpen.action), to: unavailableOpen.target, from: unavailableOpen))
+        XCTAssertEqual(openedURLs.count, 2)
+        let copy = try XCTUnwrap(outline.menu!.items.first { $0.action == NSSelectorFromString("copyFullPath:") })
+        XCTAssertTrue(copy.isEnabled)
+        XCTAssertTrue(NSApp.sendAction(try XCTUnwrap(copy.action), to: copy.target, from: copy))
+        XCTAssertEqual(sidebar.pathPasteboard.string(forType: .string), main.path)
         XCTAssertTrue(sidebar.performKeyEquivalent(with: key("t")))
         XCTAssertEqual(delegate.opened.count, 8)
     }
