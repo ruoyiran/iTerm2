@@ -99957,6 +99957,174 @@
         }
       }
     },
+    "FileSession.CloseDirty" : {
+      "comment" : "Confirmation before closing the last views of edited documents",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Save changes before closing these files?"
+          }
+        }
+      }
+    },
+    "FileSession.Discard" : {
+      "comment" : "Discard unsaved edits and delete their recovery drafts",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Discard"
+          }
+        }
+      }
+    },
+    "FileSession.KeepDraftsQuit" : {
+      "comment" : "Quit preserving file drafts without saving source files",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Keep Drafts and Quit"
+          }
+        }
+      }
+    },
+    "FileSession.KeepUnsavedChanges" : {
+      "comment" : "Keep edited file contents in durable recovery drafts while moving or renaming the source files",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Keep Unsaved Changes"
+          }
+        }
+      }
+    },
+    "FileSession.Loading" : {
+      "comment" : "Placeholder while a native file pane restores",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Opening file…"
+          }
+        }
+      }
+    },
+    "FileSession.OperationFailed" : {
+      "comment" : "Error when native file session operation cannot safely finish",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "The file operation could not finish. Your open editor has been kept."
+          }
+        }
+      }
+    },
+    "FileSession.OverwriteQuestion" : {
+      "comment" : "Explicit overwrite confirmation after a file save conflict",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "The file changed on disk. Replace it with the editor contents?"
+          }
+        }
+      }
+    },
+    "FileSession.QuitDirty" : {
+      "comment" : "Quit confirmation for unsaved file documents",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Save the edited files before quitting?"
+          }
+        }
+      }
+    },
+    "FileSession.RelocateDirty" : {
+      "comment" : "Confirmation for a file move or rename; unsaved changes can be saved or kept in recovery drafts",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Save changes before moving or renaming these files?"
+          }
+        }
+      }
+    },
+    "FileSession.Replace" : {
+      "comment" : "Button to overwrite a conflicting disk file",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Replace"
+          }
+        }
+      }
+    },
+    "FileSession.RestoreUnavailable" : {
+      "comment" : "Missing file workspace service or invalid saved file descriptor",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "This file view could not be restored."
+          }
+        }
+      }
+    },
+    "FileSession.Save" : {
+      "comment" : "Save edited files before closing\nSave the focused file document",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Save"
+          }
+        }
+      }
+    },
+    "FileSession.SaveAll" : {
+      "comment" : "Save every edited file before quitting",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Save All"
+          }
+        }
+      }
+    },
+    "FileSession.SaveSelectedText" : {
+      "comment" : "Legacy terminal save-selection menu title when file editor does not own focus",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Save Selected Text…"
+          }
+        }
+      }
+    },
     "FileTransfer.AuthPrompt" : {
       "comment" : "Prompt asking for a credential; first %@ is the credential type (e.g. password), second %@ is who is requesting it, third %@ is the operation name",
       "extractionState" : "extracted_with_value",
@@ -100385,6 +100553,858 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "文件传输因未知错误失败"
+          }
+        }
+      }
+    },
+    "FileTree.HideSidebar" : {
+      "comment" : "Tooltip for the top-right sidebar button when the file tree is visible",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Hide File Tree"
+          }
+        }
+      }
+    },
+    "FileTree.ShowSidebar" : {
+      "comment" : "Tooltip for the top-right sidebar button when the file tree is collapsed",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Show File Tree"
+          }
+        }
+      }
+    },
+    "FileWorkspace.Reload" : {
+      "comment" : "Reload a file from disk",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Reload"
+          }
+        }
+      }
+    },
+    "FileWorkspace.ReloadDiscard" : {
+      "comment" : "Explicit reload confirmation for a dirty file",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Discard the edited file contents and reload from disk?"
+          }
+        }
+      }
+    },
+    "FileWorkspace.SearchTooLong" : {
+      "comment" : "Search queries exceeding the UTF-8 size limit cannot run",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Search text is too long."
+          }
+        }
+      }
+    },
+    "FileWorkspace.addProject" : {
+      "comment" : "File workspace control or status: addProject",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Add Folder as Project…"
+          }
+        }
+      }
+    },
+    "FileWorkspace.cancel" : {
+      "comment" : "File workspace control or status: cancel",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Cancel"
+          }
+        }
+      }
+    },
+    "FileWorkspace.caseSensitive" : {
+      "comment" : "File workspace control or status: caseSensitive",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Match Case"
+          }
+        }
+      }
+    },
+    "FileWorkspace.clear" : {
+      "comment" : "File workspace control or status: clear",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Clear"
+          }
+        }
+      }
+    },
+    "FileWorkspace.collapseAll" : {
+      "comment" : "File workspace control or status: collapseAll",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Collapse All"
+          }
+        }
+      }
+    },
+    "FileWorkspace.contents" : {
+      "comment" : "File workspace control or status: contents",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Contents"
+          }
+        }
+      }
+    },
+    "FileWorkspace.copy" : {
+      "comment" : "File workspace control or status: copy",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Copy"
+          }
+        }
+      }
+    },
+    "FileWorkspace.copyFiles" : {
+      "comment" : "File workspace control or status: copyFiles",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Copy"
+          }
+        }
+      }
+    },
+    "FileWorkspace.copyPath" : {
+      "comment" : "File workspace control or status: copyPath",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Copy Path"
+          }
+        }
+      }
+    },
+    "FileWorkspace.copyRelativePath" : {
+      "comment" : "File workspace control or status: copyRelativePath",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Copy Relative Path"
+          }
+        }
+      }
+    },
+    "FileWorkspace.cut" : {
+      "comment" : "File workspace control or status: cut",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Cut"
+          }
+        }
+      }
+    },
+    "FileWorkspace.duplicate" : {
+      "comment" : "File workspace control or status: duplicate",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Duplicate"
+          }
+        }
+      }
+    },
+    "FileWorkspace.editor" : {
+      "comment" : "File workspace control or status: editor",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "File editor"
+          }
+        }
+      }
+    },
+    "FileWorkspace.empty" : {
+      "comment" : "File workspace control or status: empty",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "No files to display"
+          }
+        }
+      }
+    },
+    "FileWorkspace.exclude" : {
+      "comment" : "File workspace control or status: exclude",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Files to exclude (comma separated)"
+          }
+        }
+      }
+    },
+    "FileWorkspace.files" : {
+      "comment" : "File workspace control or status: files",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Files"
+          }
+        }
+      }
+    },
+    "FileWorkspace.find" : {
+      "comment" : "File workspace control or status: find",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Find"
+          }
+        }
+      }
+    },
+    "FileWorkspace.findFiles" : {
+      "comment" : "File workspace control or status: findFiles",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Find files"
+          }
+        }
+      }
+    },
+    "FileWorkspace.findInFolder" : {
+      "comment" : "File workspace control or status: findInFolder",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Find in Folder"
+          }
+        }
+      }
+    },
+    "FileWorkspace.include" : {
+      "comment" : "File workspace control or status: include",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Files to include (comma separated)"
+          }
+        }
+      }
+    },
+    "FileWorkspace.loading" : {
+      "comment" : "File workspace control or status: loading",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Loading…"
+          }
+        }
+      }
+    },
+    "FileWorkspace.more" : {
+      "comment" : "File workspace control or status: more",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "More Explorer Actions"
+          }
+        }
+      }
+    },
+    "FileWorkspace.name" : {
+      "comment" : "File workspace control or status: name",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Name"
+          }
+        }
+      }
+    },
+    "FileWorkspace.names" : {
+      "comment" : "File workspace control or status: names",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Names"
+          }
+        }
+      }
+    },
+    "FileWorkspace.newFile" : {
+      "comment" : "File workspace control or status: newFile",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "New File"
+          }
+        }
+      }
+    },
+    "FileWorkspace.newFolder" : {
+      "comment" : "File workspace control or status: newFolder",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "New Folder"
+          }
+        }
+      }
+    },
+    "FileWorkspace.newTab" : {
+      "comment" : "File workspace control or status: newTab",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "New Tab"
+          }
+        }
+      }
+    },
+    "FileWorkspace.newWindow" : {
+      "comment" : "File workspace control or status: newWindow",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "New Window"
+          }
+        }
+      }
+    },
+    "FileWorkspace.noResults" : {
+      "comment" : "File workspace control or status: noResults",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "No results. Try another search or adjust your filters."
+          }
+        }
+      }
+    },
+    "FileWorkspace.openExternally" : {
+      "comment" : "File workspace control or status: openExternally",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Open Externally"
+          }
+        }
+      }
+    },
+    "FileWorkspace.openFile" : {
+      "comment" : "File workspace control or status: openFile",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Open File"
+          }
+        }
+      }
+    },
+    "FileWorkspace.openTerminal" : {
+      "comment" : "File workspace control or status: openTerminal",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Open Terminal Here"
+          }
+        }
+      }
+    },
+    "FileWorkspace.paste" : {
+      "comment" : "File workspace control or status: paste",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Paste"
+          }
+        }
+      }
+    },
+    "FileWorkspace.pin" : {
+      "comment" : "File workspace control or status: pin",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Keep Open"
+          }
+        }
+      }
+    },
+    "FileWorkspace.previewError" : {
+      "comment" : "File workspace control or status: previewError",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "This file cannot be previewed."
+          }
+        }
+      }
+    },
+    "FileWorkspace.readOnly" : {
+      "comment" : "File workspace control or status: readOnly",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Read Only"
+          }
+        }
+      }
+    },
+    "FileWorkspace.ready" : {
+      "comment" : "File workspace control or status: ready",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Ready"
+          }
+        }
+      }
+    },
+    "FileWorkspace.redo" : {
+      "comment" : "File workspace control or status: redo",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Redo"
+          }
+        }
+      }
+    },
+    "FileWorkspace.refresh" : {
+      "comment" : "File workspace control or status: refresh",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Refresh Explorer"
+          }
+        }
+      }
+    },
+    "FileWorkspace.regularExpression" : {
+      "comment" : "File workspace control or status: regularExpression",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Use Regular Expression"
+          }
+        }
+      }
+    },
+    "FileWorkspace.rename" : {
+      "comment" : "File workspace control or status: rename",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Rename"
+          }
+        }
+      }
+    },
+    "FileWorkspace.results" : {
+      "comment" : "Label next to the numeric search match count",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Results"
+          }
+        }
+      }
+    },
+    "FileWorkspace.retry" : {
+      "comment" : "Retry a failed directory listing",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Retry"
+          }
+        }
+      }
+    },
+    "FileWorkspace.returnToRoot" : {
+      "comment" : "File workspace control or status: returnToRoot",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Return to Workspace Root"
+          }
+        }
+      }
+    },
+    "FileWorkspace.reveal" : {
+      "comment" : "File workspace control or status: reveal",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Reveal in Finder"
+          }
+        }
+      }
+    },
+    "FileWorkspace.save" : {
+      "comment" : "File workspace control or status: save",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Save"
+          }
+        }
+      }
+    },
+    "FileWorkspace.saveAs" : {
+      "comment" : "File workspace control or status: saveAs",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Save As…"
+          }
+        }
+      }
+    },
+    "FileWorkspace.savingEdits" : {
+      "comment" : "File workspace control or status: savingEdits",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Synchronizing edits…"
+          }
+        }
+      }
+    },
+    "FileWorkspace.search" : {
+      "comment" : "File workspace control or status: search",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Search"
+          }
+        }
+      }
+    },
+    "FileWorkspace.searchDetails" : {
+      "comment" : "File workspace control or status: searchDetails",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Search details"
+          }
+        }
+      }
+    },
+    "FileWorkspace.selectAll" : {
+      "comment" : "File workspace control or status: selectAll",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Select All"
+          }
+        }
+      }
+    },
+    "FileWorkspace.selectProject" : {
+      "comment" : "File workspace control or status: selectProject",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Select a Project"
+          }
+        }
+      }
+    },
+    "FileWorkspace.showHidden" : {
+      "comment" : "File workspace control or status: showHidden",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Show Hidden Files"
+          }
+        }
+      }
+    },
+    "FileWorkspace.showIgnored" : {
+      "comment" : "File workspace control or status: showIgnored",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Show Git Ignored Files"
+          }
+        }
+      }
+    },
+    "FileWorkspace.skipped" : {
+      "comment" : "File workspace control or status: skipped",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Some files could not be searched"
+          }
+        }
+      }
+    },
+    "FileWorkspace.splitDown" : {
+      "comment" : "File workspace control or status: splitDown",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Split Top and Bottom"
+          }
+        }
+      }
+    },
+    "FileWorkspace.splitRight" : {
+      "comment" : "File workspace control or status: splitRight",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Split Left and Right"
+          }
+        }
+      }
+    },
+    "FileWorkspace.syncError" : {
+      "comment" : "File workspace control or status: syncError",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Edits could not be synchronized. Keep this view open and copy your changes."
+          }
+        }
+      }
+    },
+    "FileWorkspace.toggleMarkdownPreview" : {
+      "comment" : "File workspace control or status: toggleMarkdownPreview",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Toggle Markdown Preview"
+          }
+        }
+      }
+    },
+    "FileWorkspace.tooLarge" : {
+      "comment" : "Information shown for a file above the supported editor size limit",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "This file is too large to display."
+          }
+        }
+      }
+    },
+    "FileWorkspace.trash" : {
+      "comment" : "File workspace control or status: trash",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Move to Trash"
+          }
+        }
+      }
+    },
+    "FileWorkspace.truncated" : {
+      "comment" : "File workspace control or status: truncated",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Results truncated"
+          }
+        }
+      }
+    },
+    "FileWorkspace.typeSearch" : {
+      "comment" : "File workspace control or status: typeSearch",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Type to search in files"
+          }
+        }
+      }
+    },
+    "FileWorkspace.undo" : {
+      "comment" : "File workspace control or status: undo",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Undo"
+          }
+        }
+      }
+    },
+    "FileWorkspace.unsupported" : {
+      "comment" : "File workspace control or status: unsupported",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "This file type cannot be displayed."
+          }
+        }
+      }
+    },
+    "FileWorkspace.wholeWord" : {
+      "comment" : "File workspace control or status: wholeWord",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Match Whole Word"
           }
         }
       }
@@ -105884,6 +106904,126 @@
         }
       }
     },
+    "GitWorktrees.BranchDeleteFailed" : {
+      "comment" : "Partial deletion error; placeholder is the underlying Git error",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "The worktree directory was deleted, but branch deletion could not be confirmed. %@"
+          }
+        }
+      }
+    },
+    "GitWorktrees.DeleteChanged" : {
+      "comment" : "Error when a worktree changes after the user opens its deletion confirmation",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "The worktree’s branch or commit changed. Refresh the list and confirm the deletion again."
+          }
+        }
+      }
+    },
+    "GitWorktrees.DeleteOutputTooLarge" : {
+      "comment" : "Error when a Git deletion command exceeds its output limit",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Git returned too much output. Refresh the worktree list to check its current state."
+          }
+        }
+      }
+    },
+    "GitWorktrees.DeleteProtected" : {
+      "comment" : "Error when a worktree is not eligible for deletion",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "This worktree cannot be deleted. Main, locked, and unavailable worktrees are protected. Refresh the list and try again."
+          }
+        }
+      }
+    },
+    "GitWorktrees.DeleteRejected" : {
+      "comment" : "Error when Git rejects an ordinary worktree or branch deletion",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Git could not complete the deletion. To discard uncommitted changes or delete an unmerged branch, select Force Delete in the confirmation dialog."
+          }
+        }
+      }
+    },
+    "GitWorktrees.DeleteTimeout" : {
+      "comment" : "Error when a Git worktree deletion command times out",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Git worktree deletion timed out. Refresh the list to check its current state."
+          }
+        }
+      }
+    },
+    "GitWorktrees.InvalidOutput" : {
+      "comment" : "Error tooltip when Git worktree output cannot be parsed",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Git returned invalid worktree information."
+          }
+        }
+      }
+    },
+    "GitWorktrees.OutputTooLarge" : {
+      "comment" : "Error tooltip when Git output exceeds the scanner limit",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Git returned too much worktree information."
+          }
+        }
+      }
+    },
+    "GitWorktrees.ReadFailed" : {
+      "comment" : "Error tooltip when Git repository discovery or a read command fails",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Git worktree information could not be read."
+          }
+        }
+      }
+    },
+    "GitWorktrees.Timeout" : {
+      "comment" : "Error tooltip when scanning a Git repository exceeds its deadline",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Git worktree discovery timed out."
+          }
+        }
+      }
+    },
     "GlobalSearch.FoldedRegionMatches" : {
       "comment" : "Label for a folded region of search results; %ld is the number of matches",
       "localizations" : {
@@ -110210,6 +111350,18 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "Indicator.PinnedHotkeyWindow" : {
+      "comment" : "Help text, interpreted as markdown, for the indicator shown in a pinned Hotkey Window. Unpin is a link that unpins the window. %@ is the link’s URL and must stay inside the parentheses.",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "This Hotkey Window is pinned. [Unpin](%@)"
           }
         }
       }
@@ -176001,6 +177153,534 @@
         }
       }
     },
+    "ProjectSidebar.AddCurrent" : {
+      "comment" : "Add current terminal directory as a project",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Add Current Directory"
+          }
+        }
+      }
+    },
+    "ProjectSidebar.AddFolder" : {
+      "comment" : "Choose a folder to add as a project",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Add Folder…"
+          }
+        }
+      }
+    },
+    "ProjectSidebar.ConfirmDeleteWorktree" : {
+      "comment" : "Destructive button in the worktree deletion confirmation",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Delete"
+          }
+        }
+      }
+    },
+    "ProjectSidebar.CopyFullPath" : {
+      "comment" : "Copy the absolute directory path of the clicked sidebar item",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Copy Full Path"
+          }
+        }
+      }
+    },
+    "ProjectSidebar.DeleteWorktreeAndBranch" : {
+      "comment" : "Delete the clicked linked worktree and its local Git branch",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Delete Worktree and Branch…"
+          }
+        }
+      }
+    },
+    "ProjectSidebar.DeleteWorktreeAndBranchBody" : {
+      "comment" : "Deletion confirmation; first placeholder is the absolute directory path, second is the local branch name",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "This permanently deletes the worktree directory at “%1$@” and the local branch “%2$@”. Selecting Force Delete also discards uncommitted files and deletes unmerged commits on the branch."
+          }
+        }
+      }
+    },
+    "ProjectSidebar.DeleteWorktreeAndBranchHeading" : {
+      "comment" : "Confirmation heading for deleting a linked checkout and its branch",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Delete Worktree and Branch?"
+          }
+        }
+      }
+    },
+    "ProjectSidebar.DeleteWorktreeDirectory" : {
+      "comment" : "Delete the clicked linked worktree while keeping its branch",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Delete Worktree Directory…"
+          }
+        }
+      }
+    },
+    "ProjectSidebar.DeleteWorktreeDirectoryBody" : {
+      "comment" : "Deletion confirmation; placeholder is the absolute worktree directory path",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "This permanently deletes the worktree directory at “%@”. Existing local branches are kept. Selecting Force Delete also discards uncommitted files."
+          }
+        }
+      }
+    },
+    "ProjectSidebar.DeleteWorktreeDirectoryHeading" : {
+      "comment" : "Confirmation heading for deleting a linked checkout while retaining its branch",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Delete Worktree Directory?"
+          }
+        }
+      }
+    },
+    "ProjectSidebar.Empty" : {
+      "comment" : "Empty state in the project sidebar",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Add a folder to get started."
+          }
+        }
+      }
+    },
+    "ProjectSidebar.ForceDelete" : {
+      "comment" : "Unchecked checkbox that allows deleting a dirty Git worktree",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Force Delete (discard uncommitted changes)"
+          }
+        }
+      }
+    },
+    "ProjectSidebar.OpenDirectory" : {
+      "comment" : "Open the clicked project, repository, or worktree directory in Finder",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Open Directory in Finder"
+          }
+        }
+      }
+    },
+    "ProjectSidebar.Projects" : {
+      "comment" : "Project sidebar heading",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Projects"
+          }
+        }
+      }
+    },
+    "ProjectSidebar.RefreshWorktrees" : {
+      "comment" : "Refresh registered repositories and worktree lists",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Refresh Worktrees"
+          }
+        }
+      }
+    },
+    "ProjectSidebar.RemoteForceDelete" : {
+      "comment" : "Companion input for the worktree force deletion checkbox",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Force Delete (0 = off, 1 = discard uncommitted changes)"
+          }
+        }
+      }
+    },
+    "ProjectSidebar.Remove" : {
+      "comment" : "Remove selected project from the list",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Remove Project"
+          }
+        }
+      }
+    },
+    "ProjectSidebar.RemoveRepository" : {
+      "comment" : "Remove repository registration without deleting worktrees",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Remove Repository from Sidebar"
+          }
+        }
+      }
+    },
+    "Projects.AssignTab" : {
+      "comment" : "Tab context menu submenu",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Assign to Project"
+          }
+        }
+      }
+    },
+    "Projects.DetachedWorktreeTitle" : {
+      "comment" : "Checkout that points directly to a commit instead of a branch; placeholder is the abbreviated commit ID",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Detached HEAD · %@"
+          }
+        }
+      }
+    },
+    "Projects.DirectoryUnavailable" : {
+      "comment" : "Message when a project directory cannot be read",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "The selected directory is unavailable. Reconnect its disk or choose another project."
+          }
+        }
+      }
+    },
+    "Projects.Error" : {
+      "comment" : "Error heading for an unavailable project directory or terminal",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Could Not Open Project"
+          }
+        }
+      }
+    },
+    "Projects.HideSidebar" : {
+      "comment" : "Tooltip for the top-left sidebar button when projects are visible",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Hide Project Sidebar"
+          }
+        }
+      }
+    },
+    "Projects.LaunchFailed" : {
+      "comment" : "Message when project terminal launch fails",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "The terminal could not be started in this project."
+          }
+        }
+      }
+    },
+    "Projects.LockedDetachedWorktreeTitle" : {
+      "comment" : "Detached checkout row with a Git lock; placeholder is the abbreviated commit ID",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Detached HEAD · %@ · Locked"
+          }
+        }
+      }
+    },
+    "Projects.LockedWorktreeTitle" : {
+      "comment" : "Git-locked worktree row; placeholder is its branch or name",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%@ · Locked"
+          }
+        }
+      }
+    },
+    "Projects.MainDetachedWorktreeTitle" : {
+      "comment" : "Detached main checkout row; placeholder is the abbreviated commit ID",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Detached HEAD · %@ · Main"
+          }
+        }
+      }
+    },
+    "Projects.MainLockedDetachedWorktreeTitle" : {
+      "comment" : "Detached main checkout row with a Git lock; placeholder is the abbreviated commit ID",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Detached HEAD · %@ · Main · Locked"
+          }
+        }
+      }
+    },
+    "Projects.MainLockedWorktreeTitle" : {
+      "comment" : "Main checkout row with a Git lock; placeholder is its branch or name",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%@ · Main · Locked"
+          }
+        }
+      }
+    },
+    "Projects.MainWorktreeTitle" : {
+      "comment" : "Main checkout row; placeholder is its branch or name",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%@ · Main"
+          }
+        }
+      }
+    },
+    "Projects.OpenTerminal" : {
+      "comment" : "Project/worktree context menu for explicit terminal opening",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Open Terminal"
+          }
+        }
+      }
+    },
+    "Projects.OpenTerminalNewTab" : {
+      "comment" : "Open a new terminal in the chosen directory in a new tab",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "New Tab"
+          }
+        }
+      }
+    },
+    "Projects.OpenTerminalNewWindow" : {
+      "comment" : "Open a new terminal in the chosen directory in a separate window",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "New Window"
+          }
+        }
+      }
+    },
+    "Projects.OpenTerminalSplitDown" : {
+      "comment" : "Open a new terminal below the current pane, with a horizontal divider",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Split Top and Bottom"
+          }
+        }
+      }
+    },
+    "Projects.OpenTerminalSplitRight" : {
+      "comment" : "Open a new terminal beside the current pane, with a vertical divider",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Split Left and Right"
+          }
+        }
+      }
+    },
+    "Projects.RepositoryLoadingTitle" : {
+      "comment" : "Repository heading while its first worktree list loads; placeholder is repository name",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%@ · Loading…"
+          }
+        }
+      }
+    },
+    "Projects.RepositoryReadFailedTitle" : {
+      "comment" : "Repository heading whose worktrees could not be refreshed; placeholder is repository name",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%@ · Read Failed"
+          }
+        }
+      }
+    },
+    "Projects.ShowSidebar" : {
+      "comment" : "Tooltip for the top-left sidebar button when projects are collapsed",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Show Project Sidebar"
+          }
+        }
+      }
+    },
+    "Projects.TerminalModeUnavailable" : {
+      "comment" : "Error when the requested project terminal tab, split, or window cannot be created\nTooltip for a disabled terminal opening menu item",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "This opening mode is unavailable for the current terminal or layout."
+          }
+        }
+      }
+    },
+    "Projects.Unassign" : {
+      "comment" : "Remove project ownership from a tab",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "No Project"
+          }
+        }
+      }
+    },
+    "Projects.UnavailableDetachedWorktreeTitle" : {
+      "comment" : "Unavailable detached checkout row; placeholder is the abbreviated commit ID",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Detached HEAD · %@ · Unavailable"
+          }
+        }
+      }
+    },
+    "Projects.WorktreeScanTimeout" : {
+      "comment" : "Error when repository discovery does not finish before its deadline",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Reading Git worktrees timed out. Try refreshing the list."
+          }
+        }
+      }
+    },
+    "Projects.WorktreeUnavailable" : {
+      "comment" : "Error when opening a terminal in a missing worktree",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "The worktree directory is unavailable. Refresh the list or choose another worktree."
+          }
+        }
+      }
+    },
+    "Projects.WorktreeUnavailableTitle" : {
+      "comment" : "Worktree row for an unavailable directory; placeholder is its branch or name",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%@ · Unavailable"
+          }
+        }
+      }
+    },
     "PseudoTerminal.AddTabToGroup" : {
       "comment" : "Menu item that adds a tab to a group",
       "extractionState" : "extracted_with_value",
@@ -239022,6 +240702,18 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "命令历史记录"
+          }
+        }
+      }
+    },
+    "Toolbelt.Tool.FileTree" : {
+      "comment" : "Name of the project file tree tool",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "File Tree"
           }
         }
       }
