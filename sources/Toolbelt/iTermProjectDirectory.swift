@@ -43,6 +43,7 @@ final class iTermProjectCatalog: NSObject {
     private var discoveries = [String: Discovery]()
     private var membershipGeneration: UInt64 = 0
     private var removedRepositories = [String: UInt64]()
+    private var mutatedRepositories = [String: UInt64]()
     var isScanning: Bool { !discoveries.isEmpty }
     var repositories: [iTermGitRepositorySnapshot] {
         var seen = Set<String>()
@@ -193,7 +194,7 @@ final class iTermProjectCatalog: NSObject {
                 }
                 self.scanner.scan(directory: canonical) { [weak self] snapshot, error in
                     guard let self, shouldAdd() else { completion(nil, NSError(domain: NSCocoaErrorDomain, code: NSUserCancelledError)); return }
-                    if let snapshot, (self.removedRepositories[snapshot.identifier] ?? 0) > generation {
+                    if let snapshot, !self.canAdmitSnapshot(snapshot, fromGeneration: generation) {
                         completion(nil, NSError(domain: NSCocoaErrorDomain, code: NSUserCancelledError)); return
                     }
                     let worktree = snapshot?.worktrees.filter {
@@ -201,7 +202,7 @@ final class iTermProjectCatalog: NSObject {
                     }.max { $0.rootDirectory.count < $1.rootDirectory.count }
                     let canCommit: () -> Bool = { [weak self] in
                         guard let self, shouldAdd() else { return false }
-                        return snapshot.map { (self.removedRepositories[$0.identifier] ?? 0) <= generation } ?? true
+                        return snapshot.map { self.canAdmitSnapshot($0, fromGeneration: generation) } ?? true
                     }
                     self.addDirectoryIfCurrent(atPath: canonical, reuseContainingProject: worktree != nil || (snapshot == nil && error == nil),
                                                requiredWorktreeRoot: worktree?.rootDirectory, shouldAdd: canCommit) { [weak self] project, addError in
@@ -210,7 +211,7 @@ final class iTermProjectCatalog: NSObject {
                             self.removeProject(withIdentifier: project.identifier)
                             completion(nil, NSError(domain: NSCocoaErrorDomain, code: NSUserCancelledError)); return
                         }
-                        guard shouldAdd() else { completion(nil, NSError(domain: NSCocoaErrorDomain, code: NSUserCancelledError)); return }
+                        guard canCommit() else { completion(nil, NSError(domain: NSCocoaErrorDomain, code: NSUserCancelledError)); return }
                         if let snapshot, worktree != nil || canonical == snapshot.commonDirectory {
                             self.cacheRepositorySnapshot(snapshot)
                             if self.setMetadata(project, repository: snapshot, worktreeRoot: worktree?.rootDirectory) { self.persist() }
@@ -221,6 +222,11 @@ final class iTermProjectCatalog: NSObject {
                 }
             }
         }
+    }
+
+    @nonobjc private func canAdmitSnapshot(_ snapshot: iTermGitRepositorySnapshot, fromGeneration generation: UInt64) -> Bool {
+        (removedRepositories[snapshot.identifier] ?? 0) <= generation &&
+            (mutatedRepositories[snapshot.identifier] ?? 0) <= generation
     }
 
     @nonobjc func worktree(forProjectIdentifier identifier: String) -> iTermGitWorktree? {
@@ -260,6 +266,26 @@ final class iTermProjectCatalog: NSObject {
             }
         } else {
             for project in projects { refreshProject(withIdentifier: project.identifier) { _ in } }
+        }
+    }
+
+    func refreshRepositoryAfterWorktreeRemoval(_ identifier: String) {
+        membershipGeneration &+= 1
+        mutatedRepositories[identifier] = membershipGeneration
+        scanner.invalidateRepository(identifier)
+        refreshRepositoryWhenReady(identifier)
+    }
+
+    private func refreshRepositoryWhenReady(_ identifier: String) {
+        guard let project = projects.first(where: { $0.gitCommonDirectory == identifier }) else { return }
+        if let pending = projects.first(where: { $0.gitCommonDirectory == identifier && discoveries[$0.identifier] != nil }) {
+            // A coalesced refresh may still contain pre-deletion rows. Wait for it
+            // to finish, then start a read whose listing is collected after removal.
+            refreshProject(withIdentifier: pending.identifier) { [weak self] _ in
+                self?.refreshRepositoryWhenReady(identifier)
+            }
+        } else {
+            refreshProject(withIdentifier: project.identifier) { _ in }
         }
     }
 

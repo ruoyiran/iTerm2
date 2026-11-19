@@ -14,6 +14,10 @@ Major New Features:
   Right-click a project to open its folder in
   Finder, copy its path, or remove it from the
   sidebar while keeping its files.
+  Right-click a Git worktree to delete its
+  directory, optionally deleting its branch.
+  The confirmation offers Force Delete for
+  uncommitted changes and unmerged branches.
 - Grok is now a built-in AI provider. Pick it
   in Settings > General > AI and enter an xAI
   API key to chat with grok-4.7.

@@ -19,6 +19,7 @@ final class ProjectSidebarTerminalShortcutTests: XCTestCase {
         var didSelect: (() -> Void)?
         var removedProjects = [String]()
         var removedRepositories = [String]()
+        var removedWorktrees = [(directory: String, repository: String, deleteBranch: Bool)]()
         func projectSidebar(_ sidebar: iTermProjectSidebarView, didSelectProject project: iTermProjectDirectory, openIfNeeded: Bool) { didSelect?() }
         func projectSidebar(_ sidebar: iTermProjectSidebarView, didSelectWorktree worktree: iTermGitWorktree, openIfNeeded: Bool) { didSelect?() }
         func projectSidebar(_ sidebar: iTermProjectSidebarView, didSelectRepository repository: iTermGitRepositorySnapshot, openIfNeeded: Bool) { didSelect?() }
@@ -30,6 +31,10 @@ final class ProjectSidebarTerminalShortcutTests: XCTestCase {
         func projectSidebarAddCurrentDirectory(_ sidebar: iTermProjectSidebarView) {}
         func projectSidebar(_ sidebar: iTermProjectSidebarView, removeProject project: iTermProjectDirectory) { removedProjects.append(project.identifier) }
         func projectSidebar(_ sidebar: iTermProjectSidebarView, removeRepository repository: iTermGitRepositorySnapshot) { removedRepositories.append(repository.identifier) }
+        @objc func projectSidebar(_ sidebar: iTermProjectSidebarView, removeWorktree worktree: iTermGitWorktree,
+                                 fromRepository repository: iTermGitRepositorySnapshot, deleteBranch: Bool) {
+            removedWorktrees.append((worktree.rootDirectory, repository.identifier, deleteBranch))
+        }
         func projectSidebar(_ sidebar: iTermProjectSidebarView, refreshRepositories identifiers: [String]?) {}
     }
 
@@ -283,9 +288,56 @@ final class ProjectSidebarTerminalShortcutTests: XCTestCase {
                 XCTAssertTrue(FileManager.default.fileExists(atPath: linked.path))
             } else {
                 XCTAssertNil(remove)
+                for (selector, deleteBranch) in [("removeWorktreeDirectory:", false), ("removeWorktreeAndBranch:", true)] {
+                    let deletion = try XCTUnwrap(menu.items.first { $0.action == NSSelectorFromString(selector) })
+                    XCTAssertTrue(deletion.isEnabled)
+                    XCTAssertTrue(NSApp.sendAction(try XCTUnwrap(deletion.action), to: deletion.target, from: deletion))
+                    XCTAssertEqual(delegate.removedWorktrees.last?.directory, linked.path)
+                    XCTAssertEqual(delegate.removedWorktrees.last?.repository, main.path + "/.git")
+                    XCTAssertEqual(delegate.removedWorktrees.last?.deleteBranch, deleteBranch)
+                }
             }
         }
         XCTAssertEqual(delegate.opened.count, 8)
+        // A named branch keeps its title when a commit changes. Its menu must still
+        // receive the refreshed HEAD for deletion's confirmation-state validation.
+        scanner.snapshot = .init(commonDirectory: main.path + "/.git", rootDirectory: main.path, worktrees: [
+            .init(rootDirectory: main.path, branch: "main", head: "a", isMain: true),
+            .init(rootDirectory: linked.path, branch: "feature", head: "updated", isMain: false)
+        ])
+        let updated = expectation(description: "updated branch commit")
+        catalog.refreshProject(withIdentifier: catalog.projects[0].identifier) { _ in updated.fulfill() }
+        wait(for: [updated], timeout: 5)
+        sidebar.tree = iTermProjectSidebarTree(catalog: catalog)
+        outline.selectRowIndexes(IndexSet(integer: 2), byExtendingSelection: false)
+        sidebar.menuNeedsUpdate(outline.menu!)
+        let updatedDelete = try XCTUnwrap(outline.menu!.items.first { $0.action == NSSelectorFromString("removeWorktreeDirectory:") })
+        XCTAssertEqual((updatedDelete.representedObject as? iTermProjectSidebarNode)?.worktree?.head, "updated")
+
+        for (branch, locked) in [("feature" as String?, true), (nil, false)] {
+            scanner.snapshot = .init(commonDirectory: main.path + "/.git", rootDirectory: main.path, worktrees: [
+                .init(rootDirectory: main.path, branch: "main", head: "a", isMain: true),
+                .init(rootDirectory: linked.path, branch: branch, head: "updated", isMain: false, locked: locked)
+            ])
+            let refreshed = expectation(description: "deletion availability")
+            catalog.refreshProject(withIdentifier: catalog.projects[0].identifier) { _ in refreshed.fulfill() }
+            wait(for: [refreshed], timeout: 5)
+            sidebar.tree = iTermProjectSidebarTree(catalog: catalog)
+            for (row, enabled) in [(1, false), (2, !locked)] {
+                outline.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
+                sidebar.menuNeedsUpdate(outline.menu!)
+                let directory = try XCTUnwrap(outline.menu!.items.first { $0.action == NSSelectorFromString("removeWorktreeDirectory:") })
+                XCTAssertEqual(directory.isEnabled, enabled)
+                let combined = outline.menu!.items.first { $0.action == NSSelectorFromString("removeWorktreeAndBranch:") }
+                XCTAssertEqual(combined != nil, row == 1 || branch != nil)
+                if let combined { XCTAssertEqual(combined.isEnabled, enabled) }
+                if !enabled {
+                    let count = delegate.removedWorktrees.count
+                    XCTAssertTrue(NSApp.sendAction(try XCTUnwrap(directory.action), to: directory.target, from: directory))
+                    XCTAssertEqual(delegate.removedWorktrees.count, count)
+                }
+            }
+        }
         scanner.snapshot = .init(commonDirectory: main.path + "/.git", rootDirectory: main.path, worktrees: [
             .init(rootDirectory: main.path, branch: "main", head: "a", isMain: true, available: false)
         ])

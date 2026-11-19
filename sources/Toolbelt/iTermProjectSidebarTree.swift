@@ -62,6 +62,8 @@ import Foundation
 
     @nonobjc func isEquivalent(to other: iTermProjectSidebarNode) -> Bool {
         identifier == other.identifier && kind == other.kind && title == other.title && tooltip == other.tooltip &&
+            worktree?.head == other.worktree?.head && worktree?.branch == other.worktree?.branch &&
+            worktree?.prunable == other.worktree?.prunable &&
             hasError == other.hasError && isLoading == other.isLoading && children.count == other.children.count &&
             zip(children, other.children).allSatisfy { $0.isEquivalent(to: $1) }
     }

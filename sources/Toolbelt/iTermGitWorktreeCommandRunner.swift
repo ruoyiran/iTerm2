@@ -4,8 +4,10 @@ import Foundation
 // command runner and the existing advanced preference at this adapter boundary.
 private final class iTermGitWorktreeCommandRunner: iTermGitWorktreeCommandExecuting {
     private let executable: String
+    private let discardStandardError: Bool
 
-    init(searchPath: String) {
+    init(searchPath: String, discardStandardError: Bool = true) {
+        self.discardStandardError = discardStandardError
         let firstDirectory = searchPath.components(separatedBy: ":").first ?? ""
         executable = firstDirectory.isEmpty ? "/usr/bin/git" :
             (firstDirectory as NSString).appendingPathComponent("git")
@@ -14,7 +16,7 @@ private final class iTermGitWorktreeCommandRunner: iTermGitWorktreeCommandExecut
     func run(arguments: [String], directory: String, timeout: TimeInterval) -> iTermGitWorktreeCommandResult {
         it_assert(!Thread.isMainThread, "Git worktree commands must run off the main thread")
         let runner = iTermBufferedCommandRunner(command: executable, withArguments: arguments, path: directory)
-        runner.discardStandardError = true
+        runner.discardStandardError = discardStandardError
         runner.terminatesProcessGroup = true
         runner.maximumOutputSize = NSNumber(value: 1024 * 1024)
         runner.terminateWhenOutputExceedsMaximum = true
@@ -26,10 +28,17 @@ private final class iTermGitWorktreeCommandRunner: iTermGitWorktreeCommandExecut
         runner.environment = environment
         let status = runner.blockingRun(withTimeout: timeout)
         if status != 0 || runner.timedOut || runner.truncated {
-            DLog("Git worktree read failed: status=\(status), timeout=\(runner.timedOut), truncated=\(runner.truncated)")
+            DLog("Git worktree command failed: status=\(status), timeout=\(runner.timedOut), truncated=\(runner.truncated)")
         }
         return .init(output: runner.output ?? Data(), status: status,
                      timedOut: runner.timedOut, truncated: runner.truncated)
+    }
+}
+
+extension iTermGitWorktreeRemover {
+    static func makeDefault() -> iTermGitWorktreeRemover {
+        iTermGitWorktreeRemover(executor: iTermGitWorktreeCommandRunner(
+            searchPath: iTermAdvancedSettingsModel.gitSearchPath(), discardStandardError: false))
     }
 }
 
