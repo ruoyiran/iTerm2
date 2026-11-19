@@ -41,6 +41,11 @@ final class iTermGitRepositorySnapshot: NSObject {
 
 protocol iTermGitWorktreeScanning: AnyObject {
     func scan(directory: String, completion: @escaping (iTermGitRepositorySnapshot?, NSError?) -> Void)
+    func invalidateRepository(_ identifier: String)
+}
+
+extension iTermGitWorktreeScanning {
+    func invalidateRepository(_ identifier: String) {}
 }
 
 struct iTermGitWorktreeCommandResult {
@@ -224,6 +229,7 @@ final class iTermGitWorktreeScanner: NSObject, iTermGitWorktreeScanning {
         var pendingLocations = 0
         var mainCheckout: MainCheckout?
         var pendingSnapshot: iTermGitRepositorySnapshot?
+        var generation: UInt64 = 0
         init(directory: String, completion: @escaping Completion) {
             self.directory = directory
             completions = [completion]
@@ -244,6 +250,8 @@ final class iTermGitWorktreeScanner: NSObject, iTermGitWorktreeScanning {
     // wait for another scan; a joined scan gives its worker slot back immediately.
     private var paths = [String: Job]()
     private var repositories = [String: Job]()
+    private var generation: UInt64 = 0
+    private var invalidatedRepositories = [String: UInt64]()
     private let capabilities: iTermGitWorktreeCapabilities
 
     init(executor: iTermGitWorktreeCommandExecuting) {
@@ -254,7 +262,8 @@ final class iTermGitWorktreeScanner: NSObject, iTermGitWorktreeScanning {
     func scan(directory: String, completion: @escaping (iTermGitRepositorySnapshot?, NSError?) -> Void) {
         let job = Job(directory: directory, completion: completion)
         state.async {
-            if let existing = self.paths[directory] {
+            job.generation = self.generation
+            if let existing = self.paths[directory], existing.generation == self.generation {
                 existing.completions.append(completion)
                 return
             }
@@ -264,6 +273,16 @@ final class iTermGitWorktreeScanner: NSObject, iTermGitWorktreeScanning {
                 self.finish(job, snapshot: nil, error: Self.timeoutError())
             }
             self.workers.addOperation { self.perform(job) }
+        }
+    }
+
+    func invalidateRepository(_ identifier: String) {
+        state.sync {
+            generation &+= 1
+            invalidatedRepositories[identifier] = generation
+            if let owner = repositories[identifier] {
+                finish(owner, snapshot: nil, error: NSError(domain: NSCocoaErrorDomain, code: NSUserCancelledError))
+            }
         }
     }
 
@@ -277,7 +296,15 @@ final class iTermGitWorktreeScanner: NSObject, iTermGitWorktreeScanning {
         job.completions.removeAll()
         let followers = job.followers
         job.followers.removeAll()
-        DispatchQueue.main.async { completions.forEach { $0(snapshot, error) } }
+        DispatchQueue.main.async {
+            // A result can already be queued for delivery when deletion invalidates
+            // its repository. Check again before callers can cache that snapshot.
+            let stale = snapshot.map { snapshot in
+                self.state.sync { job.generation < (self.invalidatedRepositories[snapshot.identifier] ?? 0) }
+            } ?? false
+            let failure = stale ? NSError(domain: NSCocoaErrorDomain, code: NSUserCancelledError) : error
+            completions.forEach { $0(stale ? nil : snapshot, failure) }
+        }
         followers.forEach { finish($0, snapshot: snapshot, error: error) }
     }
 
@@ -367,7 +394,7 @@ final class iTermGitWorktreeScanner: NSObject, iTermGitWorktreeScanning {
             let directory = Self.normalizedPath(job.directory)
             let shouldContinue = state.sync { () -> Bool in
                 guard !job.finished else { return false }
-                if let other = paths[directory], other !== job {
+                if let other = paths[directory], other !== job, other.generation >= job.generation {
                     join(job, to: other)
                     return false
                 }
@@ -390,6 +417,12 @@ final class iTermGitWorktreeScanner: NSObject, iTermGitWorktreeScanning {
             let common = try gitPath("--git-common-dir", directory: directory, job: job)
             let owner = state.sync { () -> Job? in
                 guard !job.finished else { return nil }
+                // A job may not know its repository yet when deletion invalidates
+                // it. Reject that old flight as soon as its common directory resolves.
+                guard job.generation >= (invalidatedRepositories[common] ?? 0) else {
+                    finish(job, snapshot: nil, error: NSError(domain: NSCocoaErrorDomain, code: NSUserCancelledError))
+                    return nil
+                }
                 let owner: Job
                 if let other = repositories[common], other !== job {
                     join(job, to: other)
@@ -478,7 +511,7 @@ final class iTermGitWorktreeScanner: NSObject, iTermGitWorktreeScanning {
         directory == root || directory.hasPrefix(root == "/" ? root : root + "/")
     }
 
-    private static func normalizedPath(_ path: String, relativeTo base: String? = nil) -> String {
+    static func normalizedPath(_ path: String, relativeTo base: String? = nil) -> String {
         let absolute = path.hasPrefix("/") ? path :
             (base ?? FileManager.default.currentDirectoryPath) + "/" + path
         // Foundation rewrites physical /private paths to /var or /tmp aliases.

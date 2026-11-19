@@ -206,6 +206,57 @@ final class GitProjectIntegrationTests: XCTestCase {
         XCTAssertEqual(catalog.worktree(forProjectIdentifier: f.records[2]["identifier"]!)?.rootDirectory, f.linked)
     }
 
+    func testDeletionRefreshWaitsForOldDiscoveryThenReadsNewWorktrees() throws {
+        let f = try fixture()
+        let scanner = Scanner(); scanner.snapshot = f.snapshot
+        let catalog = catalog(f, scanner: scanner, records: [f.records[0]])
+        ready(catalog) { !catalog.isScanning && catalog.repositories.count == 1 }
+        scanner.delayed = true
+        let oldScan = expectation(description: "old discovery started")
+        scanner.entered = { oldScan.fulfill() }
+        catalog.refreshRepositories([f.common])
+        wait(for: [oldScan], timeout: 5)
+        let newScan = expectation(description: "fresh discovery after deletion")
+        scanner.entered = { newScan.fulfill() }
+        catalog.refreshRepositoryAfterWorktreeRemoval(f.common)
+        // This result was collected before deletion and still lists the removed checkout.
+        scanner.deliver()
+        scanner.snapshot = .init(commonDirectory: f.common, rootDirectory: f.main,
+                                 worktrees: [f.snapshot.worktrees[0]])
+        wait(for: [newScan], timeout: 5)
+        scanner.delayed = false
+        scanner.deliver()
+        XCTAssertEqual(iTermProjectSidebarTree(catalog: catalog).roots.first?.children.map { $0.worktree?.identifier }, [f.main])
+    }
+
+    func testDeletionRejectsOldAddCurrentDirectorySnapshot() throws {
+        let f = try fixture()
+        let scanner = Scanner(); scanner.snapshot = f.snapshot
+        let catalog = catalog(f, scanner: scanner, records: [f.records[0]])
+        ready(catalog) { !catalog.isScanning && catalog.repositories.count == 1 }
+        scanner.delayed = true
+        let started = expectation(description: "old add-current-directory scan")
+        scanner.entered = { started.fulfill() }
+        let completed = expectation(description: "old admission cancelled")
+        catalog.addWorkingDirectory(atPath: f.records[1]["rootDirectory"]!, shouldAdd: { true }) { project, error in
+            XCTAssertNil(project)
+            XCTAssertEqual(error?.code, NSUserCancelledError)
+            completed.fulfill()
+        }
+        wait(for: [started], timeout: 5)
+        let oldCallbacks = scanner.pending
+        scanner.pending.removeAll()
+        catalog.refreshRepositoryAfterWorktreeRemoval(f.common)
+        scanner.delayed = false
+        scanner.snapshot = .init(commonDirectory: f.common, rootDirectory: f.main, worktrees: [f.snapshot.worktrees[0]])
+        // Even a delivery already queued before scanner invalidation must not
+        // admit the old snapshot after asynchronous directory validation.
+        oldCallbacks.forEach { $0(f.snapshot, nil) }
+        wait(for: [completed], timeout: 5)
+        ready(catalog) { !catalog.isScanning && catalog.repositories.first?.worktrees.count == 1 }
+        XCTAssertEqual(catalog.projects.count, 1)
+    }
+
     func testRemovedProjectCannotBeResurrectedByDelayedDiscovery() throws {
         let f = try fixture()
         let scanner = Scanner(); scanner.snapshot = f.snapshot; scanner.delayed = true

@@ -387,6 +387,35 @@ final class GitWorktreeScannerTests: XCTestCase {
         }
     }
 
+    func testRepositoryInvalidationStartsFreshReadWhileOldWorkerIsStillRunning() throws {
+        for gateListing in [false, true] {
+            let fixture = try GitFixture()
+            defer { fixture.remove() }
+            let linked = fixture.base + "/side"
+            try fixture.git(["worktree", "add", "-b", "side", linked])
+            let captured = expectation(description: "old scan captured output")
+            let executor = MutationGatedGitExecutor(gateListing: gateListing) { captured.fulfill() }
+            let scanner = iTermGitWorktreeScanner(executor: executor)
+            let oldDone = expectation(description: "invalidated scan finishes")
+            scanner.scan(directory: fixture.root) { _, error in
+                XCTAssertNotNil(error)
+                oldDone.fulfill()
+            }
+            wait(for: [captured], timeout: 10)
+            scanner.invalidateRepository(fixture.root + "/.git")
+            try fixture.git(["worktree", "remove", linked])
+            let freshDone = expectation(description: "new scan does not join the old worker")
+            scanner.scan(directory: fixture.root) { snapshot, error in
+                XCTAssertNil(error)
+                XCTAssertEqual(snapshot?.worktrees.map(\.rootDirectory), [fixture.root])
+                freshDone.fulfill()
+            }
+            wait(for: [freshDone], timeout: 10)
+            executor.release.signal()
+            wait(for: [oldDone], timeout: 10)
+        }
+    }
+
     private func scan(_ scanner: iTermGitWorktreeScanning, directory: String) -> (iTermGitRepositorySnapshot?, NSError?) {
         let done = expectation(description: "Scan completion")
         var result: iTermGitRepositorySnapshot?
@@ -468,6 +497,31 @@ private final class FixedGitExecutor: iTermGitWorktreeCommandExecuting {
     let response: iTermGitWorktreeCommandResult
     init(_ response: iTermGitWorktreeCommandResult) { self.response = response }
     func run(arguments: [String], directory: String, timeout: TimeInterval) -> iTermGitWorktreeCommandResult { response }
+}
+
+private final class MutationGatedGitExecutor: ProcessGitExecutor {
+    let release = DispatchSemaphore(value: 0)
+    private let gateListing: Bool
+    private let onCapture: () -> Void
+    private let lock = NSLock()
+    private var first = true
+    init(gateListing: Bool, onCapture: @escaping () -> Void) {
+        self.gateListing = gateListing
+        self.onCapture = onCapture
+    }
+    override func run(arguments: [String], directory: String, timeout: TimeInterval) -> iTermGitWorktreeCommandResult {
+        let result = super.run(arguments: arguments, directory: directory, timeout: timeout)
+        let matches = gateListing ? arguments.first == "worktree" : arguments == ["rev-parse", "--git-common-dir"]
+        lock.lock()
+        let gated = matches && first
+        if gated { first = false }
+        lock.unlock()
+        if gated {
+            DispatchQueue.main.async(execute: onCapture)
+            release.wait()
+        }
+        return result
+    }
 }
 
 private final class GatedGitExecutor: ProcessGitExecutor {

@@ -5432,6 +5432,71 @@ hidingToolbeltShouldResizeWindow:(BOOL)hidingToolbeltShouldResizeWindow
     [[iTermProjectCatalog shared] removeRepositoryWithIdentifier:repository.identifier];
 }
 
+- (void)projectSidebar:(iTermProjectSidebarView *)sidebar
+        removeWorktree:(iTermGitWorktree *)worktree
+        fromRepository:(iTermGitRepositorySnapshot *)repository
+          deleteBranch:(BOOL)deleteBranch {
+    if (_closing || _deallocing || worktree.isMain || worktree.locked || !worktree.available ||
+        (deleteBranch && !worktree.branch)) { return; }
+    NSString *forceLabel = NSLocalizedStringWithDefaultValue(@"ProjectSidebar.ForceDelete", nil, [NSBundle mainBundle],
+        @"Force Delete (discard uncommitted changes)", @"Unchecked checkbox that allows deleting a dirty Git worktree");
+    NSButton *forceDelete = [NSButton checkboxWithTitle:forceLabel target:nil action:nil];
+    forceDelete.state = NSControlStateValueOff;
+    [forceDelete sizeToFit];
+    iTermWarning *warning = [[[iTermWarning alloc] init] autorelease];
+    if (deleteBranch) {
+        warning.heading = NSLocalizedStringWithDefaultValue(@"ProjectSidebar.DeleteWorktreeAndBranchHeading", nil,
+            [NSBundle mainBundle], @"Delete Worktree and Branch?", @"Confirmation heading for deleting a linked checkout and its branch");
+        warning.title = [NSString localizedStringWithFormat:NSLocalizedStringWithDefaultValue(
+            @"ProjectSidebar.DeleteWorktreeAndBranchBody", nil, [NSBundle mainBundle],
+            @"This permanently deletes the worktree directory at “%1$@” and the local branch “%2$@”. Selecting Force Delete also discards uncommitted files and deletes unmerged commits on the branch.",
+            @"Deletion confirmation; first placeholder is the absolute directory path, second is the local branch name"),
+            worktree.rootDirectory, worktree.branch];
+    } else {
+        warning.heading = NSLocalizedStringWithDefaultValue(@"ProjectSidebar.DeleteWorktreeDirectoryHeading", nil,
+            [NSBundle mainBundle], @"Delete Worktree Directory?", @"Confirmation heading for deleting a linked checkout while retaining its branch");
+        warning.title = [NSString localizedStringWithFormat:NSLocalizedStringWithDefaultValue(
+            @"ProjectSidebar.DeleteWorktreeDirectoryBody", nil, [NSBundle mainBundle],
+            @"This permanently deletes the worktree directory at “%@”. Existing local branches are kept. Selecting Force Delete also discards uncommitted files.",
+            @"Deletion confirmation; placeholder is the absolute worktree directory path"), worktree.rootDirectory];
+    }
+    iTermWarningAction *cancel = [iTermWarningAction warningActionWithLabel:iTermLocalizedCancel() block:nil];
+    cancel.isCancel = YES;
+    iTermWarningAction *confirm = [iTermWarningAction warningActionWithLabel:
+        NSLocalizedStringWithDefaultValue(@"ProjectSidebar.ConfirmDeleteWorktree", nil, [NSBundle mainBundle],
+            @"Delete", @"Destructive button in the worktree deletion confirmation") block:nil];
+    confirm.destructive = YES;
+    confirm.neverRemember = YES;
+    // Default to Cancel; every deletion requires a new explicit confirmation.
+    warning.warningActions = @[cancel, confirm];
+    warning.warningType = kiTermWarningTypePersistent;
+    warning.accessory = forceDelete;
+    warning.window = self.window;
+    warning.remoteInputs = @[[iTermWarningRemoteInput integerInputWithIdentifier:@"forceDelete"
+        label:NSLocalizedStringWithDefaultValue(@"ProjectSidebar.RemoteForceDelete", nil, [NSBundle mainBundle],
+            @"Force Delete (0 = off, 1 = discard uncommitted changes)", @"Companion input for the worktree force deletion checkbox")
+        minimum:0 maximum:1 getter:^NSInteger { return forceDelete.state == NSControlStateValueOn ? 1 : 0; }
+        setter:^(NSInteger value) { forceDelete.state = value == 1 ? NSControlStateValueOn : NSControlStateValueOff; }]];
+    __weak __typeof(self) weakSelf = self;
+    [warning runModalAsync:^(iTermWarningSelection result, iTermWarning *completedWarning) {
+        PseudoTerminal *term = [[weakSelf retain] autorelease];
+        if (result != kiTermWarningSelection1 || !term || term->_closing || term->_deallocing) { return; }
+        BOOL force = forceDelete.state == NSControlStateValueOn;
+        DLog(@"Delete worktree %@, branch=%@, deleteBranch=%d, force=%d", worktree.identifier, worktree.branch, deleteBranch, force);
+        [[iTermGitWorktreeRemover makeDefault] removeWorktree:worktree fromRepository:repository
+            deleteBranch:deleteBranch force:force completion:^(BOOL removed, NSError *error) {
+                // Refresh even on failure: a timeout or branch error can follow a completed directory deletion.
+                [[iTermProjectCatalog shared] refreshRepositoryAfterWorktreeRemoval:repository.identifier];
+                PseudoTerminal *current = [[weakSelf retain] autorelease];
+                if (error && current && !current->_closing && !current->_deallocing) {
+                    [iTermWarning showWarningWithTitle:error.localizedDescription actions:@[iTermLocalizedOK()]
+                        identifier:nil silenceable:kiTermWarningTypePersistent
+                        window:current.window];
+                }
+            }];
+    }];
+}
+
 - (void)projectReportError:(NSError *)error {
     [self showProjectError:error.localizedDescription];
 }

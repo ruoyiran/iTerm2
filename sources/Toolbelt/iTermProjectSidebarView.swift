@@ -12,6 +12,8 @@ import AppKit
     func projectSidebarAddCurrentDirectory(_ sidebar: iTermProjectSidebarView)
     func projectSidebar(_ sidebar: iTermProjectSidebarView, removeProject project: iTermProjectDirectory)
     func projectSidebar(_ sidebar: iTermProjectSidebarView, removeRepository repository: iTermGitRepositorySnapshot)
+    func projectSidebar(_ sidebar: iTermProjectSidebarView, removeWorktree worktree: iTermGitWorktree,
+                        fromRepository repository: iTermGitRepositorySnapshot, deleteBranch: Bool)
     func projectSidebar(_ sidebar: iTermProjectSidebarView, refreshRepositories identifiers: [String]?)
 }
 
@@ -230,6 +232,19 @@ import AppKit
                 ? String(localized: "ProjectSidebar.RemoveRepository", defaultValue: "Remove Repository from Sidebar", comment: "Remove repository registration without deleting worktrees")
                 : String(localized: "ProjectSidebar.Remove", defaultValue: "Remove Project", comment: "Remove selected project from the list")
             addMenuItem(to: menu, title: title, action: #selector(removeFromSidebar(_:)), node: node)
+        } else if let worktree = node.worktree {
+            menu.addItem(.separator())
+            let canRemove = !worktree.isMain && !worktree.locked && worktree.available
+            let removeDirectory = addMenuItem(to: menu, title: String(localized: "ProjectSidebar.DeleteWorktreeDirectory",
+                defaultValue: "Delete Worktree Directory…", comment: "Delete the clicked linked worktree while keeping its branch"),
+                action: #selector(removeWorktreeDirectory(_:)), node: node)
+            removeDirectory.isEnabled = canRemove
+            if worktree.branch != nil {
+                let removeBranch = addMenuItem(to: menu, title: String(localized: "ProjectSidebar.DeleteWorktreeAndBranch",
+                    defaultValue: "Delete Worktree and Branch…", comment: "Delete the clicked linked worktree and its local Git branch"),
+                    action: #selector(removeWorktreeAndBranch(_:)), node: node)
+                removeBranch.isEnabled = canRemove
+            }
         }
     }
 
@@ -262,6 +277,18 @@ import AppKit
     @objc private func removeFromSidebar(_ item: NSMenuItem) {
         guard item.isEnabled, let node = item.representedObject as? iTermProjectSidebarNode else { return }
         removeNode(node)
+    }
+
+    @objc private func removeWorktreeDirectory(_ item: NSMenuItem) { removeWorktree(item, deleteBranch: false) }
+    @objc private func removeWorktreeAndBranch(_ item: NSMenuItem) { removeWorktree(item, deleteBranch: true) }
+
+    private func removeWorktree(_ item: NSMenuItem, deleteBranch: Bool) {
+        guard item.isEnabled, let node = item.representedObject as? iTermProjectSidebarNode,
+              let worktree = node.worktree, let repository = node.repository,
+              !worktree.isMain, !worktree.locked, worktree.available,
+              !deleteBranch || worktree.branch != nil else { return }
+        DLog("Request deletion of project sidebar worktree \(worktree.identifier), deleteBranch=\(deleteBranch)")
+        delegate?.projectSidebar(self, removeWorktree: worktree, fromRepository: repository, deleteBranch: deleteBranch)
     }
 
     func menuWillOpen(_ menu: NSMenu) { terminalMenuIsTracking = true }
