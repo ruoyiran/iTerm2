@@ -672,6 +672,7 @@ $(SRCROOT)/sources/FileWorkspace/Resources/src/portable/viewers.tsx
 $(SRCROOT)/sources/FileWorkspace/Resources/src/portable/webkit-compatibility.mjs
 $(SRCROOT)/sources/FileWorkspace/Resources/src/tree-state.mjs
 $(SRCROOT)/tools/file-workspace-ui/build.mjs
+$(SRCROOT)/tools/file-workspace-ui/compact-css.mjs
 $(SRCROOT)/tools/file-workspace-ui/orca-style.css
 $(SRCROOT)/tools/file-workspace-ui/package-lock.json
 $(SRCROOT)/tools/file-workspace-ui/package-notices.mjs
@@ -684,6 +685,7 @@ $(SRCROOT)/tools/file-workspace-ui/patches/orca-packages.json
 $(SRCROOT)/tools/file-workspace-ui/portable-build.mjs
 $(SRCROOT)/tools/file-workspace-ui/portable-imports.json
 $(SRCROOT)/tools/file-workspace-ui/safari-css.mjs
+$(SRCROOT)/tools/file-workspace-ui/stage-output.mjs
 $(SRCROOT)/tools/file-workspace-ui/sync-orca-provenance.py
 $(SRCROOT)/tools/file-workspace-ui/verify-orca-provenance.mjs
 $(SRCROOT)/tools/file-workspace-ui/verify-resources.mjs
@@ -1539,7 +1541,6 @@ $(SRCROOT)/sources/FileWorkspace/Resources/FileWorkspaceUI/cmaps/UniKS-UTF8-H.bc
 $(SRCROOT)/sources/FileWorkspace/Resources/FileWorkspaceUI/cmaps/UniKS-UTF8-V.bcmap
 $(SRCROOT)/sources/FileWorkspace/Resources/FileWorkspaceUI/cmaps/V.bcmap
 $(SRCROOT)/sources/FileWorkspace/Resources/FileWorkspaceUI/cmaps/WP-Symbol.bcmap
-$(SRCROOT)/sources/FileWorkspace/Resources/FileWorkspaceUI/fonts/Geist-Variable.woff2
 $(SRCROOT)/sources/FileWorkspace/Resources/FileWorkspaceUI/icons/lucide.svg
 $(SRCROOT)/sources/FileWorkspace/Resources/FileWorkspaceUI/index.html
 $(SRCROOT)/sources/FileWorkspace/Resources/FileWorkspaceUI/legacy-dark.css

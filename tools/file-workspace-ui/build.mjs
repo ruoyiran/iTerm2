@@ -1,4 +1,6 @@
 import {writePackageNotices} from "./package-notices.mjs";
+import {compactStylesheets} from "./compact-css.mjs";
+import {stageOutput} from "./stage-output.mjs";
 import { safariStyles } from "./safari-css.mjs";
 import { execFileSync } from "node:child_process";
 import { portablePlugin } from "./portable-build.mjs";
@@ -40,7 +42,7 @@ execFileSync(
   ],
   { cwd: tooling, stdio: "pipe" },
 );
-execFileSync("git", ["add", path.join(source, "css/orca-generated.css")], { cwd: repo });
+stageOutput(repo, path.join(source, "css/orca-generated.css"));
 const legacy = safariStyles(
   await readFile(path.join(source, "css/orca-generated.css"), "utf8"),
   await readFile(path.join(source, "src/orca/src/renderer/src/assets/main.css"), "utf8"),
@@ -48,7 +50,7 @@ const legacy = safariStyles(
 for (const name of ["light", "dark"]) {
   const output = path.join(source, `css/orca-safari-${name}.css`);
   await writeFile(output, legacy[name]);
-  execFileSync("git", ["add", output], { cwd: repo });
+  stageOutput(repo, output);
 }
 const monaco = path.join(tooling, "node_modules/monaco-editor/esm/vs");
 const bundle = await build({
@@ -105,8 +107,10 @@ for (const name of ["cmaps", "standard_fonts", "wasm"])
   await cp(path.join(tooling, "node_modules/pdfjs-dist", name), path.join(staging, name), {
     recursive: true,
   });
-for (const name of ["index.html", "icons", "fonts", "licenses"])
+// Font URLs in the source stylesheets are emitted under assets by esbuild.
+for (const name of ["index.html", "icons", "licenses"])
   await cp(path.join(source, name), path.join(staging, name), { recursive: true });
+await compactStylesheets(staging);
 const mime = {
   ".js": "text/javascript; charset=utf-8",
   ".css": "text/css; charset=utf-8",
@@ -142,6 +146,8 @@ const inputs = [
     "package.json",
     "package-lock.json",
     "build.mjs",
+    "compact-css.mjs",
+    "stage-output.mjs",
     "package-notices.mjs",
     "patch-monaco.mjs",
     "patch-orca-packages.mjs",
@@ -166,7 +172,7 @@ for (const filename of inputs.sort()) {
 await writeFile(path.join(staging, "manifest.json"), JSON.stringify(manifest, null, 2) + "\n");
 await rm(target, { recursive: true, force: true });
 await rename(staging, target);
-execFileSync("git", ["add", target], { cwd: repo });
+stageOutput(repo, target);
 const inputLines = [
   "$(SRCROOT)/tools/verify_file_workspace_ui.py",
   "$(SRCROOT)/sources/FileWorkspace/Resources/FileWorkspaceUI/manifest.json",

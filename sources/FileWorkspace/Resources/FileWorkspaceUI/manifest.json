@@ -2241,8 +2241,8 @@
     },
     {
       "path": "chunks/freemarker2-EH2SKOAA.css",
-      "bytes": 146370,
-      "sha256": "9dfa6eb7f6259d87fb22ef9d4d3b07fac905e33ef32e0bcebe614a8fb0e0566e",
+      "bytes": 39,
+      "sha256": "8751111498b966f7a34040944a917e520c2bdc0b954f83a9e08a831c80204ae7",
       "mime": "text/css; charset=utf-8"
     },
     {
@@ -2415,8 +2415,8 @@
     },
     {
       "path": "chunks/handlebars-KJ7L5FD5.css",
-      "bytes": 146370,
-      "sha256": "9dfa6eb7f6259d87fb22ef9d4d3b07fac905e33ef32e0bcebe614a8fb0e0566e",
+      "bytes": 39,
+      "sha256": "8751111498b966f7a34040944a917e520c2bdc0b954f83a9e08a831c80204ae7",
       "mime": "text/css; charset=utf-8"
     },
     {
@@ -2481,8 +2481,8 @@
     },
     {
       "path": "chunks/html-FKZI5RWR.css",
-      "bytes": 146370,
-      "sha256": "9dfa6eb7f6259d87fb22ef9d4d3b07fac905e33ef32e0bcebe614a8fb0e0566e",
+      "bytes": 39,
+      "sha256": "8751111498b966f7a34040944a917e520c2bdc0b954f83a9e08a831c80204ae7",
       "mime": "text/css; charset=utf-8"
     },
     {
@@ -2493,8 +2493,8 @@
     },
     {
       "path": "chunks/htmlMode-X2NQ3XC2.css",
-      "bytes": 146370,
-      "sha256": "9dfa6eb7f6259d87fb22ef9d4d3b07fac905e33ef32e0bcebe614a8fb0e0566e",
+      "bytes": 39,
+      "sha256": "8751111498b966f7a34040944a917e520c2bdc0b954f83a9e08a831c80204ae7",
       "mime": "text/css; charset=utf-8"
     },
     {
@@ -2595,8 +2595,8 @@
     },
     {
       "path": "chunks/javascript-ZTJV7OL4.css",
-      "bytes": 146370,
-      "sha256": "9dfa6eb7f6259d87fb22ef9d4d3b07fac905e33ef32e0bcebe614a8fb0e0566e",
+      "bytes": 39,
+      "sha256": "8751111498b966f7a34040944a917e520c2bdc0b954f83a9e08a831c80204ae7",
       "mime": "text/css; charset=utf-8"
     },
     {
@@ -2643,8 +2643,8 @@
     },
     {
       "path": "chunks/jsonMode-HD6OOMYW.css",
-      "bytes": 146370,
-      "sha256": "9dfa6eb7f6259d87fb22ef9d4d3b07fac905e33ef32e0bcebe614a8fb0e0566e",
+      "bytes": 39,
+      "sha256": "8751111498b966f7a34040944a917e520c2bdc0b954f83a9e08a831c80204ae7",
       "mime": "text/css; charset=utf-8"
     },
     {
@@ -2787,8 +2787,8 @@
     },
     {
       "path": "chunks/liquid-YEI27SBR.css",
-      "bytes": 146370,
-      "sha256": "9dfa6eb7f6259d87fb22ef9d4d3b07fac905e33ef32e0bcebe614a8fb0e0566e",
+      "bytes": 39,
+      "sha256": "8751111498b966f7a34040944a917e520c2bdc0b954f83a9e08a831c80204ae7",
       "mime": "text/css; charset=utf-8"
     },
     {
@@ -2889,8 +2889,8 @@
     },
     {
       "path": "chunks/mdx-3SOJLEWE.css",
-      "bytes": 146370,
-      "sha256": "9dfa6eb7f6259d87fb22ef9d4d3b07fac905e33ef32e0bcebe614a8fb0e0566e",
+      "bytes": 39,
+      "sha256": "8751111498b966f7a34040944a917e520c2bdc0b954f83a9e08a831c80204ae7",
       "mime": "text/css; charset=utf-8"
     },
     {
@@ -3267,8 +3267,8 @@
     },
     {
       "path": "chunks/python-V44XL5TZ.css",
-      "bytes": 146370,
-      "sha256": "9dfa6eb7f6259d87fb22ef9d4d3b07fac905e33ef32e0bcebe614a8fb0e0566e",
+      "bytes": 39,
+      "sha256": "8751111498b966f7a34040944a917e520c2bdc0b954f83a9e08a831c80204ae7",
       "mime": "text/css; charset=utf-8"
     },
     {
@@ -3363,8 +3363,8 @@
     },
     {
       "path": "chunks/razor-2GJBT6O6.css",
-      "bytes": 146370,
-      "sha256": "9dfa6eb7f6259d87fb22ef9d4d3b07fac905e33ef32e0bcebe614a8fb0e0566e",
+      "bytes": 39,
+      "sha256": "8751111498b966f7a34040944a917e520c2bdc0b954f83a9e08a831c80204ae7",
       "mime": "text/css; charset=utf-8"
     },
     {
@@ -3825,8 +3825,8 @@
     },
     {
       "path": "chunks/tsMode-4UGDGU62.css",
-      "bytes": 146370,
-      "sha256": "9dfa6eb7f6259d87fb22ef9d4d3b07fac905e33ef32e0bcebe614a8fb0e0566e",
+      "bytes": 39,
+      "sha256": "8751111498b966f7a34040944a917e520c2bdc0b954f83a9e08a831c80204ae7",
       "mime": "text/css; charset=utf-8"
     },
     {
@@ -3867,8 +3867,8 @@
     },
     {
       "path": "chunks/typescript-6WAVFLNN.css",
-      "bytes": 146370,
-      "sha256": "9dfa6eb7f6259d87fb22ef9d4d3b07fac905e33ef32e0bcebe614a8fb0e0566e",
+      "bytes": 39,
+      "sha256": "8751111498b966f7a34040944a917e520c2bdc0b954f83a9e08a831c80204ae7",
       "mime": "text/css; charset=utf-8"
     },
     {
@@ -4035,8 +4035,8 @@
     },
     {
       "path": "chunks/xml-62FFP7A2.css",
-      "bytes": 146370,
-      "sha256": "9dfa6eb7f6259d87fb22ef9d4d3b07fac905e33ef32e0bcebe614a8fb0e0566e",
+      "bytes": 39,
+      "sha256": "8751111498b966f7a34040944a917e520c2bdc0b954f83a9e08a831c80204ae7",
       "mime": "text/css; charset=utf-8"
     },
     {
@@ -4071,8 +4071,8 @@
     },
     {
       "path": "chunks/yaml-G4XXDUIO.css",
-      "bytes": 146370,
-      "sha256": "9dfa6eb7f6259d87fb22ef9d4d3b07fac905e33ef32e0bcebe614a8fb0e0566e",
+      "bytes": 39,
+      "sha256": "8751111498b966f7a34040944a917e520c2bdc0b954f83a9e08a831c80204ae7",
       "mime": "text/css; charset=utf-8"
     },
     {
@@ -5112,12 +5112,6 @@
       "bytes": 179,
       "sha256": "543923bead225732aba30976690ee89095a19628277b5863efecc2c728d5d7bf",
       "mime": "application/octet-stream"
-    },
-    {
-      "path": "fonts/Geist-Variable.woff2",
-      "bytes": 69488,
-      "sha256": "3626eba547294501c8a4d662c7d9ea3b49734409a4c5a1ccf12fa86429b1687e",
-      "mime": "font/woff2"
     },
     {
       "path": "icons/lucide.svg",
@@ -8161,7 +8155,11 @@
     },
     {
       "path": "tools/file-workspace-ui/build.mjs",
-      "sha256": "121d585740c326bf12f4aee58cf5809f44d6d42f270e5ac203a7ed6d87844939"
+      "sha256": "697f869ff1050423836154f042a3e3d7bf85730bf0053e9e0dfb7f2c1913d04f"
+    },
+    {
+      "path": "tools/file-workspace-ui/compact-css.mjs",
+      "sha256": "3ee052c4626ad5719422550a346911d967e05f4759afe17aa657d2eaefcf4cd9"
     },
     {
       "path": "tools/file-workspace-ui/orca-style.css",
@@ -8210,6 +8208,10 @@
     {
       "path": "tools/file-workspace-ui/safari-css.mjs",
       "sha256": "59ae341773e40bae1c30fc9fff881792f35ebfb99841819585603505574185ed"
+    },
+    {
+      "path": "tools/file-workspace-ui/stage-output.mjs",
+      "sha256": "c92b2ad619c6f6b9456cacb53c5b611cbd321953f79c4f6f6b0a6a99d03dc855"
     },
     {
       "path": "tools/file-workspace-ui/sync-orca-provenance.py",

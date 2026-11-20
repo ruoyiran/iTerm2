@@ -136,7 +136,7 @@ def prepare_source(repo, cache):
         if source.exists():
             shutil.rmtree(source)
     source.mkdir(parents=True, exist_ok=True)
-    excludes = [".git", ".superpowers", "tmp", "node_modules", ".build", "build",
+    excludes = [".git", ".superpowers", "tmp", "node_modules", ".build", ".build-*", "build",
                 "target", ".iterm2-ai-live.json", "/submodules/openssl/boringssl",
                 "/submodules/openssl/krb5", "/submodules/openssl/pyca-cryptography"]
     if native_ready:
@@ -186,7 +186,7 @@ def adapt_local_sdk(source, cache):
     raise RuntimeError("Selected Xcode does not provide a supported FoundationModels SDK")
 
 
-def sign_app(app):
+def sign_app(app, identity="-"):
     candidates = []
     for directory, folders, files in os.walk(app, followlinks=False):
         for name in files:
@@ -201,7 +201,9 @@ def sign_app(app):
                 candidates.append(path)
     # Sign nested code before enclosing bundles; never use --deep to sign.
     for path in sorted(candidates, key=lambda p: len(p.parts), reverse=True) + [app]:
-        subprocess.run(["codesign", "--force", "--sign", "-", "--timestamp=none", str(path)],
+        timestamp = "--timestamp=none" if identity == "-" else "--timestamp"
+        subprocess.run(["codesign", "--force", "--sign", identity, timestamp,
+                        "--preserve-metadata=identifier,entitlements,flags,runtime", str(path)],
                        stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, check=True)
 
 
@@ -282,9 +284,17 @@ def main():
              f"SYMROOT={cache / 'products'}", f"OBJROOT={cache / 'intermediates'}", "ENABLE_ADDRESS_SANITIZER=NO"],
             cwd=source, log=cache / "build.log")
         app = cache / "products/Deployment/iTerm2.app"
+        from release_package import prepare_app, write_size_report, check_size
+        symbols = cache / "products/Deployment/ReleaseSymbols"
+        print("Archiving release symbols and compacting the application…", flush=True)
+        prepare_app(app, symbols, dsym_roots=[source / name for name in (
+            "ThirdParty", "BetterFontPicker", "ColorPicker", "SearchableComboListView")])
         print("Signing and verifying the local release…", flush=True)
         sign_app(app)
         verify_app(app)
+        report = write_size_report(app, symbols / "size.json")
+        check_size(report, max_mib=110)
+        print(f"Release bundle: {report['mib']:.2f} MiB; symbols: {symbols}", flush=True)
         print(f"Release built: {app}", flush=True)
         if not arguments.no_install:
             if os.access(arguments.install_dir, os.W_OK):
