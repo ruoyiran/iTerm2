@@ -52,7 +52,7 @@ final class FileUIWebViewTests: XCTestCase, FileUIWebViewDelegate {
   try withPreview("zoom.png",data:try XCTUnwrap(bitmap.representation(using:.png,properties:[:]))) {controller in
    let web=try previewWeb(controller)
    waitForDOM("[data-orca-view] img",in:web)
-   let result=evaluate(web,"const image = document.querySelector('[data-orca-view] img'); await image.decode(); const before=image.getBoundingClientRect().width; const zoom=document.querySelector('button[title*=\"zoom in\" i]'); zoom.click(); return new Promise(resolve => { const check=()=>{ const after=image.getBoundingClientRect().width; if(after>before){ observer.disconnect(); resolve({before,after}); } }; const observer=new MutationObserver(check); observer.observe(image,{attributes:true}); check(); }); ") as? [String:Any]
+   let result=evaluate(web,"const image = document.querySelector('[data-orca-view] img'); await image.decode(); const before=image.getBoundingClientRect().width; const zoom=document.querySelector('button:has(svg.lucide-zoom-in)'); zoom.click(); return new Promise(resolve => { const check=()=>{ const after=image.getBoundingClientRect().width; if(after>before){ observer.disconnect(); resolve({before,after}); } }; const observer=new MutationObserver(check); observer.observe(image,{attributes:true}); check(); }); ") as? [String:Any]
    XCTAssertGreaterThan((result?["after"] as? NSNumber)?.doubleValue ?? 0,(result?["before"] as? NSNumber)?.doubleValue ?? 0)
   }
  }
@@ -71,8 +71,8 @@ final class FileUIWebViewTests: XCTestCase, FileUIWebViewDelegate {
   try withPreview("find.pdf",data:data as Data) {controller in
    let web=try previewWeb(controller)
    waitForDOM("canvas",in:web)
-   controller.perform(.find);waitForDOM("input",in:web)
-   _=evaluate(web,"const input=document.querySelector('input'); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'alpha'); input.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertText',data:'alpha'}));")
+   controller.perform(.find);waitForDOM("[data-pdf-find] input",in:web)
+   _=evaluate(web,"const input=document.querySelector('[data-pdf-find] input'); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'alpha'); input.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertText',data:'alpha'}));")
    waitForDOM(".page[data-page-number='1'] .highlight.selected",in:web)
    controller.perform(.findNext)
    waitForDOM(".page[data-page-number='3'] .highlight.selected",in:web)

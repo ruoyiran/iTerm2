@@ -172,6 +172,9 @@ class NativeCacheTests(unittest.TestCase):
         copied_cache = self.repo / "pwmplugin/.build-arm64/ModuleCache"
         copied_cache.mkdir(parents=True)
         (copied_cache / "SwiftShims.pcm").write_text("compiled for the original checkout path")
+        adapter = self.repo / "pwmplugin/binaries/adapter"
+        adapter.parent.mkdir(parents=True)
+        adapter.write_text("prebuilt universal adapter")
         self.git(self.repo, "add", "last-xcode-version", "ThirdParty", "sources")
         self.git(self.repo, "commit", "--quiet", "-m", "build inputs")
         cache = self.root / "cache"
@@ -183,6 +186,7 @@ class NativeCacheTests(unittest.TestCase):
                 self.assertFalse((kwargs["cwd"] / "pwmplugin/.build-arm64").exists(),
                                  "SwiftPM caches compiled for another source path must not be copied")
                 (kwargs["cwd"] / "ThirdParty/artifact").write_text("new compiled")
+                (kwargs["cwd"] / "pwmplugin/binaries/adapter").write_text("generated native adapter")
             else:
                 original_run(command, **kwargs)
 
@@ -193,6 +197,7 @@ class NativeCacheTests(unittest.TestCase):
         source = release.prepare_source(self.repo, cache)
         self.assertEqual((source / "ThirdParty/artifact").read_text(), "new compiled")
         self.assertEqual((source / "sources/app").read_text(), "updated application")
+        self.assertEqual((source / "pwmplugin/binaries/adapter").read_text(), "generated native adapter")
 
 
 if __name__ == "__main__":

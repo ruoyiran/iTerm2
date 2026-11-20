@@ -1,34 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import http from "node:http";
-import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
-import path from "node:path";
 import { chromium } from "playwright";
+import {assetServer} from "./asset-server.mjs";
 const assets = fileURLToPath(
   new URL("../../../sources/FileWorkspace/Resources/FileWorkspaceUI/", import.meta.url),
 );
 test("document presentation, explicit focus and same-view replacement follow document readiness", async (t) => {
-  const server = http.createServer(async (req, res) => {
-    try {
-      const file = path.join(assets, req.url.split("?")[0]);
-      if (!file.startsWith(assets)) throw Error();
-      res.setHeader(
-        "Content-Type",
-        /\.m?js$/.test(file)
-          ? "text/javascript"
-          : file.endsWith(".css")
-            ? "text/css"
-            : file.endsWith(".html")
-              ? "text/html"
-              : "application/octet-stream",
-      );
-      res.end(await readFile(file));
-    } catch {
-      res.statusCode = 404;
-      res.end();
-    }
-  });
+  const server = await assetServer(assets);
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   const browser = await chromium.launch({ headless: true });
   try {

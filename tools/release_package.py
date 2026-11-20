@@ -53,15 +53,15 @@ def archive_binary(path, app, symbols):
     return uuids
 
 
-def thin_local_cli(path, architectures):
+def thin_local_executable(path, architectures):
     present = binary_uuids(path)
     architectures = set(architectures)
     if not architectures or not architectures.issubset(present):
-        raise ValueError(f"Local it2 does not support the application architectures: {path}")
+        raise ValueError(f"Local executable does not support the application architectures: {path}")
     if architectures == set(present):
         return present
-    # SSH uploads it2.py and it2-remote, not this native executable. Keep this
-    # local helper aligned with the app; universal app builds keep both slices.
+    # These helpers execute locally. Universal app builds retain both slices;
+    # SSH delivery uses the separate it2.py interpreter and it2-remote wrapper.
     with tempfile.TemporaryDirectory(prefix=".it2-thin-", dir=path.parent) as directory:
         output = Path(directory) / path.name
         options = ["-thin", next(iter(architectures))] if len(architectures) == 1 else [
@@ -122,10 +122,12 @@ def prepare_app(app, symbols, dsym_roots=()):
         shutil.copytree(source, destination)
 
     (app / "Contents/MacOS/iterm2-test-adapter").unlink(missing_ok=True)
+    local_helpers = {"Contents/Resources/utilities/it2", "Contents/MacOS/iterm2-bitwarden-adapter",
+                     "Contents/MacOS/iterm2-keepassxc-adapter", "Contents/MacOS/iterm2-keeper-adapter"}
     for path in binaries:
         before = archive_binary(path, app, symbols)
-        if path == app / "Contents/Resources/utilities/it2":
-            before = thin_local_cli(path, uuids)
+        if str(path.relative_to(app)) in local_helpers:
+            before = thin_local_executable(path, uuids)
         subprocess.run(["xcrun", "strip", "-x", str(path)], check=True)
         if binary_uuids(path) != before:
             raise ValueError(f"Executable architectures or UUIDs changed while stripping: {path}")

@@ -193,8 +193,24 @@ class ReleasePackageTests(unittest.TestCase):
         cli = self.root / "universal-it2"
         subprocess.run(["lipo", "-create", str(self.executable), str(other), "-output", str(cli)], check=True)
         original = cli.read_bytes()
-        package.thin_local_cli(cli, {"arm64", "x86_64"})
+        package.thin_local_executable(cli, {"arm64", "x86_64"})
         self.assertEqual(cli.read_bytes(), original)
+
+    def test_local_password_adapters_match_the_native_app_architecture(self):
+        other = self.root / "other-architecture"
+        architecture = "arm64" if "x86_64" in package.binary_uuids(self.executable) else "x86_64"
+        subprocess.run(["xcrun", "clang", "-arch", architecture, "-x", "c", "-", "-o", str(other)],
+                       input="int main(void) { return 0; }\n", text=True, check=True)
+        names = ["iterm2-bitwarden-adapter", "iterm2-keepassxc-adapter", "iterm2-keeper-adapter"]
+        for name in names:
+            path = self.app / "Contents/MacOS" / name
+            subprocess.run(["lipo", "-create", str(self.executable), str(other), "-output", str(path)], check=True)
+        package.prepare_app(self.app, self.symbols)
+        for name in names:
+            path = self.app / "Contents/MacOS" / name
+            self.assertEqual(set(package.binary_uuids(path)), set(package.binary_uuids(self.executable)))
+            self.assertEqual(set(package.binary_uuids(self.symbols / "unstripped/Contents/MacOS" / name)), {"arm64", "x86_64"})
+            subprocess.run([str(path)], check=True)
 
 
 if __name__ == "__main__":

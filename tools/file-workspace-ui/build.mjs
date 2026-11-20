@@ -1,6 +1,7 @@
 import {writePackageNotices} from "./package-notices.mjs";
 import {compactStylesheets} from "./compact-css.mjs";
 import {stageOutput} from "./stage-output.mjs";
+import {encodeAssets} from "./gzip-assets.mjs";
 import { safariStyles } from "./safari-css.mjs";
 import { execFileSync } from "node:child_process";
 import { portablePlugin } from "./portable-build.mjs";
@@ -125,16 +126,12 @@ const mime = {
   ".woff2": "font/woff2",
   ".txt": "text/plain; charset=utf-8",
 };
-const manifest = { version: 1, files: [], inputs: [] };
+const manifest = { version: 2, files: [], inputs: [] };
+const mimeByPath = {};
 for (const filename of await files(staging)) {
-  const bytes = await readFile(filename);
-  manifest.files.push({
-    path: path.relative(staging, filename),
-    bytes: bytes.length,
-    sha256: hash(bytes),
-    mime: mime[path.extname(filename)] ?? "application/octet-stream",
-  });
+  mimeByPath[path.relative(staging, filename)] = mime[path.extname(filename)] ?? "application/octet-stream";
 }
+manifest.files = await encodeAssets(staging, mimeByPath);
 const inputs = [
   path.join(source, "index.html"),
   ...(await files(path.join(source, "src"))),
@@ -148,6 +145,7 @@ const inputs = [
     "build.mjs",
     "compact-css.mjs",
     "stage-output.mjs",
+    "gzip-assets.mjs",
     "package-notices.mjs",
     "patch-monaco.mjs",
     "patch-orca-packages.mjs",
@@ -178,7 +176,7 @@ const inputLines = [
   "$(SRCROOT)/sources/FileWorkspace/Resources/FileWorkspaceUI/manifest.json",
   ...manifest.inputs.map((x) => "$(SRCROOT)/" + x.path),
   ...manifest.files.map(
-    (x) => "$(SRCROOT)/sources/FileWorkspace/Resources/FileWorkspaceUI/" + x.path,
+    (x) => "$(SRCROOT)/sources/FileWorkspace/Resources/FileWorkspaceUI/" + x.storagePath,
   ),
 ];
 await writeFile(path.join(tooling, "inputs.xcfilelist"), inputLines.join("\n") + "\n");

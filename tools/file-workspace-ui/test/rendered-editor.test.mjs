@@ -1,39 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import http from "node:http";
-import { readFile } from "node:fs/promises";
-import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
-const assets = fileURLToPath(
+import {assetServer} from "./asset-server.mjs";
+const assets = process.env.FILE_UI_RESOURCE_DIR ?? fileURLToPath(
   new URL("../../../sources/FileWorkspace/Resources/FileWorkspaceUI/", import.meta.url),
 );
 test("original Orca views render offline and edits pass the authority bridge", async () => {
-  const server = http.createServer(async (req, res) => {
-    try {
-      const p = path.join(assets, decodeURIComponent(req.url.split("?")[0]));
-      if (!p.startsWith(assets)) throw Error();
-      const bytes = await readFile(p);
-      res.setHeader(
-        "content-type",
-        p.endsWith(".js") || p.endsWith(".mjs")
-          ? "text/javascript"
-          : p.endsWith(".css")
-            ? "text/css"
-            : p.endsWith(".html")
-              ? "text/html"
-              : p.endsWith(".svg")
-                ? "image/svg+xml"
-                : p.endsWith(".woff2")
-                  ? "font/woff2"
-                  : "application/octet-stream",
-      );
-      res.end(bytes);
-    } catch {
-      res.statusCode = 404;
-      res.end();
-    }
-  });
+  const server = await assetServer(assets);
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage({
@@ -166,6 +140,7 @@ test("original Orca views render offline and edits pass the authority bridge", a
         CSS.supports = (...args) =>
           args.some((value) => String(value).includes("color-mix")) ? false : supports(...args);
       });
+    const started = performance.now();
     await page.goto(`http://127.0.0.1:${server.address().port}/index.html`);
     await page.waitForFunction(() => window.fileWorkspace);
     await page.evaluate(() =>
@@ -221,6 +196,21 @@ test("original Orca views render offline and edits pass the authority bridge", a
         window.sent.findLast((m) => m.type === "status")?.payload.documentIdentifier === "0" &&
         window.sent.findLast((m) => m.type === "status")?.payload.isReady === true,
     );
+    if (process.env.FILE_UI_BENCHMARK === '1') {
+      const cold = performance.now() - started;
+      const hot = [];
+      for (let i = 0; i < 3; i++) {
+        const id = 'benchmark-' + i, start = performance.now();
+        await receive('document', {snapshot: {documentIdentifier: id, filePath: '/repo/bench.js',
+          text: 'const value = 1;\n', kind: 0, revision: '1', isReadOnly: false, isDirty: false}});
+        await receive('editAuthority', {granted: true});
+        await page.waitForFunction(id => window.sent.findLast(m => m.type === 'status')?.payload.documentIdentifier === id &&
+          window.sent.findLast(m => m.type === 'status')?.payload.isReady === true, id);
+        hot.push(performance.now() - start);
+      }
+      console.log('FILE_UI_BENCHMARK ' + JSON.stringify({cold_ms: cold, hot_ms: hot}));
+      return;
+    }
     await receive("paste", { text: "// test\r\n" });
     await page.waitForFunction(() =>
       window.sent.some((m) => m.type === "edits" && m.payload.documentIdentifier === "0"),

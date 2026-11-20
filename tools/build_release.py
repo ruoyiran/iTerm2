@@ -143,6 +143,7 @@ def prepare_source(repo, cache):
         excludes += ["/ThirdParty", "/BetterFontPicker/BetterFontPicker.framework",
                      "/ColorPicker/ColorPicker.framework",
                      "/SearchableComboListView/SearchableComboListView.framework",
+                     "/pwmplugin/binaries",
                      "/last-xcode-version"]
     run(["rsync", "-a", "--delete", *[f"--exclude={p}" for p in excludes],
          str(repo) + "/", str(source) + "/"])
@@ -293,7 +294,7 @@ def main():
         sign_app(app)
         verify_app(app)
         report = write_size_report(app, symbols / "size.json")
-        check_size(report, max_mib=110)
+        check_size(report, max_mib=85)
         print(f"Release bundle: {report['mib']:.2f} MiB; symbols: {symbols}", flush=True)
         print(f"Release built: {app}", flush=True)
         if not arguments.no_install:
