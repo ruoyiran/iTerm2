@@ -1,1 +1,0 @@
-import{a as r,b as o,c as t}from"../chunks/chunk-PAHR5H6N.js";import"../chunks/chunk-6YJTMHFI.js";import"../chunks/chunk-WLQ4PKOY.js";import{a as i}from"../chunks/chunk-EWWMMUA7.js";import"../chunks/chunk-JOPEIXIY.js";i();self.onmessage=()=>{o()||r(()=>({}))};export{t as initialize};

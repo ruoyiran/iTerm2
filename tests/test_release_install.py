@@ -93,6 +93,25 @@ class ReleaseInstallTests(unittest.TestCase):
             release.install_app(self.source, self.applications)
         self.assertEqual((elsewhere / "Contents/Resources/marker").read_text(), "other")
 
+    def test_resigning_after_symbol_stripping_preserves_entitlements_and_hardened_runtime(self):
+        entitlements = {"com.apple.security.cs.allow-jit": True}
+        path = self.root / "entitlements.plist"
+        path.write_bytes(plistlib.dumps(entitlements))
+        subprocess.run(["codesign", "--force", "--sign", "-", "--options", "runtime",
+                        "--entitlements", str(path), str(self.source)], check=True, capture_output=True)
+        executable = self.source / "Contents/MacOS/iTerm2"
+        subprocess.run(["xcrun", "strip", "-x", str(executable)], check=True)
+        release.sign_app(self.source)
+        actual = subprocess.check_output(["codesign", "-d", "--entitlements", "-", "--xml", str(self.source)], stderr=subprocess.PIPE)
+        self.assertEqual(plistlib.loads(actual), entitlements)
+        details = subprocess.run(["codesign", "-d", "--verbose=4", str(self.source)], capture_output=True, text=True, check=True)
+        self.assertIn("runtime", details.stderr)
+        release.verify_app(self.source)
+
+    def test_bundle_signature_uses_bundle_identifier_instead_of_linker_signature(self):
+        details = subprocess.run(["codesign", "-d", "--verbose=4", str(self.source)], capture_output=True, text=True, check=True)
+        self.assertIn("Identifier=com.googlecode.iterm2\n", details.stderr)
+
 
 class NativeCacheTests(unittest.TestCase):
     def setUp(self):
@@ -150,6 +169,12 @@ class NativeCacheTests(unittest.TestCase):
         (self.repo / "ThirdParty/artifact").write_text("old prebuilt")
         (self.repo / "sources").mkdir()
         (self.repo / "sources/app").write_text("first application")
+        copied_cache = self.repo / "pwmplugin/.build-arm64/ModuleCache"
+        copied_cache.mkdir(parents=True)
+        (copied_cache / "SwiftShims.pcm").write_text("compiled for the original checkout path")
+        adapter = self.repo / "pwmplugin/binaries/adapter"
+        adapter.parent.mkdir(parents=True)
+        adapter.write_text("prebuilt universal adapter")
         self.git(self.repo, "add", "last-xcode-version", "ThirdParty", "sources")
         self.git(self.repo, "commit", "--quiet", "-m", "build inputs")
         cache = self.root / "cache"
@@ -158,7 +183,10 @@ class NativeCacheTests(unittest.TestCase):
 
         def compiler_boundary(command, **kwargs):
             if command[0] == "/usr/bin/sandbox-exec":
+                self.assertFalse((kwargs["cwd"] / "pwmplugin/.build-arm64").exists(),
+                                 "SwiftPM caches compiled for another source path must not be copied")
                 (kwargs["cwd"] / "ThirdParty/artifact").write_text("new compiled")
+                (kwargs["cwd"] / "pwmplugin/binaries/adapter").write_text("generated native adapter")
             else:
                 original_run(command, **kwargs)
 
@@ -169,6 +197,7 @@ class NativeCacheTests(unittest.TestCase):
         source = release.prepare_source(self.repo, cache)
         self.assertEqual((source / "ThirdParty/artifact").read_text(), "new compiled")
         self.assertEqual((source / "sources/app").read_text(), "updated application")
+        self.assertEqual((source / "pwmplugin/binaries/adapter").read_text(), "generated native adapter")
 
 
 if __name__ == "__main__":

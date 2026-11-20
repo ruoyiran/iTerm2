@@ -56,6 +56,8 @@ New Features:
   under Profile in the key binding editor.
 
 Improvements:
+- Reduce the application’s installed size while
+  retaining offline file editing and previews.
 - Fetch Models in the manual AI model editor now
   lists the models on OpenAI- and
   Anthropic-compatible servers such as vLLM, LM

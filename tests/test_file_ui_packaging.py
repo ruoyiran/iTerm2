@@ -7,6 +7,9 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import gzip
+import hashlib
+import copy
 
 REPO = Path(__file__).resolve().parent.parent
 RESOURCE = Path('sources/FileWorkspace/Resources/FileWorkspaceUI')
@@ -26,16 +29,73 @@ def copy_fixture(root):
 
 
 class FileUIPackagingTests(unittest.TestCase):
+    def test_compressed_manifest_verifies_decoded_content_and_rejects_invalid_storage(self):
+        with tempfile.TemporaryDirectory(prefix='iterm-file-ui-gzip-') as directory:
+            root = Path(directory).resolve()
+            resource = root / RESOURCE
+            resource.mkdir(parents=True)
+            (root / 'tools').mkdir()
+            shutil.copyfile(REPO / TOOL, root / TOOL)
+            names = ['index.html', 'app.js', 'app.css', 'workers/editor.worker.js', 'workers/json.worker.js',
+                     'workers/css.worker.js', 'workers/html.worker.js', 'workers/ts.worker.js',
+                     'licenses/Orca-MIT.txt', 'licenses/Monaco-MIT.txt', 'licenses/Lucide.txt',
+                     'licenses/Geist-OFL.txt', 'licenses/DOMPurify.txt']
+            records = []
+            raw = b'export default "unchanged";\n' * 100
+            compressed = gzip.compress(raw, mtime=0)
+            for name in names:
+                stored = name + '.gz' if name == 'app.js' else name
+                data = compressed if name == 'app.js' else b'fixture'
+                path = resource / stored
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(data)
+                record = {'path': name, 'storagePath': stored, 'bytes': len(data),
+                          'sha256': hashlib.sha256(data).hexdigest(), 'mime': 'text/javascript'}
+                if name == 'app.js':
+                    record.update(encoding='gzip', decodedBytes=len(raw), decodedSHA256=hashlib.sha256(raw).hexdigest())
+                records.append(record)
+            manifest = {'version': 2, 'files': records, 'inputs': []}
+            command = [sys.executable, str(root / TOOL), '--verify']
+            def verify(value):
+                (resource / 'manifest.json').write_text(json.dumps(value))
+                return subprocess.run(command, capture_output=True, text=True)
+            result = verify(manifest)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            missing = copy.deepcopy(manifest)
+            del missing['files'][1]['storagePath']
+            (resource / 'app.js').write_bytes(compressed)
+            (resource / 'app.js.gz').unlink()
+            self.assertNotEqual(verify(missing).returncode, 0)
+            (resource / 'app.js').unlink()
+            (resource / 'app.js.gz').write_bytes(compressed)
+            invalid_mime = copy.deepcopy(manifest)
+            invalid_mime['files'][1]['mime'] = 'text/javascript\r\nBad: header'
+            self.assertNotEqual(verify(invalid_mime).returncode, 0)
+            for field, value in [('decodedBytes', 1), ('decodedSHA256', '0' * 64),
+                                 ('encoding', 'br'), ('storagePath', '../../outside.gz')]:
+                bad = copy.deepcopy(manifest)
+                bad['files'][1][field] = value
+                self.assertNotEqual(verify(bad).returncode, 0, field)
+            bad = copy.deepcopy(manifest)
+            bad['files'][2]['storagePath'] = 'app.js.gz'
+            self.assertNotEqual(verify(bad).returncode, 0)
+            corrupt = compressed[:-8]
+            (resource / 'app.js.gz').write_bytes(corrupt)
+            bad = copy.deepcopy(manifest)
+            bad['files'][1].update(bytes=len(corrupt), sha256=hashlib.sha256(corrupt).hexdigest())
+            self.assertNotEqual(verify(bad).returncode, 0)
+
     def test_verifier_rejects_corrupt_and_stale_inputs_before_publishing_stamp(self):
         with tempfile.TemporaryDirectory(prefix='iterm-file-ui-verify-') as directory:
             root = Path(directory).resolve()
-            copy_fixture(root)
+            manifest = copy_fixture(root)
             stamp = root / 'verified.stamp'
             command = [sys.executable, str(root / TOOL), '--verify', '--stamp', str(stamp)]
             verified = subprocess.run(command, capture_output=True, text=True)
             self.assertEqual(verified.returncode, 0, verified.stderr)
             stamp.write_text('previous verification')
-            worker = root / RESOURCE / 'workers/editor.worker.js'
+            record = next(record for record in manifest['files'] if record['path'] == 'workers/editor.worker.js')
+            worker = root / RESOURCE / record.get('storagePath', record['path'])
             original = worker.read_bytes()
             worker.write_bytes(original + b'corrupt')
             rejected = subprocess.run(command, capture_output=True, text=True)

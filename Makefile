@@ -14,6 +14,7 @@ CMAKE ?= $(HOMEBREW_PREFIX)/bin/cmake
 PKG_CONFIG ?= $(HOMEBREW_PREFIX)/bin/pkg-config
 RUSTUP ?= $(shell PATH="$(ORIG_PATH):$(HOME)/.cargo/bin" which rustup 2>/dev/null)
 DEPLOYMENT_TARGET=13.0
+RELEASE_MAX_MIB ?= 85
 
 # Build product directory: defaults to xcodebuild's SYMROOT.
 # Override with BUILD_DIR=/path/to/dir on the command line.
@@ -332,6 +333,7 @@ Beta:
 Deployment:
 	xcodebuild -scheme iTerm2 -configuration Deployment -destination 'platform=macOS' -skipPackagePluginValidation $(SIGNING_FLAGS) $(ARCH_FLAGS) SYMROOT="$(BUILD_DIR)" OBJROOT="$(call intermediates,Deployment)" ENABLE_ADDRESS_SANITIZER=NO && \
 	chmod -R go+rX $(BUILD_DIR)/Deployment
+	python3 tools/release_package.py --app "$(BUILD_DIR)/Deployment/iTerm2.app" --symbols-dir "$(BUILD_DIR)/Deployment/ReleaseSymbols" $(if $(filter 1,$(UNIVERSAL)),,--max-mib $(RELEASE_MAX_MIB))
 	OBJROOT="$(call intermediates,Deployment)" tools/extract_strings.sh Deployment "$(BUILD_DIR)"
 
 Nightly: force

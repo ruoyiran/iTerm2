@@ -9,6 +9,7 @@ final class iTermFileUIAssetServer {
         let url: URL
         let bytes: Int
         let mime: String
+        let encoding: String?
         let device: dev_t
         let inode: ino_t
     }
@@ -49,15 +50,29 @@ final class iTermFileUIAssetServer {
         guard (attributes[.size] as? NSNumber)?.intValue ?? Int.max <= 1024 * 1024 else { throw fileUIError(1) }
         let data = try Data(contentsOf: manifestURL)
         guard let manifest = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              manifest["version"] as? Int == 1,
+              let version = manifest["version"] as? Int, version == 1 || version == 2,
               let files = manifest["files"] as? [[String: Any]], files.count <= 2048 else { throw fileUIError(1) }
-        var entries = [String: Asset](), total = 0
+        var entries = [String: Asset](), total = 0, decodedTotal = 0
+        var storedPaths = Set<String>()
         for entry in files {
             guard let path = entry["path"] as? String, Self.safePath(path), entries[path] == nil,
                   let bytes = entry["bytes"] as? Int, bytes >= 0, bytes <= 32 * 1024 * 1024,
                   let digest = entry["sha256"] as? String,
                   let mime = entry["mime"] as? String, !mime.contains("\r"), !mime.contains("\n") else { throw fileUIError(1) }
-            let url = root.appendingPathComponent(path)
+            guard let storedPath = version == 1 ? path : entry["storagePath"] as? String,
+                  Self.safePath(storedPath), storedPaths.insert(storedPath).inserted else { throw fileUIError(1) }
+            let encoding = entry["encoding"] as? String
+            guard entry["encoding"] == nil || (version == 2 && encoding == "gzip") else { throw fileUIError(1) }
+            let decodedBytes: Int
+            if encoding != nil {
+                guard let size = entry["decodedBytes"] as? Int, size >= 0, size <= 32 * 1024 * 1024,
+                      let digest = entry["decodedSHA256"] as? String, digest.count == 64,
+                      digest.utf8.allSatisfy({ (48...57).contains($0) || (97...102).contains($0) }) else { throw fileUIError(1) }
+                decodedBytes = size
+            } else { decodedBytes = bytes }
+            decodedTotal += decodedBytes
+            guard decodedTotal <= 128 * 1024 * 1024 else { throw fileUIError(1) }
+            let url = root.appendingPathComponent(storedPath)
             guard url.resolvingSymlinksInPath().path == url.path, url.path.hasPrefix(root.path + "/") else { throw fileUIError(1) }
             let fd = Darwin.open(url.path, O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC)
             guard fd >= 0 else { throw fileUIError(1) }
@@ -74,7 +89,7 @@ final class iTermFileUIAssetServer {
             }
             guard count == bytes, hash.finalize().map({ String(format: "%02x", $0) }).joined() == digest else { throw fileUIError(1) }
             total += bytes; guard total <= 128 * 1024 * 1024 else { throw fileUIError(1) }
-            entries[path] = Asset(url: url, bytes: bytes, mime: mime, device: info.st_dev, inode: info.st_ino)
+            entries[path] = Asset(url: url, bytes: bytes, mime: mime, encoding: encoding, device: info.st_dev, inode: info.st_ino)
         }
         assets = entries
     }
@@ -151,6 +166,25 @@ final class iTermFileUIAssetServer {
         !path.isEmpty && !path.hasPrefix("/") && !path.contains("\\") && !path.contains("\0") &&
         path.split(separator: "/", omittingEmptySubsequences: false).allSatisfy { !$0.isEmpty && $0 != "." && $0 != ".." }
     }
+    private static func acceptsGzip(_ header: String?) -> Bool {
+        guard let header else { return true }
+        var gzip: Double?, wildcard: Double?
+        for item in header.split(separator: ",") {
+            let fields = item.split(separator: ";").map { $0.trimmingCharacters(in: .whitespaces).lowercased() }
+            guard let name = fields.first else { continue }
+            var quality = 1.0
+            for field in fields.dropFirst() {
+                let parameter = field.split(separator: "=", maxSplits: 1).map { $0.trimmingCharacters(in: .whitespaces) }
+                if parameter.first == "q" {
+                    guard parameter.count == 2, let value = Double(parameter[1]), value >= 0, value <= 1 else { return false }
+                    quality = value
+                }
+            }
+            if name == "gzip" { gzip = quality }
+            if name == "*" { wildcard = quality }
+        }
+        return (gzip ?? wildcard ?? 0) > 0
+    }
     private func accept(_ connection: NWConnection) {
         guard !stopped, clients.count < 16 else { connection.cancel(); return }
         let id = UUID(), client = Client(connection); clients[id] = client
@@ -199,13 +233,15 @@ final class iTermFileUIAssetServer {
         if let item = media[key] { serveMedia(id, item: item, method: method, range: headers["range"]); return }
         guard headers["range"] == nil else { respond(id, code: 400); return }
         guard Self.safePath(key), let asset = assets[key] else { respond(id, code: 404); return }
+        if asset.encoding != nil && !Self.acceptsGzip(headers["accept-encoding"]) { respond(id, code: 406); return }
         let fd = Darwin.open(asset.url.path, O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC)
         var info = stat()
         guard fd >= 0, fstat(fd, &info) == 0, info.st_mode & S_IFMT == S_IFREG, info.st_size == asset.bytes,
               info.st_dev == asset.device, info.st_ino == asset.inode else { if fd >= 0 { Darwin.close(fd) }; respond(id, code: 404); return }
         client.descriptor = fd; client.remaining = method == "HEAD" ? 0 : asset.bytes
         deadline(id, seconds: 15)
-        respond(id, code: 200, length: asset.bytes, mime: asset.mime, body: method != "HEAD")
+        let encodingHeader = asset.encoding.map { "Content-Encoding: \($0)\r\nVary: Accept-Encoding\r\n" } ?? ""
+        respond(id, code: 200, length: asset.bytes, mime: asset.mime, body: method != "HEAD", extra: encodingHeader)
     }
     private func serveMedia(_ id: UUID, item: Media, method: String, range: String?) {
         guard let client = clients[id] else { return }

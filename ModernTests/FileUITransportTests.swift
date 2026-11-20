@@ -4,6 +4,57 @@ import CryptoKit
 import Network
 @testable import iTerm2SharedARC
 final class FileUITransportTests: XCTestCase {
+ func testLoopbackServesCompressedLogicalAssets() throws {
+  let dir=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+  try FileManager.default.createDirectory(at:dir,withIntermediateDirectories:true)
+  defer {try? FileManager.default.removeItem(at:dir)}
+  let body=Data(String(repeating:"export default 42;\n",count:200).utf8)
+  let process=Process(),input=Pipe(),output=Pipe()
+  process.executableURL=URL(fileURLWithPath:"/usr/bin/gzip");process.arguments=["-n","-c"]
+  process.standardInput=input;process.standardOutput=output
+  try process.run();input.fileHandleForWriting.write(body);try input.fileHandleForWriting.close()
+  let gzip=output.fileHandleForReading.readDataToEndOfFile();process.waitUntilExit()
+  XCTAssertEqual(process.terminationStatus,0)
+  try gzip.write(to:dir.appendingPathComponent("worker.js.gz"))
+  func hash(_ data:Data)->String {SHA256.hash(data:data).map{String(format:"%02x",$0)}.joined()}
+  let record:[String:Any]=["path":"worker.js","storagePath":"worker.js.gz","bytes":gzip.count,"sha256":hash(gzip),
+                          "mime":"text/javascript; charset=utf-8","encoding":"gzip","decodedBytes":body.count,"decodedSHA256":hash(body)]
+  let manifest:[String:Any]=["version":2,"files":[record]]
+  try JSONSerialization.data(withJSONObject:manifest).write(to:dir.appendingPathComponent("manifest.json"))
+  let server=try iTermFileUIAssetServer(resourceDirectory:dir);defer {server.stop()}
+  let ready=expectation(description:"gzip server ready");var endpoint:URL?
+  server.start {result in endpoint=try? result.get();ready.fulfill()};wait(for:[ready],timeout:5)
+  let base=try XCTUnwrap(endpoint).deletingLastPathComponent()
+  func request(_ name:String="worker.js",method:String="GET",encoding:String="gzip",range:String?=nil)->(HTTPURLResponse?,Data?) {
+   let done=expectation(description:"gzip resource request");var response:HTTPURLResponse?,data:Data?
+   var request=URLRequest(url:base.appendingPathComponent(name));request.httpMethod=method
+   request.setValue(encoding,forHTTPHeaderField:"Accept-Encoding")
+   if let range {request.setValue(range,forHTTPHeaderField:"Range")}
+   URLSession.shared.dataTask(with:request){value,http,_ in data=value;response=http as? HTTPURLResponse;done.fulfill()}.resume()
+   wait(for:[done],timeout:5);return(response,data)
+  }
+  let response=request()
+  XCTAssertEqual(response.0?.statusCode,200);XCTAssertEqual(response.1,body)
+  XCTAssertEqual(response.0?.value(forHTTPHeaderField:"Content-Encoding"),"gzip")
+  XCTAssertEqual(response.0?.value(forHTTPHeaderField:"Content-Length"),String(gzip.count))
+  let head=request(method:"HEAD")
+  XCTAssertEqual(head.0?.statusCode,200);XCTAssertEqual(head.1?.count,0)
+  XCTAssertEqual(head.0?.value(forHTTPHeaderField:"Content-Encoding"),"gzip")
+  XCTAssertEqual(request("worker.js.gz").0?.statusCode,404)
+  XCTAssertEqual(request(encoding:"identity").0?.statusCode,406)
+  XCTAssertEqual(request(encoding:"gzip;q=0, *;q=1").0?.statusCode,406)
+  XCTAssertEqual(request(encoding:"GZIP; q=1").0?.statusCode,200)
+  XCTAssertEqual(request(range:"bytes=0-3").0?.statusCode,400)
+  for (key,value) in [("storagePath","../outside.gz" as Any), ("encoding","br" as Any),
+                      ("decodedBytes",32*1024*1024+1 as Any), ("decodedSHA256","invalid" as Any)] {
+   var invalid=record;invalid[key]=value
+   try JSONSerialization.data(withJSONObject:["version":2,"files":[invalid]]).write(to:dir.appendingPathComponent("manifest.json"))
+   XCTAssertThrowsError(try iTermFileUIAssetServer(resourceDirectory:dir),key)
+  }
+  var alias=record;alias["path"]="alias.js"
+  try JSONSerialization.data(withJSONObject:["version":2,"files":[record,alias]]).write(to:dir.appendingPathComponent("manifest.json"))
+  XCTAssertThrowsError(try iTermFileUIAssetServer(resourceDirectory:dir))
+ }
  func testHostOpenAllowsInternalAliasAndRejectsEscapingAlias() throws {
   let directory=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
   try FileManager.default.createDirectory(at:directory,withIntermediateDirectories:true)
