@@ -186,6 +186,7 @@ class Window:
                 tab.tab_group_collapsed,
                 floating_sessions,
                 tab.floating_panes_hidden,
+                [Session(connection, None, summary) for summary in tab.sidebar_sessions],
             )
             # protocol 1.18+ reports the active session here, so current_session
             # is correct straight from a list-sessions refresh without waiting

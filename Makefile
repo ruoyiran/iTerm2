@@ -651,7 +651,7 @@ companion-iphone-archive: force
 
 it2cli: force
 	cd it2cli/ && UNIVERSAL=$(UNIVERSAL) ./build.sh
-	cp it2cli/.build/release/it2 it2cli/bin
+	cp it2cli/.build/release/it2 it2cli/.build/release/it2-browser-mcp it2cli/bin
 
 # Limit PATH to system directories so SwiftPM clones dependencies with
 # /usr/bin/git. The PATH set at the top of this file puts Homebrew first, and

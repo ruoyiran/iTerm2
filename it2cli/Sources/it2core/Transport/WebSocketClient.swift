@@ -9,6 +9,10 @@ class WebSocketClient {
         self.socket = socket
     }
 
+    func configureBrowserTimeout(_ timeoutMS: UInt32) {
+        socket.configureBrowserTimeout(timeoutMS)
+    }
+
     /// Perform the HTTP upgrade handshake.
     func handshake(cookie: String?, key: String?) throws {
         let secKey = generateSecWebSocketKey()

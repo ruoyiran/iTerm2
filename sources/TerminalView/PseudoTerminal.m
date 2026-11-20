@@ -260,6 +260,7 @@ typedef NS_ENUM(int, iTermShouldHaveTitleSeparator) {
 @interface PseudoTerminal () <
     iTermProjectWindowDelegate,
     iTermProjectSidebarDelegate,
+    iTermSidebarWorkspaceViewDelegate,
     iTermBroadcastInputHelperDelegate,
     iTermGraphCodable,
     iTermObject,
@@ -448,6 +449,14 @@ typedef NS_ENUM(int, iTermShouldHaveTitleSeparator) {
     // iTermSuppressMakeCurrentTerminalLoadingArrangement deferred it.
     BOOL _makeCurrentTerminalDeferred;
     BOOL _deallocing;
+    BOOL _sidebarUsesTools;
+    BOOL _refreshingSidebarWorkspace;
+    BOOL _selectingSidebarSession;
+    __weak PTYTab *_sidebarShownTab;
+    __weak PTYSession *_lastFocusedSession;
+    __weak PTYTab *_sidebarClosingTab;
+    iTermSidebarWorkspaceContentStore *_sidebarContentStore;
+    iTermFileOpenCoordinator *_sidebarFileOpenCoordinator;
     iTermOrderEnforcer *_proxyIconOrderEnforcer;
     BOOL _restorableStateInvalid;
     BOOL _inWindowDidMove;
@@ -1140,6 +1149,9 @@ ITERM_WEAKLY_REFERENCEABLE
     [[NSNotificationCenter defaultCenter] removeObserver:self];
     [[[NSWorkspace sharedWorkspace] notificationCenter] removeObserver:self];
 
+    [_sidebarContentStore shutdown];
+    [_sidebarContentStore release]; _sidebarContentStore = nil;
+    [_sidebarFileOpenCoordinator release]; _sidebarFileOpenCoordinator = nil;
     // Release all our sessions.
     NSTabViewItem *aTabViewItem;
     while ([_contentView.tabView numberOfTabViewItems])  {
@@ -1331,13 +1343,370 @@ ITERM_WEAKLY_REFERENCEABLE
 }
 
 - (void)rootTerminalViewToggleFileTree {
-    if (!_contentView.shouldShowToolbelt) { [self prepareProjectFileTree]; }
-    hidingToolbeltShouldResizeWindow_ = NO;
-    _contentView.shouldShowToolbelt = !_contentView.shouldShowToolbelt;
-    [self repositionWidgets];
+    if (_sidebarUsesTools) {
+        _contentView.shouldShowToolbelt = !_contentView.shouldShowToolbelt;
+        [self repositionWidgets];
+    } else {
+        self.currentTab.sidebarWorkspaceState.visible = !self.currentTab.sidebarWorkspaceState.visible;
+        if (!self.currentTab.sidebarWorkspaceState.visible) {
+            [self.currentTab setActiveSessionRestoringFocus:self.currentTab.activeSession];
+        }
+        [self refreshSidebarWorkspace];
+    }
     [self fitTabsToWindow];
     [self notifyTmuxOfWindowResize];
     [self invalidateRestorableState];
+}
+
+#pragma mark - Sidebar workspace
+
+- (iTermFileBrowserContext *)sidebarContextForItem:(iTermSidebarWorkspaceItem *)item tab:(PTYTab *)tab {
+    NSDictionary *state = item.state;
+    NSString *root = [NSString castFrom:state[@"rootDirectory"]];
+    if (!root.length) { root = _projectController.selectedRootDirectory; }
+    PTYSession *primary = tab.activeSession;
+    if (!root.length && primary.isTerminalSession && !primary.sshIdentity) { root = primary.variablesScope.path; }
+    if (!root.length) { root = NSHomeDirectory(); }
+    return [[[iTermFileBrowserContext alloc] initWithRootDirectory:root
+        projectIdentifier:[NSString castFrom:state[@"projectIdentifier"]] ?: tab.projectIdentifier ?: @""
+        worktreeIdentifier:[NSString castFrom:state[@"worktreeIdentifier"]] ?: @""
+        generation:0 showsHiddenFiles:NO showsGitIgnoredFiles:NO] autorelease];
+}
+
+- (void)refreshSidebarWorkspace {
+    if (!_contentView || _deallocing || _closing || _refreshingSidebarWorkspace) { return; }
+    _refreshingSidebarWorkspace = YES;
+    PTYTab *tab = self.currentTab;
+    iTermSidebarWorkspaceView *view = _contentView.sidebarWorkspace;
+    view.delegate = self;
+    if (_sidebarShownTab != tab) {
+        _contentView.sidebarWorkspaceExpanded = NO;
+        view.contentView = nil;
+        _sidebarShownTab = tab;
+    }
+    if (!tab) { _contentView.shouldShowSidebarWorkspace = NO; _refreshingSidebarWorkspace = NO; return; }
+    iTermSidebarWorkspaceState *state = tab.sidebarWorkspaceState;
+    for (iTermSidebarWorkspaceItem *item in state.items) {
+        for (PTYSession *session in tab.sidebarSessions) {
+            if (![session.guid isEqualToString:item.sessionIdentifier]) { continue; }
+            item.title = session.name ?: item.title;
+            if (session.isBrowserSession && session.view.browserViewController.webView.URL) {
+                NSMutableDictionary *metadata = [[item.state mutableCopy] autorelease];
+                metadata[@"url"] = session.view.browserViewController.webView.URL.absoluteString;
+                item.state = metadata;
+            }
+        }
+    }
+    view.items = state.items;
+    view.selectedIdentifier = state.selectedIdentifier;
+    _contentView.sidebarWorkspaceWidth = state.width;
+    if (_contentView.shouldShowToolbelt) { _sidebarUsesTools = YES; }
+    _contentView.shouldShowSidebarWorkspace = state.visible && !_sidebarUsesTools;
+    iTermSidebarWorkspaceItem *selected = [state.items objectPassingTest:^BOOL(iTermSidebarWorkspaceItem *item, NSUInteger i, BOOL *stop) {
+        return [item.identifier isEqualToString:state.selectedIdentifier];
+    }];
+    PTYSession *session = tab.selectedSidebarSession;
+    NSView *content = session.view;
+    if (!content && selected && ![selected.kind isEqualToString:@"home"]) {
+        if (!_sidebarContentStore) {
+            _sidebarContentStore = [[iTermSidebarWorkspaceContentStore alloc] init];
+            __weak __typeof(self) weakSelf = self;
+            _sidebarContentStore.fileRequest = ^(iTermFileBrowserRequest *request) {
+                PseudoTerminal *term = weakSelf;
+                if (!term || term->_closing || term->_deallocing) { return; }
+                if (request.kind == iTermFileBrowserRequestKindOpenFile) {
+                    [term openSidebarFile:request.openRequest inTab:term.currentTab];
+                } else if (request.kind == iTermFileBrowserRequestKindOpenTerminal) {
+                    [term createSidebarTerminalInDirectory:request.directoryPath inTab:term.currentTab];
+                } else { [term performFileBrowserRequest:request]; }
+            };
+        }
+        content = [_sidebarContentStore viewForItem:selected context:[self sidebarContextForItem:selected tab:tab]];
+    }
+    if (view.contentView != content && view.containsFirstResponder) {
+        [tab setActiveSessionRestoringFocus:tab.activeSession];
+    }
+    view.contentView = content;
+    [_sidebarContentStore setVisibleItemIdentifier:_contentView.shouldShowSidebarWorkspace ? selected.identifier : nil];
+    NSMutableArray *live = [NSMutableArray array];
+    for (PTYTab *owner in self.tabs) {
+        for (iTermSidebarWorkspaceItem *item in owner.sidebarWorkspaceState.items) { [live addObject:item.identifier]; }
+    }
+    [_sidebarContentStore pruneKeepingItemIdentifiers:live];
+    [self repositionWidgets];
+    if (session) {
+        [session setScreenSize:session.view.bounds.size parent:self];
+        [session.fileSessionHost updateVisibility];
+    }
+    _refreshingSidebarWorkspace = NO;
+}
+
+- (void)showSidebarWorkspace:(id)sender {
+    _sidebarUsesTools = NO;
+    _contentView.shouldShowToolbelt = NO;
+    self.currentTab.sidebarWorkspaceState.visible = YES;
+    [self refreshSidebarWorkspace];
+    [self fitTabsToWindow];
+    [self invalidateRestorableState];
+}
+
+- (BOOL)sessionFocusChanged:(PTYSession *)session {
+    BOOL changed = _lastFocusedSession != session;
+    _lastFocusedSession = session;
+    return changed;
+}
+
+- (void)selectSidebarSession:(PTYSession *)session {
+    if (_selectingSidebarSession) { return; }
+    PTYTab *tab = [self tabForSession:session];
+    if (![self.tabs containsObject:tab] || ![tab sessionIsSidebar:session]) { return; }
+    _selectingSidebarSession = YES;
+    for (iTermSidebarWorkspaceItem *item in tab.sidebarWorkspaceState.items) {
+        if ([item.sessionIdentifier isEqualToString:session.guid]) {
+            [tab.sidebarWorkspaceState selectItemWithIdentifier:item.identifier]; break;
+        }
+    }
+    tab.sidebarWorkspaceState.visible = YES;
+    if (tab != self.currentTab) { [_contentView.tabView selectTabViewItem:tab.tabViewItem]; }
+    _sidebarUsesTools = NO;
+    _contentView.shouldShowToolbelt = NO;
+    [self refreshSidebarWorkspace];
+    if ([self.window makeFirstResponder:session.mainResponder]) {
+        const BOOL changed = [self sessionFocusChanged:session];
+        for (PTYSession *candidate in self.allSessions) { [candidate setFocused:candidate == session]; }
+        [[NSNotificationCenter defaultCenter] postNotificationName:iTermSessionBecameKey object:session
+            userInfo:@{ @"changed": @(changed) }];
+        [[NSNotificationCenter defaultCenter] postNotificationName:iTermCurrentSessionDidChange object:session];
+    }
+    [self invalidateRestorableState];
+    _selectingSidebarSession = NO;
+}
+
+- (BOOL)handleLastPrimarySessionRemoval:(PTYSession *)session {
+    PTYTab *tab = [self tabForSession:session];
+    if (_closing || _deallocing || _sidebarClosingTab == tab || ![self.tabs containsObject:tab]) { return NO; }
+    [self closeTabIfConfirmed:tab];
+    // Cancellation keeps the exited primary view while the sidebar remains alive.
+    return YES;
+}
+
+- (void)closeSidebarSession:(PTYSession *)session completion:(void (^)(BOOL))completion {
+    PTYTab *tab = [self tabForSession:session];
+    if (![self.tabs containsObject:tab] || ![tab sessionIsSidebar:session]) { completion(NO); return; }
+    const BOOL closed = [self closeSessionWithConfirmation:session];
+    [self refreshSidebarWorkspace];
+    completion(closed && ![tab sessionIsSidebar:session]);
+}
+
+- (PTYSession *)createSidebarBrowserWithURL:(NSURL *)url originSession:(PTYSession *)origin configuration:(WKWebViewConfiguration *)configuration completion:(void (^)(PTYSession *, NSError *))completion {
+    PTYTab *tab = [self tabForSession:origin];
+    if (_closing || _deallocing || !origin || origin.exited || ![self.tabs containsObject:tab]) {
+        completion(nil, [NSError errorWithDomain:@"com.iterm2.sidebar" code:1 userInfo:nil]); return nil;
+    }
+    NSMutableDictionary *profile = [[origin.profile mutableCopy] autorelease];
+    profile[KEY_CUSTOM_COMMAND] = kProfilePreferenceCommandTypeBrowserValue;
+    profile[KEY_INITIAL_URL] = url.absoluteString ?: @"about:blank";
+    PTYSession *session = [[self.sessionFactory newSessionWithProfile:profile parent:origin] autorelease];
+    [self setupSession:session withSize:nil];
+    [tab installSidebarSession:session];
+    tab.sidebarWorkspaceState.visible = YES;
+    if (tab == self.currentTab) { [self showSidebarWorkspace:nil]; }
+    __weak __typeof(self) weakSelf = self;
+    iTermSessionAttachOrLaunchRequest *request = [iTermSessionAttachOrLaunchRequest launchRequestWithSession:session
+        canPrompt:YES objectType:iTermPaneObject hasServerConnection:NO serverConnection:(iTermGeneralServerConnection){}
+        urlString:nil allowURLSubs:NO environment:@{} customShell:nil oldCWD:nil forceUseOldCWD:NO
+        command:nil isUTF8:nil substitutions:nil windowController:self ready:nil
+        completion:^(PTYSession *launched, BOOL ok) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                PseudoTerminal *term = weakSelf;
+                if (!ok || !term || ![term.tabs containsObject:tab] || ![tab sessionIsSidebar:session] || !session.view.browserViewController) {
+                    if ([tab sessionIsSidebar:session]) { [session terminate]; [tab removeSession:session]; }
+                    completion(nil, [NSError errorWithDomain:@"com.iterm2.sidebar" code:2 userInfo:nil]);
+                    return;
+                }
+                if (tab == term.currentTab) { [term refreshSidebarWorkspace]; }
+                completion(session, nil);
+            });
+        }];
+    request.webViewConfiguration = configuration;
+    [self.sessionFactory attachOrLaunchWithRequest:request];
+    return session;
+}
+
+- (void)openSidebarBrowserWithURL:(NSURL *)url originSession:(PTYSession *)origin completion:(void (^)(PTYSession *, NSError *))completion {
+    [self createSidebarBrowserWithURL:url originSession:origin configuration:nil completion:completion];
+}
+
+- (iTermBrowserWebView *)openSidebarPopupWithURL:(NSURL *)url originSession:(PTYSession *)origin configuration:(WKWebViewConfiguration *)configuration {
+    PTYSession *session = [self createSidebarBrowserWithURL:url originSession:origin configuration:configuration
+        completion:^(PTYSession *created, NSError *error) {}];
+    return session.view.browserViewController.webView;
+}
+
+
+- (void)createSidebarTerminalInDirectory:(NSString *)directory inTab:(PTYTab *)tab {
+    if (_closing || _deallocing || ![self.tabs containsObject:tab]) { return; }
+    NSDictionary *profile = [PseudoTerminal localSidebarTerminalProfile:[[ProfileModel sharedInstance] defaultBookmark]];
+    PTYSession *parent = tab.activeSession;
+    PTYSession *session = [[self.sessionFactory newSessionWithProfile:profile parent:parent] autorelease];
+    [self setupSession:session withSize:nil];
+    [tab installSidebarSession:session];
+    tab.sidebarWorkspaceState.visible = YES;
+    [self selectSidebarSession:session];
+    __weak __typeof(self) weakSelf = self;
+    iTermSessionAttachOrLaunchRequest *request = [iTermSessionAttachOrLaunchRequest launchRequestWithSession:session
+        canPrompt:YES objectType:iTermPaneObject hasServerConnection:NO serverConnection:(iTermGeneralServerConnection){}
+        urlString:nil allowURLSubs:NO environment:@{} customShell:[ITAddressBookMgr customShellForProfile:profile]
+        oldCWD:directory forceUseOldCWD:YES command:nil isUTF8:nil substitutions:nil windowController:self ready:nil
+        completion:^(PTYSession *launched, BOOL ok) {
+            PseudoTerminal *term = weakSelf;
+            if (!ok) { [session terminate]; [tab removeSession:session]; }
+            if (term && term.currentTab == tab) { [term refreshSidebarWorkspace]; }
+        }];
+    [self.sessionFactory attachOrLaunchWithRequest:request];
+}
+
++ (NSDictionary *)localSidebarTerminalProfile:(NSDictionary *)base {
+    NSMutableDictionary *profile = [[base mutableCopy] autorelease];
+    profile[KEY_CUSTOM_COMMAND] = kProfilePreferenceCommandTypeLoginShellValue;
+    [profile removeObjectForKey:KEY_COMMAND_LINE];
+    [profile removeObjectForKey:KEY_SSH_CONFIG];
+    profile[KEY_INITIAL_TEXT] = @"";
+    return profile;
+}
+
+- (void)openSidebarFile:(iTermFileOpenRequest *)request inTab:(PTYTab *)tab {
+    if (!request || ![self.tabs containsObject:tab] || _closing || _deallocing) { return; }
+    if (!_sidebarFileOpenCoordinator) { _sidebarFileOpenCoordinator = [[iTermFileOpenCoordinator alloc] initWithCoordinator:[iTermFileWorkspaceService bootstrap].coordinator]; }
+    NSMutableArray<iTermFileSessionPane *> *panes = [NSMutableArray array];
+    NSMutableDictionary<NSString *, PTYSession *> *sessions = [NSMutableDictionary dictionary];
+    for (PTYSession *session in tab.sidebarSessions) {
+        if (session.fileSessionPane) { [panes addObject:session.fileSessionPane]; sessions[session.fileSessionPane.viewIdentifier] = session; }
+    }
+    __weak __typeof(self) weakSelf = self;
+    BOOL (^current)(void) = ^BOOL {
+        PseudoTerminal *term = weakSelf;
+        return term && !term->_closing && !term->_deallocing && [term.tabs containsObject:tab];
+    };
+    [_sidebarFileOpenCoordinator open:request candidates:panes isCurrent:current
+        install:^(iTermFileSessionPane *pane, void (^done)(BOOL)) {
+            PseudoTerminal *term = weakSelf;
+            if (!current()) { done(NO); return; }
+            PTYSession *session = [PTYSession fileSessionWithPane:pane profile:tab.activeSession.profile];
+            if (!session) { done(NO); return; }
+            [term setupSession:session withSize:nil];
+            [tab installSidebarSession:session];
+            [session didFinishInitialization];
+            sessions[pane.viewIdentifier] = session;
+            done(YES);
+        }
+        activate:^(iTermFileSessionPane *pane) {
+            PseudoTerminal *term = weakSelf;
+            PTYSession *session = sessions[pane.viewIdentifier];
+            if (!current() || !session) { return; }
+            tab.sidebarWorkspaceState.visible = YES;
+            if (term.currentTab == tab) {
+                [term selectSidebarSession:session];
+                [pane.controller focusEditor];
+                if (request.lineNumber > 0) { [pane.controller revealWithLineNumber:request.lineNumber utf16Column:request.utf16Column]; }
+            }
+        } completion:^(BOOL ok) {
+            PseudoTerminal *term = weakSelf;
+            if (term && term.currentTab == tab) { [term refreshSidebarWorkspace]; }
+        }];
+}
+
+- (void)sidebarWorkspaceView:(iTermSidebarWorkspaceView *)view createItemOfKind:(NSString *)kind {
+    PTYTab *tab = self.currentTab;
+    if (!tab || _closing || _deallocing) { return; }
+    iTermFileBrowserContext *context = [self sidebarContextForItem:nil tab:tab];
+    if ([kind isEqualToString:@"terminal"]) { [self createSidebarTerminalInDirectory:context.rootDirectory inTab:tab]; return; }
+    NSDictionary *metadata = @{ @"rootDirectory": context.rootDirectory,
+        @"projectIdentifier": context.projectIdentifier, @"worktreeIdentifier": context.worktreeIdentifier };
+    NSString *title = NSLocalizedStringWithDefaultValue(@"SidebarWorkspace.NewTab", nil, [NSBundle mainBundle], @"New Tab", @"New sidebar tab title");
+    if ([kind isEqualToString:@"files"]) { title = NSLocalizedStringWithDefaultValue(@"SidebarWorkspace.Files", nil, [NSBundle mainBundle], @"Files", @"File browser sidebar tab title"); }
+    if ([kind isEqualToString:@"changes"]) { title = NSLocalizedStringWithDefaultValue(@"SidebarWorkspace.Changes", nil, [NSBundle mainBundle], @"Changes", @"Repository changes sidebar tab title"); }
+    iTermSidebarWorkspaceItem *item = [[[iTermSidebarWorkspaceItem alloc] initWithIdentifier:[NSUUID UUID].UUIDString
+        title:title kind:kind sessionIdentifier:nil state:metadata] autorelease];
+    [tab.sidebarWorkspaceState appendItem:item];
+    [self showSidebarWorkspace:nil];
+    if ([kind isEqualToString:@"home"]) { [view focusAddressField]; }
+}
+
+- (void)sidebarWorkspaceView:(iTermSidebarWorkspaceView *)view selectItemWithIdentifier:(NSString *)identifier {
+    PTYTab *tab = self.currentTab;
+    [tab.sidebarWorkspaceState selectItemWithIdentifier:identifier];
+    if (tab.selectedSidebarSession) { [self selectSidebarSession:tab.selectedSidebarSession]; }
+    else { [self refreshSidebarWorkspace]; [self.window makeFirstResponder:view]; }
+    [self invalidateRestorableState];
+}
+
+- (void)sidebarWorkspaceView:(iTermSidebarWorkspaceView *)view closeItemWithIdentifier:(NSString *)identifier {
+    PTYTab *tab = self.currentTab;
+    iTermSidebarWorkspaceItem *item = [tab.sidebarWorkspaceState.items objectPassingTest:^BOOL(iTermSidebarWorkspaceItem *candidate, NSUInteger i, BOOL *stop) {
+        return [candidate.identifier isEqualToString:identifier];
+    }];
+    for (PTYSession *session in tab.sidebarSessions) {
+        if ([session.guid isEqualToString:item.sessionIdentifier]) {
+            [self closeSidebarSession:session completion:^(BOOL ok) {}]; return;
+        }
+    }
+    [tab.sidebarWorkspaceState removeItemWithIdentifier:identifier];
+    [self refreshSidebarWorkspace]; [self invalidateRestorableState];
+}
+
+- (void)sidebarWorkspaceView:(iTermSidebarWorkspaceView *)view navigateToText:(NSString *)text {
+    text = [text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    if (!text.length) { return; }
+    PTYTab *tab = self.currentTab;
+    iTermSidebarWorkspaceItem *selected = [tab.sidebarWorkspaceState.items objectPassingTest:^BOOL(iTermSidebarWorkspaceItem *item, NSUInteger i, BOOL *stop) {
+        return [item.identifier isEqualToString:tab.sidebarWorkspaceState.selectedIdentifier];
+    }];
+    iTermFileBrowserContext *context = [self sidebarContextForItem:selected tab:tab];
+    NSString *path = text.stringByExpandingTildeInPath;
+    if (![path isAbsolutePath]) { path = [context.rootDirectory stringByAppendingPathComponent:path]; }
+    BOOL directory = NO;
+    if ([[NSFileManager defaultManager] fileExistsAtPath:path isDirectory:&directory] && !directory) {
+        iTermFileOpenRequest *request = [[[iTermFileOpenRequest alloc] initWithContext:context path:path
+            placement:iTermOpenStyleTab activation:iTermFileActivationPinned lineNumber:0 utf16Column:0] autorelease];
+        [self openSidebarFile:request inTab:tab]; return;
+    }
+    NSURL *url = nil;
+    if ([text containsString:@"://"]) { url = [NSURL URLWithString:text]; }
+    else if (![text containsString:@" "] && ([text containsString:@"."] || [text hasPrefix:@"localhost:"])) {
+        NSString *scheme = ([text hasPrefix:@"localhost"] || [text hasPrefix:@"127.0.0.1"] || [text hasPrefix:@"[::1]"]) ? @"http://" : @"https://";
+        url = [NSURL URLWithString:[scheme stringByAppendingString:text]];
+    } else {
+        NSString *escaped = [text stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLQueryAllowedCharacterSet]];
+        url = [NSURL URLWithString:[[iTermAdvancedSettingsModel searchCommand] stringByReplacingOccurrencesOfString:@"%@" withString:escaped ?: @""]];
+    }
+    if (!url || ![@[@"http", @"https"] containsObject:url.scheme.lowercaseString]) { return; }
+    NSString *home = [selected.kind isEqualToString:@"home"] ? selected.identifier : nil;
+    __weak __typeof(self) weakSelf = self;
+    [self openSidebarBrowserWithURL:url originSession:tab.activeSession completion:^(PTYSession *session, NSError *error) {
+        PseudoTerminal *term = weakSelf;
+        if (!session || !term || ![term.tabs containsObject:tab]) { return; }
+        if (home) { [tab.sidebarWorkspaceState removeItemWithIdentifier:home]; }
+        if (term.currentTab == tab) { [term selectSidebarSession:session]; }
+    }];
+}
+
+- (void)sidebarWorkspaceViewDidRequestExpand:(iTermSidebarWorkspaceView *)view {
+    _contentView.sidebarWorkspaceExpanded = !_contentView.sidebarWorkspaceExpanded;
+    [self refreshSidebarWorkspace];
+}
+
+- (void)sidebarWorkspaceViewDidRequestTools:(iTermSidebarWorkspaceView *)view {
+    _sidebarUsesTools = YES;
+    _contentView.shouldShowSidebarWorkspace = NO;
+    [self prepareProjectFileTree];
+    _contentView.shouldShowToolbelt = YES;
+    [self refreshSidebarWorkspace]; [self fitTabsToWindow];
+}
+
+- (void)sidebarWorkspaceView:(iTermSidebarWorkspaceView *)view didChangeWidth:(CGFloat)width {
+    self.currentTab.sidebarWorkspaceState.width = width;
+    [self refreshSidebarWorkspace]; [self fitTabsToWindow]; [self invalidateRestorableState];
 }
 
 - (void)toggleBroadcastingToCurrentSession:(id)sender {
@@ -1897,7 +2266,7 @@ ITERM_WEAKLY_REFERENCEABLE
         [[tmuxPaneSession tmuxController] killWindowPane:[tmuxPaneSession tmuxPane]];
     } else {
         PTYTab *tab = [self tabForSession:aSession];
-        if ([[tab sessions] count] == 1) {
+        if (![tab sessionIsSidebar:aSession] && [[tab sessions] count] == 1) {
             [self closeTab:tab soft:soft];
         } else {
             [aSession terminate];
@@ -1932,6 +2301,7 @@ ITERM_WEAKLY_REFERENCEABLE
 
 - (void)tabTitleDidChange:(PTYTab *)tab {
     [self updateTouchBarIfNeeded:NO];
+    if (tab == self.currentTab && tab.sidebarSessions.count > 0) { [self refreshSidebarWorkspace]; }
 }
 
 - (void)tabAddSwiftyStringsToGraph:(iTermSwiftyStringGraph *)graph {
@@ -2447,7 +2817,7 @@ typedef NS_ENUM(NSInteger, iTermCloseSubject) {
     PTYTab *lastTabWithJobs = nil;
     NSUInteger numberOfTabsWithJobs = 0;
     for (PTYTab *aTab in tabs) {
-        NSArray<NSString *> *names = [self jobNamesForSessions:aTab.sessions];
+        NSArray<NSString *> *names = [self jobNamesForSessions:aTab.allSessions];
         if (names.count == 0) {
             continue;
         }
@@ -2485,7 +2855,7 @@ typedef NS_ENUM(NSInteger, iTermCloseSubject) {
     NSMutableArray<PTYSession *> *sessions = [NSMutableArray array];
     NSUInteger numClosing = 0;
     for (PTYTab *aTab in tabs) {
-        const NSUInteger numLive = [[aTab.sessions filteredArrayUsingBlock:^BOOL(PTYSession *session) {
+        const NSUInteger numLive = [[aTab.allSessions filteredArrayUsingBlock:^BOOL(PTYSession *session) {
             return !session.exited;
         }] count];
         if (aTab.isPinned) {
@@ -2495,7 +2865,7 @@ typedef NS_ENUM(NSInteger, iTermCloseSubject) {
             mustAsk = YES;
         }
         numClosing += numLive;
-        [sessions addObjectsFromArray:aTab.sessions];
+        [sessions addObjectsFromArray:aTab.allSessions];
     }
     if (numClosing > 1 &&
         [iTermPreferences boolForKey:kPreferenceKeyConfirmClosingMultipleTabs]) {
@@ -2576,7 +2946,7 @@ typedef NS_ENUM(NSInteger, iTermCloseSubject) {
         return NO;
     }
 
-    NSArray<PTYSession *> *sessions = [aTab sessions];
+    NSArray<PTYSession *> *sessions = [aTab allSessions];
     int numClosing = 0;
     for (PTYSession* session in sessions) {
         if (![session exited]) {
@@ -2674,7 +3044,7 @@ typedef NS_ENUM(NSInteger, iTermCloseSubject) {
 }
 
 - (void)closeTab:(PTYTab *)aTab soft:(BOOL)soft {
-    if ([iTermFileSessionHost deferClosing:aTab.sessions continuation:^{ [self closeTab:aTab soft:soft]; }]) { return; }
+    if ([self deferFileCloseForTab:aTab soft:soft confirmClose:^BOOL { return YES; }]) { return; }
     if (!soft &&
         [self tabIsAttachedTmuxTabWithSessions:aTab]) {
         if ([self numberOfTabsWithTmuxController:aTab.tmuxController] == 1) {
@@ -2742,6 +3112,26 @@ typedef NS_ENUM(NSInteger, iTermCloseSubject) {
     return [[^{ [self closeTab:tab soft:YES]; } copy] autorelease];
 }
 
+// Resolve every cancellable native decision before the file coordinator commits
+// Save or Discard. The prepared action is the only work left after that commit.
+- (BOOL)deferFileCloseForTab:(PTYTab *)tab soft:(BOOL)soft confirmClose:(BOOL (^)(void))confirmClose {
+    NSMutableArray *preparedActions = [NSMutableArray array];
+    return [iTermFileSessionHost deferClosing:tab.allSessions
+                                   canClose:^BOOL { return !_layoutLocked && [self.tabs containsObject:tab]; }
+                               confirmClose:^BOOL {
+        if (!confirmClose()) { return NO; }
+        void (^action)(void) = nil;
+        if (soft) { action = [[^{ [self removeTab:tab]; } copy] autorelease]; }
+        else { action = [self preparedTabClose:tab]; }
+        if (!action) { return NO; }
+        [preparedActions addObject:action];
+        return YES;
+    } continuation:^{
+        void (^action)(void) = preparedActions.firstObject;
+        if (action) { action(); }
+    }];
+}
+
 - (void)closeTab:(PTYTab *)aTab {
     [self closeTab:aTab soft:NO];
 }
@@ -2750,7 +3140,7 @@ typedef NS_ENUM(NSInteger, iTermCloseSubject) {
     if (session.isTmuxClient) {
         return nil;
     }
-    if ([[[self tabForSession:session] sessions] count] > 1) {
+    if ([[self tabForSession:session] sessionIsSidebar:session] || [[[self tabForSession:session] sessions] count] > 1) {
         return [session restorableSession];
     }
     if (self.numberOfTabs > 1) {
@@ -2802,11 +3192,12 @@ typedef NS_ENUM(NSInteger, iTermCloseSubject) {
 // Just like closeTab but skips the tmux code. Terminates sessions, removes the
 // tab, and closes the window if there are no tabs left.
 - (void)removeTab:(PTYTab *)aTab {
+    _sidebarClosingTab = aTab;
     RLog(@"Remove tab %@", aTab);
     if (![aTab isTmuxTab]) {
         // Exit synthetic sessions (filter, instant replay, screenshot mode)
         // so the restorable session captures live sessions that can be revived.
-        for (PTYSession *session in [aTab sessions]) {
+        for (PTYSession *session in [aTab allSessions]) {
             if (session.liveSession) {
                 PTYSession *liveSession = session.liveSession;
                 [self showLiveSession:liveSession inPlaceOf:session];
@@ -2814,7 +3205,7 @@ typedef NS_ENUM(NSInteger, iTermCloseSubject) {
             }
         }
         iTermRestorableSession *restorableSession = [[[iTermRestorableSession alloc] init] autorelease];
-        restorableSession.sessions = [[aTab sessions] filteredArrayUsingBlock:^BOOL(PTYSession *value) { return !value.isFileSession; }];
+        restorableSession.sessions = [[aTab allSessions] filteredArrayUsingBlock:^BOOL(PTYSession *value) { return !value.isFileSession; }];
         restorableSession.terminalGuid = self.terminalGuid;
         restorableSession.tabUniqueId = aTab.uniqueId;
         restorableSession.windowTitle = [self.scope windowTitleOverrideFormat];
@@ -2840,7 +3231,7 @@ typedef NS_ENUM(NSInteger, iTermCloseSubject) {
         if (restorableSession.arrangement) {
             [[iTermController sharedInstance] pushCurrentRestorableSession:restorableSession];
         }
-        for (PTYSession* session in [aTab sessions]) {
+        for (PTYSession* session in [aTab allSessions]) {
             [session terminate];
         }
         if (restorableSession.arrangement) {
@@ -2849,7 +3240,7 @@ typedef NS_ENUM(NSInteger, iTermCloseSubject) {
         [[NSNotificationCenter defaultCenter] postNotificationName:iTermTabDidCloseNotification
                                                             object:aTab];
     } else {
-        for (PTYSession* session in [aTab sessions]) {
+        for (PTYSession* session in [aTab allSessions]) {
             [session terminate];
         }
     }
@@ -2864,6 +3255,8 @@ typedef NS_ENUM(NSInteger, iTermCloseSubject) {
         PtyLog(@"closeSession - calling fitWindowToTabs");
         [self fitWindowToTabs];
     }
+    [self refreshSidebarWorkspace];
+    if (_sidebarClosingTab == aTab) { _sidebarClosingTab = nil; }
 }
 
 - (IBAction)findCursor:(id)sender
@@ -2980,7 +3373,7 @@ typedef NS_ENUM(NSInteger, iTermCloseSubject) {
     iTermApplicationDelegate *appDelegate = [iTermApplication.sharedApplication delegate];
     [appDelegate userDidInteractWithASession];
     if ([[self window] isKeyWindow]) {
-        PTYSession *aSession = [[[_contentView.tabView selectedTabViewItem] identifier] activeSession];
+        PTYSession *aSession = self.currentSession;
         if ([aSession closeComposer]) {
             return;
         }
@@ -2994,7 +3387,7 @@ typedef NS_ENUM(NSInteger, iTermCloseSubject) {
         return NO;
     }
     PTYTab *tab = [self tabForSession:aSession];
-    if ([[tab sessions] count] == 1) {
+    if (![tab sessionIsSidebar:aSession] && [[tab sessions] count] == 1) {
         return [self closeTabIfConfirmed:tab];
     }
     if ([iTermFileSessionHost deferClosing:@[aSession]
@@ -3255,7 +3648,11 @@ typedef NS_ENUM(NSInteger, iTermCloseSubject) {
 }
 
 - (PTYSession *)currentSession {
-    return [[[_contentView.tabView selectedTabViewItem] identifier] activeSession];
+    PTYTab *tab = [[_contentView.tabView selectedTabViewItem] identifier];
+    if (!_contentView.sidebarWorkspace.hidden && _contentView.sidebarWorkspace.containsFirstResponder && tab.selectedSidebarSession) {
+        return tab.selectedSidebarSession;
+    }
+    return tab.activeSession;
 }
 
 - (void)setWindowTitle {
@@ -5296,6 +5693,10 @@ hidingToolbeltShouldResizeWindow:(BOOL)hidingToolbeltShouldResizeWindow
 }
 
 - (void)openWorkspaceFile:(iTermFileOpenRequest *)request fromSession:(PTYSession *)fileSource {
+    if (fileSource && [[self tabForSession:fileSource] sessionIsSidebar:fileSource]) {
+        if (fileSource == self.currentSession && [fileSource.fileSessionPane.controller hasContext:request.context]) { [self openSidebarFile:request inTab:[self tabForSession:fileSource]]; }
+        return;
+    }
     if (fileSource && (fileSource != self.currentSession || ![fileSource.fileSessionPane.controller hasContext:request.context])) {
         return;
     }
@@ -5379,6 +5780,7 @@ hidingToolbeltShouldResizeWindow:(BOOL)hidingToolbeltShouldResizeWindow
 
 - (BOOL)handleProjectSidebarTerminalShortcut:(NSEvent *)event {
     if (_closing || _deallocing || self.window != NSApp.keyWindow) { return NO; }
+    if ([_contentView.sidebarWorkspace handleKeyEquivalent:event]) { return YES; }
     return [_contentView.projectSidebar performKeyEquivalent:event];
 }
 
@@ -8413,6 +8815,7 @@ hidingToolbeltShouldResizeWindow:(BOOL)hidingToolbeltShouldResizeWindow
 }
 
 - (void)tabView:(NSTabView *)tabView didSelectTabViewItem:(NSTabViewItem *)tabViewItem {
+    [self refreshSidebarWorkspace];
     RLog(@"Did select tab view %@", tabViewItem);
     [_contentView.tabBarControl setFlashing:YES];
 
@@ -8698,10 +9101,9 @@ hidingToolbeltShouldResizeWindow:(BOOL)hidingToolbeltShouldResizeWindow
         return NO;
     }
 
-    if ([iTermFileSessionHost deferClosing:aTab.sessions
-                                  canClose:^BOOL { return !_layoutLocked && [self.tabs containsObject:aTab]; }
-                              confirmClose:^BOOL { return [self confirmCloseTab:aTab suppressConfirmation:suppressConfirmation]; }
-                              continuation:^{ [self closeTab:aTab]; }]) { return NO; }
+    if ([self deferFileCloseForTab:aTab soft:NO confirmClose:^BOOL {
+        return [self confirmCloseTab:aTab suppressConfirmation:suppressConfirmation];
+    }]) { return NO; }
     return [self confirmCloseTab:aTab suppressConfirmation:suppressConfirmation];
 }
 
@@ -11123,7 +11525,7 @@ deferringExpansion:(BOOL)deferExpansion {
         return;
     }
     NSMutableArray *fileCloseSessions = [NSMutableArray array];
-    for (PTYTab *tab in closable) { [fileCloseSessions addObjectsFromArray:tab.sessions]; }
+    for (PTYTab *tab in closable) { [fileCloseSessions addObjectsFromArray:tab.allSessions]; }
     NSMutableArray *actions = [NSMutableArray array];
     if ([iTermFileSessionHost deferClosing:fileCloseSessions canClose:^BOOL {
         return !_layoutLocked && ![closable anyWithBlock:^BOOL(PTYTab *tab) { return ![self.tabs containsObject:tab]; }];
@@ -12464,15 +12866,29 @@ static CGFloat iTermDimmingAmount(PSMTabBarControl *tabView) {
     // the arrangement, and live floats are left alone.
     NSMutableArray<PTYSession *> *floatingRevived = [NSMutableArray array];
     NSMutableArray<PTYSession *> *tiledRevived = [NSMutableArray array];
+    NSMutableSet<NSString *> *sidebarRestored = [NSMutableSet set];
     for (PTYSession *session in sessions) {
-        if ([PTYTab floatingPaneRecordForSessionWithGUID:session.guid inArrangement:arrangement]) {
+        if ([PTYTab sidebarSessionRecordForSessionWithGUID:session.guid inArrangement:arrangement]) {
+            if (revive) { [session revive]; }
+            [tab addRevivedSidebarSession:session fromArrangement:arrangement];
+            if ([tab sessionIsSidebar:session]) { [sidebarRestored addObject:session.guid]; }
+        } else if ([PTYTab floatingPaneRecordForSessionWithGUID:session.guid inArrangement:arrangement]) {
             [floatingRevived addObject:session];
         } else {
             [tiledRevived addObject:session];
         }
     }
     NSDictionary *fullArrangement = arrangement;
-    arrangement = [PTYTab arrangementWithoutFloatingPanes:arrangement];
+    for (NSString *guid in archives.sessionGUIDs) {
+        if ([PTYTab sidebarSessionRecordForSessionWithGUID:guid inArrangement:fullArrangement] &&
+            [tab addArchivedSidebarSessionWithGUID:guid fromArrangement:fullArrangement]) { [sidebarRestored addObject:guid]; }
+    }
+    if (tiledRevived.count == 0 && floatingRevived.count == 0 && sidebarRestored.count > 0) {
+        [self refreshSidebarWorkspace];
+        [self addTabsForArchives:archives excludingSessionGUIDs:sidebarRestored];
+        return;
+    }
+    arrangement = [PTYTab arrangementWithoutSidebarSessions:[PTYTab arrangementWithoutFloatingPanes:arrangement]];
     sessions = tiledRevived;
     void (^restoreFloats)(void) = ^{
         for (PTYSession *session in floatingRevived) {
@@ -12493,7 +12909,7 @@ static CGFloat iTermDimmingAmount(PSMTabBarControl *tabView) {
     if (tiledRevived.count == 0 && (floatingRevived.count > 0 || archivedFloatGUIDs.count > 0)) {
         RLog(@"Only floating panes come back; the tiled layout is unchanged");
         restoreFloats();
-        NSMutableSet<NSString *> *restoredGUIDs = [NSMutableSet set];
+        NSMutableSet<NSString *> *restoredGUIDs = [sidebarRestored mutableCopy];
         for (NSString *guid in archivedFloatGUIDs) {
             RLog(@"Restore archived float %@", guid);
             if ([tab addArchivedFloatingSessionWithGUID:guid fromArrangement:fullArrangement]) {
@@ -12675,6 +13091,9 @@ static CGFloat iTermDimmingAmount(PSMTabBarControl *tabView) {
          @(isVertical), @(before), newSession, targetSession, @(performSetup), self);
     // Callers of this method cannot be refused (the session already exists), so a split aimed at a
     // floating pane is redirected.
+    if ([[self tabForSession:targetSession] sessionIsSidebar:targetSession]) {
+        targetSession = [self tabForSession:targetSession].activeSession;
+    }
     targetSession = [[self tabForSession:targetSession] splitTargetForSession:targetSession] ?: targetSession;
     // The relayout must not let the pane under a still pointer take focus.
     [[iTermPaneFocusFollowsMouse shared] freeze];
@@ -12776,6 +13195,11 @@ static CGFloat iTermDimmingAmount(PSMTabBarControl *tabView) {
                targetSession:(PTYSession *)targetSession
                   completion:(void (^)(PTYSession *, BOOL ok))completion
                        ready:(void (^)(PTYSession *, BOOL ok))ready {
+    if ([[self tabForSession:targetSession] sessionIsSidebar:targetSession]) {
+        if (ready) { ready(nil, NO); }
+        if (completion) { completion(nil, NO); }
+        return;
+    }
     if (_layoutLocked) {
         RLog(@"Layout is locked, refusing to split");
         if (ready) {
@@ -12880,6 +13304,10 @@ static CGFloat iTermDimmingAmount(PSMTabBarControl *tabView) {
                  forceUseOldCWD:(BOOL)forceUseOldCWD
               projectIdentifier:(NSString *)projectIdentifier
                      completion:(void (^)(PTYSession *, BOOL))completion {
+    if ([[self tabForSession:targetSession] sessionIsSidebar:targetSession]) {
+        if (completion) { completion(nil, NO); }
+        return nil;
+    }
     if ([targetSession isTmuxClient]) {
         [self willSplitTmuxPane];
         TmuxController *controller = [targetSession tmuxController];
@@ -13338,6 +13766,7 @@ static CGFloat iTermDimmingAmount(PSMTabBarControl *tabView) {
 }
 
 - (void)tabActiveSessionDidChange {
+    [self refreshSidebarWorkspace];
     if (_projectSessionPlacementDepth == 0) { [[self projectController] activeSessionDidChange]; }
     if (self.autoCommandHistorySessionGuid) {
         [self hideAutoCommandHistory];
@@ -14867,6 +15296,14 @@ static BOOL iTermApproximatelyEqualRects(NSRect lhs, NSRect rhs, double epsilon)
 }
 
 - (void)rootTerminalViewDidLayoutSubviews {
+    if (_contentView.sidebarWorkspace.hidden && _contentView.sidebarWorkspace.containsFirstResponder) {
+        [self.currentTab setActiveSessionRestoringFocus:self.currentTab.activeSession];
+    }
+    PTYSession *sidebar = self.currentTab.selectedSidebarSession;
+    if (sidebar && !_contentView.sidebarWorkspace.hidden) {
+        [sidebar setScreenSize:sidebar.view.bounds.size parent:self];
+        [sidebar.fileSessionHost updateVisibility];
+    }
     for (PTYSession *session in self.allSessions) {
         [session.view updateActivePaneBorder];
     }
@@ -16748,7 +17185,7 @@ typedef NS_ENUM(NSUInteger, iTermBroadcastCommand) {
     NSMutableArray* result = [NSMutableArray arrayWithCapacity:[_contentView.tabView numberOfTabViewItems]];
     for (NSTabViewItem* item in [_contentView.tabView tabViewItems]) {
         PTYTab *tab = [item identifier];
-        [result addObjectsFromArray:[tab sessions]];
+        [result addObjectsFromArray:[tab allSessions]];
     }
     return result;
 }

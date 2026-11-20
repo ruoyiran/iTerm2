@@ -50,13 +50,11 @@ if [ "${UNIVERSAL:-0}" = "1" ]; then
 
     mkdir -p .build/release
 
-    echo "Creating universal binary..."
-    lipo -create \
-        "$ARM64_BIN/it2" \
-        "$X86_64_BIN/it2" \
-        -output .build/release/it2
-
-    sign_binary "it2"
+    echo "Creating universal binaries..."
+    for product in it2 it2-browser-mcp; do
+        lipo -create "$ARM64_BIN/$product" "$X86_64_BIN/$product" -output ".build/release/$product"
+        sign_binary "$product"
+    done
 
     echo "Build complete: .build/release/it2 (universal binary)"
     echo "Architectures:"
@@ -66,9 +64,10 @@ else
     NATIVE_BIN="$(build_arch "$NATIVE_ARCH" ".build-$NATIVE_ARCH")"
 
     mkdir -p .build/release
-    cp "$NATIVE_BIN/it2" ".build/release/it2"
-
-    sign_binary "it2"
+    for product in it2 it2-browser-mcp; do
+        cp "$NATIVE_BIN/$product" ".build/release/$product"
+        sign_binary "$product"
+    done
 
     echo "Build complete: .build/release/it2 ($NATIVE_ARCH)"
 fi

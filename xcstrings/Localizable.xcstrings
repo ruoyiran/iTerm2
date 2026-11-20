@@ -42851,6 +42851,222 @@
         }
       }
     },
+    "BrowserAutomation.Cancelled" : {
+      "comment" : "Error returned when a browser automation request is cancelled",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "The browser request was cancelled."
+          }
+        }
+      }
+    },
+    "BrowserAutomation.ElementNotFound" : {
+      "comment" : "Error returned when a referenced DOM element was removed",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "The page element is no longer available."
+          }
+        }
+      }
+    },
+    "BrowserAutomation.ElementNotInteractable" : {
+      "comment" : "Error returned for hidden, disabled or read-only browser elements",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "The page element cannot receive this interaction."
+          }
+        }
+      }
+    },
+    "BrowserAutomation.InTransaction" : {
+      "comment" : "Error returned when browser automation is requested from a main-thread-blocking API transaction",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Browser automation cannot run inside an API transaction."
+          }
+        }
+      }
+    },
+    "BrowserAutomation.InternalError" : {
+      "comment" : "Error returned for an inconsistent native browser automation result",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "The browser returned an invalid result."
+          }
+        }
+      }
+    },
+    "BrowserAutomation.InvalidRequest" : {
+      "comment" : "Error returned for malformed browser automation arguments",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "The browser request is invalid."
+          }
+        }
+      }
+    },
+    "BrowserAutomation.JavaScriptError" : {
+      "comment" : "Error returned when a browser automation JavaScript helper fails",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "The browser could not execute the page action."
+          }
+        }
+      }
+    },
+    "BrowserAutomation.NavigationChanged" : {
+      "comment" : "Error returned when browser navigation changes the approved origin",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "The browser navigated to a different website before the action could run."
+          }
+        }
+      }
+    },
+    "BrowserAutomation.OriginNotFound" : {
+      "comment" : "Error returned when the browser automation origin session closed",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "The originating session is no longer available."
+          }
+        }
+      }
+    },
+    "BrowserAutomation.OutOfScope" : {
+      "comment" : "Error returned when an automation request targets another primary tab",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "The browser session belongs to a different workspace."
+          }
+        }
+      }
+    },
+    "BrowserAutomation.PermissionDenied" : {
+      "comment" : "Error returned when a browser automation permission prompt is declined",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Permission to control this website was denied."
+          }
+        }
+      }
+    },
+    "BrowserAutomation.PermissionHeading" : {
+      "comment" : "Permission heading for browser automation; placeholder is the authenticated script name",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%@ wants to control this browser workspace."
+          }
+        }
+      }
+    },
+    "BrowserAutomation.PermissionTitle" : {
+      "comment" : "Permission prompt for browser automation; placeholder is the website origin",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Allow scripts to read and control pages on %@?"
+          }
+        }
+      }
+    },
+    "BrowserAutomation.ScriptName" : {
+      "comment" : "Fallback name for an authenticated browser automation script",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "A script"
+          }
+        }
+      }
+    },
+    "BrowserAutomation.StaleReference" : {
+      "comment" : "Error returned when a browser snapshot generation or element reference expired",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "The page reference expired. Take a new snapshot before using it."
+          }
+        }
+      }
+    },
+    "BrowserAutomation.TargetNotFound" : {
+      "comment" : "Error returned when a browser automation target closed",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "The browser session is no longer available."
+          }
+        }
+      }
+    },
+    "BrowserAutomation.Timeout" : {
+      "comment" : "Error returned when browser automation exceeds its deadline",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "The browser request timed out."
+          }
+        }
+      }
+    },
+    "BrowserAutomation.Unsupported" : {
+      "comment" : "Error returned for unavailable or unsafe browser automation interactions",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "This browser interaction is not supported."
+          }
+        }
+      }
+    },
     "BrowserBasicAuth.Prompt" : {
       "comment" : "Heading of the browser HTTP authentication prompt. The placeholder is the host name.",
       "extractionState" : "extracted_with_value",
@@ -211311,6 +211527,306 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在录制"
+          }
+        }
+      }
+    },
+    "SidebarWorkspace.AccessibilityLabel" : {
+      "comment" : "Accessibility label for the right workspace pane",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Sidebar workspace"
+          }
+        }
+      }
+    },
+    "SidebarWorkspace.AddressAccessibilityLabel" : {
+      "comment" : "Accessibility label for the sidebar address field",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Search files or enter a URL"
+          }
+        }
+      }
+    },
+    "SidebarWorkspace.AddressPlaceholder" : {
+      "comment" : "Placeholder in the sidebar URL and file search field",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Search files or enter a URL"
+          }
+        }
+      }
+    },
+    "SidebarWorkspace.BinaryDiff" : {
+      "comment" : "Read-only comparison limitation",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "This binary or large file cannot be displayed as a text comparison."
+          }
+        }
+      }
+    },
+    "SidebarWorkspace.Changes" : {
+      "comment" : "Card that opens repository changes in the sidebar\nRepository changes sidebar tab title",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Changes"
+          }
+        }
+      }
+    },
+    "SidebarWorkspace.CloseTab" : {
+      "comment" : "Close sidebar tab button; the interpolated value is the tab’s title",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Close %@"
+          }
+        }
+      }
+    },
+    "SidebarWorkspace.DiffUnavailable" : {
+      "comment" : "Changed or deleted repository diff could not be read",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "The file comparison is no longer available. Refresh the changes list."
+          }
+        }
+      }
+    },
+    "SidebarWorkspace.Expand" : {
+      "comment" : "Button to expand the right workspace",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Expand Sidebar"
+          }
+        }
+      }
+    },
+    "SidebarWorkspace.Files" : {
+      "comment" : "Card that opens a file browser in the sidebar\nFile browser sidebar tab title",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Files"
+          }
+        }
+      }
+    },
+    "SidebarWorkspace.GitUnavailable" : {
+      "comment" : "Repository missing or no longer accessible",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "This directory is not an available Git repository."
+          }
+        }
+      }
+    },
+    "SidebarWorkspace.LoadingChanges" : {
+      "comment" : "Git status loading indicator",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Loading changes…"
+          }
+        }
+      }
+    },
+    "SidebarWorkspace.Modified" : {
+      "comment" : "Modified side of a read-only file comparison",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Modified contents"
+          }
+        }
+      }
+    },
+    "SidebarWorkspace.More" : {
+      "comment" : "More tools button beside the Open heading",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "More Sidebar Tools"
+          }
+        }
+      }
+    },
+    "SidebarWorkspace.NewTab" : {
+      "comment" : "New sidebar tab title\nTitle and accessibility label for a new sidebar tab",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "New Tab"
+          }
+        }
+      }
+    },
+    "SidebarWorkspace.NoChanges" : {
+      "comment" : "Clean local repository status",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "No local changes."
+          }
+        }
+      }
+    },
+    "SidebarWorkspace.Open" : {
+      "comment" : "Heading above the sidebar’s Terminal, Files, and Changes cards",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Open"
+          }
+        }
+      }
+    },
+    "SidebarWorkspace.Original" : {
+      "comment" : "Original side of a read-only file comparison",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Original contents"
+          }
+        }
+      }
+    },
+    "SidebarWorkspace.RefreshChanges" : {
+      "comment" : "Refresh local Git changes",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Refresh"
+          }
+        }
+      }
+    },
+    "SidebarWorkspace.SelectChange" : {
+      "comment" : "Git changes empty selection instruction",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Select a changed file to compare its original and modified contents."
+          }
+        }
+      }
+    },
+    "SidebarWorkspace.Show" : {
+      "comment" : "Context menu command to show the right workspace",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Show Workspace"
+          }
+        }
+      }
+    },
+    "SidebarWorkspace.StagedFile" : {
+      "comment" : "Staged change row; placeholder is a file path",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Staged: %@"
+          }
+        }
+      }
+    },
+    "SidebarWorkspace.Terminal" : {
+      "comment" : "Card that opens a terminal in the sidebar",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Terminal"
+          }
+        }
+      }
+    },
+    "SidebarWorkspace.Tools" : {
+      "comment" : "Button to show sidebar tools",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Sidebar Tools"
+          }
+        }
+      }
+    },
+    "SidebarWorkspace.UnstagedFile" : {
+      "comment" : "Unstaged change row; placeholder is a file path",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Unstaged: %@"
+          }
+        }
+      }
+    },
+    "SidebarWorkspace.UntrackedFile" : {
+      "comment" : "Untracked change row; placeholder is a file path",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Untracked: %@"
           }
         }
       }

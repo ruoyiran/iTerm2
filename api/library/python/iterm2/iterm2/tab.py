@@ -82,6 +82,7 @@ class Tab:
         tab_group_collapsed: bool = False,
         floating_sessions: Iterable[Session] = [],
         floating_panes_hidden: bool = False,
+        sidebar_sessions: Iterable[Session] = [],
     ) -> None:
         self.connection: Connection = connection
         self.__tab_id = tab_id
@@ -96,6 +97,7 @@ class Tab:
         self.__tab_group_collapsed = tab_group_collapsed
         self.__floating_sessions = list(floating_sessions)
         self.__floating_panes_hidden = floating_panes_hidden
+        self.__sidebar_sessions = list(sidebar_sessions)
 
     # pylint: enable=too-many-arguments
 
@@ -115,6 +117,7 @@ class Tab:
         self.__root = other.root
         self.__minimized_sessions = list(other.minimized_sessions)
         self.__floating_sessions = list(other.floating_sessions)
+        self.__sidebar_sessions = list(other.sidebar_sessions)
         self.__floating_panes_hidden = other.floating_panes_hidden
         # pylint: disable=protected-access
         self.__tab_group_id = other.__tab_group_id
@@ -127,7 +130,7 @@ class Tab:
         """Replaces references to a session."""
         if self.__root.update_session(session):
             return
-        for sessions in (self.__minimized_sessions, self.__floating_sessions):
+        for sessions in (self.__minimized_sessions, self.__floating_sessions, self.__sidebar_sessions):
             indexes = [
                 idx
                 for idx, candidate in enumerate(sessions)
@@ -186,7 +189,7 @@ class Tab:
         """
         A tab contains a list of sessions, which are its split panes.
 
-        This excludes minimized sessions and floating panes. Use
+        This excludes minimized, floating and sidebar sessions. Use
         `all_sessions` to get every session in this tab.
 
         :returns: The sessions belonging to this tab, in no particular order.
@@ -196,14 +199,14 @@ class Tab:
     @property
     def all_sessions(self) -> list[Session]:
         """
-        Returns the visible, minimized and floating sessions in this tab.
+        Returns the split, minimized, floating and sidebar sessions in this tab.
 
         A session would be minimized if another session in the tab is maximized.
 
         :returns: All sessions in this tab, including minimized sessions and
-             floating panes, in no particular order.
+             floating and sidebar sessions, in no particular order.
         """
-        return self.sessions + self.minimized_sessions + self.floating_sessions
+        return self.sessions + self.minimized_sessions + self.floating_sessions + self.sidebar_sessions
 
     @property
     def root(self) -> Splitter:
@@ -252,6 +255,11 @@ class Tab:
         :returns: The tab's floating sessions, back to front. Empty if none.
         """
         return list(self.__floating_sessions)
+
+    @property
+    def sidebar_sessions(self) -> list[Session]:
+        """Sessions in this tab's sidebar, outside the split layout."""
+        return list(self.__sidebar_sessions)
 
     @property
     def floating_panes_hidden(self) -> bool:
@@ -317,7 +325,7 @@ class Tab:
         """
         # A layout change handled during the await below can replace the
         # root, so remember which sessions this request covered.
-        sessions = self.all_sessions
+        sessions = self.sessions + self.minimized_sessions + self.floating_sessions
         response = await async_set_tab_layout(
             self.connection, self.tab_id, self.__root.to_protobuf()
         )

@@ -4899,6 +4899,22 @@
 		0FA39CE8E93A5E79E3DEAFA6 /* iTermFileSessionDescriptor.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4EB5954940B3B0C7403E726 /* iTermFileSessionDescriptor.swift */; };
 		1664497C30D8DF828A2C8E3D /* iTermFileSessionCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = E251D6482037D914E7C9E9CD /* iTermFileSessionCoordinator.swift */; };
 		8913A2571A7E64E3E7BC3F95 /* iTermFileSessionHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECFA7032BBE2FF96A3F6DB30 /* iTermFileSessionHost.swift */; };
+		14254E9E59FB9EE5F01D4EC5 /* iTermSidebarWorkspaceState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 66C477E2ADE0677A47B8F5C9 /* iTermSidebarWorkspaceState.swift */; };
+		21408988405564F3724D2DC9 /* BrowserCommand.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8168B67B68A701F54FC3F60D /* BrowserCommand.swift */; };
+		32A6FD8C1D381CC7A048D095 /* it2-browser-mcp in CopyFiles */ = {isa = PBXBuildFile; fileRef = D6E927CED6B4CA20B3EABC7A /* it2-browser-mcp */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
+		37CCBFEEB3D839597DF3D027 /* BrowserClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83B39C58D63C67343BD5AA0B /* BrowserClient.swift */; };
+		391EB304E405C165D9B1A2D9 /* it2-browser-mcp in Resources */ = {isa = PBXBuildFile; fileRef = D6E927CED6B4CA20B3EABC7A /* it2-browser-mcp */; };
+		3B948BD99A9A3AB1E57C1AA4 /* iTermSidebarWorkspaceContentStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = D79CEE91CD5FF6E16C8F05D8 /* iTermSidebarWorkspaceContentStore.swift */; };
+		420E48A5AA95834B1737EC6C /* browser-automation.js in Resources */ = {isa = PBXBuildFile; fileRef = D74A6874F6BC097DBB4D6A0C /* browser-automation.js */; };
+		5090FF6A0DC1000D6B04A388 /* browser-automation.js in Resources */ = {isa = PBXBuildFile; fileRef = D74A6874F6BC097DBB4D6A0C /* browser-automation.js */; };
+		51B8BA5B76869C7530B575C6 /* iTermSidebarWorkspaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE2329A46148CCDFD8071D5E /* iTermSidebarWorkspaceView.swift */; };
+		6DC985DFF3F84BB6607FE563 /* iTermBrowserAutomationRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = 492A52710F8C07FE879C4C42 /* iTermBrowserAutomationRequest.swift */; };
+		7200B1B4D09B138794203AF4 /* browser-automation-evaluate.js in Resources */ = {isa = PBXBuildFile; fileRef = 5DE067FA67C0D3E94C197FE9 /* browser-automation-evaluate.js */; };
+		8E74403A591C2E3643DD0F9B /* iTermBrowserAutomationBroker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37DAC4A86248B9BBC18CDF38 /* iTermBrowserAutomationBroker.swift */; };
+		98082DE078825E9668D558F4 /* it2-browser-mcp in Resources */ = {isa = PBXBuildFile; fileRef = D6E927CED6B4CA20B3EABC7A /* it2-browser-mcp */; };
+		B58DB898129BDAD02EB5DACD /* browser-automation.js in Resources */ = {isa = PBXBuildFile; fileRef = D74A6874F6BC097DBB4D6A0C /* browser-automation.js */; };
+		D1BB6C6734D96E229358E32A /* browser-automation-evaluate.js in Resources */ = {isa = PBXBuildFile; fileRef = 5DE067FA67C0D3E94C197FE9 /* browser-automation-evaluate.js */; };
+		E6214765646636BFE52C6DB4 /* browser-automation-evaluate.js in Resources */ = {isa = PBXBuildFile; fileRef = 5DE067FA67C0D3E94C197FE9 /* browser-automation-evaluate.js */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -5124,6 +5140,7 @@
 			files = (
 				A6BAB25E2F8CCCD10063FA7F /* cc-status in CopyFiles */,
 				A6E7ED2F2F7CAFDD001349AE /* it2 in CopyFiles */,
+				32A6FD8C1D381CC7A048D095 /* it2-browser-mcp in CopyFiles */,
 				A6CB24AF2C68155800005824 /* imgcat in CopyFiles */,
 				A6CB24B02C68155800005824 /* imgls in CopyFiles */,
 				A6CB24B12C68155800005824 /* it2api in CopyFiles */,
@@ -9282,6 +9299,16 @@
 		E251D6482037D914E7C9E9CD /* iTermFileSessionCoordinator.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = iTermFileSessionCoordinator.swift; sourceTree = "<group>"; };
 		ECFA7032BBE2FF96A3F6DB30 /* iTermFileSessionHost.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = iTermFileSessionHost.swift; sourceTree = "<group>"; };
 		F4EB5954940B3B0C7403E726 /* iTermFileSessionDescriptor.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = iTermFileSessionDescriptor.swift; sourceTree = "<group>"; };
+		37DAC4A86248B9BBC18CDF38 /* iTermBrowserAutomationBroker.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = iTermBrowserAutomationBroker.swift; sourceTree = "<group>"; };
+		492A52710F8C07FE879C4C42 /* iTermBrowserAutomationRequest.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = iTermBrowserAutomationRequest.swift; sourceTree = "<group>"; };
+		5DE067FA67C0D3E94C197FE9 /* browser-automation-evaluate.js */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.javascript; path = "browser-automation-evaluate.js"; sourceTree = "<group>"; };
+		66C477E2ADE0677A47B8F5C9 /* iTermSidebarWorkspaceState.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = iTermSidebarWorkspaceState.swift; sourceTree = "<group>"; };
+		8168B67B68A701F54FC3F60D /* BrowserCommand.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BrowserCommand.swift; sourceTree = "<group>"; };
+		83B39C58D63C67343BD5AA0B /* BrowserClient.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BrowserClient.swift; sourceTree = "<group>"; };
+		D6E927CED6B4CA20B3EABC7A /* it2-browser-mcp */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = "compiled.mach-o.executable"; name = "it2-browser-mcp"; path = "it2cli/bin/it2-browser-mcp"; sourceTree = "<group>"; };
+		D74A6874F6BC097DBB4D6A0C /* browser-automation.js */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.javascript; path = "browser-automation.js"; sourceTree = "<group>"; };
+		D79CEE91CD5FF6E16C8F05D8 /* iTermSidebarWorkspaceContentStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = iTermSidebarWorkspaceContentStore.swift; sourceTree = "<group>"; };
+		EE2329A46148CCDFD8071D5E /* iTermSidebarWorkspaceView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = iTermSidebarWorkspaceView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -9508,6 +9535,8 @@
 				EB45025044F301BC048BFE02 /* AILiveHarness */,
 				AE29751AF18538C9184D7D47 /* Companion */,
 				141981589D999BAE06FC6CAC /* it2core */,
+				EEE4A1EF85E59591BD859368 /* it2cli */,
+				D6E927CED6B4CA20B3EABC7A /* it2-browser-mcp */,
 			);
 			name = JTerminal;
 			sourceTree = "<group>";
@@ -9642,6 +9671,7 @@
 				9E8EE77086E04B6E9BACAF1D /* Localizable.xcstrings */,
 				E85C9259B4BF4E83BBC22D64 /* InfoPlist.xcstrings */,
 				B16999917FF591646F3888DC /* FileWorkspace */,
+				ED8CC5ABE999E0A61D663AD1 /* SidebarWorkspace */,
 			);
 			name = Classes;
 			path = sources/;
@@ -15237,6 +15267,7 @@
 				A6CBB81C2E0A1C5500B2CCCB /* UI */,
 				A6CBB81B2E0A1C2900B2CCCB /* ViewSource */,
 				A6CBB9DE2E0B6E9300B2CCCB /* WebViewAdditions */,
+				35082EC2274F060F0A201460 /* Automation */,
 			);
 			path = Browser;
 			sourceTree = "<group>";
@@ -15535,6 +15566,75 @@
 			);
 			name = Native;
 			path = Native;
+			sourceTree = "<group>";
+		};
+		13E859BB147A669C639C1E27 /* Commands */ = {
+			isa = PBXGroup;
+			children = (
+				8168B67B68A701F54FC3F60D /* BrowserCommand.swift */,
+			);
+			name = Commands;
+			path = Commands;
+			sourceTree = "<group>";
+		};
+		35082EC2274F060F0A201460 /* Automation */ = {
+			isa = PBXGroup;
+			children = (
+				492A52710F8C07FE879C4C42 /* iTermBrowserAutomationRequest.swift */,
+				37DAC4A86248B9BBC18CDF38 /* iTermBrowserAutomationBroker.swift */,
+				D74A6874F6BC097DBB4D6A0C /* browser-automation.js */,
+				5DE067FA67C0D3E94C197FE9 /* browser-automation-evaluate.js */,
+			);
+			name = Automation;
+			path = Automation;
+			sourceTree = "<group>";
+		};
+		A1EE07B6570179EA5C6A8582 /* it2core */ = {
+			isa = PBXGroup;
+			children = (
+				13E859BB147A669C639C1E27 /* Commands */,
+				EE257A2368566DECB43D7C19 /* Transport */,
+			);
+			name = it2core;
+			path = it2core;
+			sourceTree = "<group>";
+		};
+		BC591E2DF8C0C36929EE27E3 /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				A1EE07B6570179EA5C6A8582 /* it2core */,
+			);
+			name = Sources;
+			path = Sources;
+			sourceTree = "<group>";
+		};
+		ED8CC5ABE999E0A61D663AD1 /* SidebarWorkspace */ = {
+			isa = PBXGroup;
+			children = (
+				66C477E2ADE0677A47B8F5C9 /* iTermSidebarWorkspaceState.swift */,
+				EE2329A46148CCDFD8071D5E /* iTermSidebarWorkspaceView.swift */,
+				D79CEE91CD5FF6E16C8F05D8 /* iTermSidebarWorkspaceContentStore.swift */,
+			);
+			name = SidebarWorkspace;
+			path = SidebarWorkspace;
+			sourceTree = "<group>";
+		};
+		EE257A2368566DECB43D7C19 /* Transport */ = {
+			isa = PBXGroup;
+			children = (
+				83B39C58D63C67343BD5AA0B /* BrowserClient.swift */,
+			);
+			name = Transport;
+			path = Transport;
+			sourceTree = "<group>";
+		};
+		EEE4A1EF85E59591BD859368 /* it2cli */ = {
+			isa = PBXGroup;
+			children = (
+				BC591E2DF8C0C36929EE27E3 /* Sources */,
+			);
+			name = it2cli;
+			path = it2cli;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -17985,6 +18085,9 @@
 				640AE7AAB1BDCC09B531A3AC /* it2.py in Resources */,
 				923F4778B3116EBDC9D56980 /* it2_git_state.py in Resources */,
 				A4DA57992DB5D9D843661F94 /* it2-remote in Resources */,
+				5090FF6A0DC1000D6B04A388 /* browser-automation.js in Resources */,
+				7200B1B4D09B138794203AF4 /* browser-automation-evaluate.js in Resources */,
+				391EB304E405C165D9B1A2D9 /* it2-browser-mcp in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -18686,6 +18789,8 @@
 				72386C923E6555FC1BEE219E /* it2_git_state.py in Resources */,
 				9EC3C7C85EB065688CB08F0C /* it2-remote in Resources */,
 				F5323A214C7408AEE4705371 /* FileWorkspaceUI in Resources */,
+				B58DB898129BDAD02EB5DACD /* browser-automation.js in Resources */,
+				D1BB6C6734D96E229358E32A /* browser-automation-evaluate.js in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -18717,6 +18822,9 @@
 				A6A5BDFC2A070C3D00F5FD44 /* Assets.xcassets in Resources */,
 				A618692D2A0814C50052487D /* ImportingWindowController.xib in Resources */,
 				A6A5BDFF2A070C3D00F5FD44 /* MainMenu.xib in Resources */,
+				420E48A5AA95834B1737EC6C /* browser-automation.js in Resources */,
+				E6214765646636BFE52C6DB4 /* browser-automation-evaluate.js in Resources */,
+				98082DE078825E9668D558F4 /* it2-browser-mcp in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -18946,6 +19054,8 @@
 				DADD9F9FCAC79239898CA963 /* AgentHookAddress.swift in Sources */,
 				26EB541CEAA6EC4E871C9D9B /* AgentStatusBackend.swift in Sources */,
 				5DF2A2CA4FCF770F809772A9 /* HandleAgentHookCommand.swift in Sources */,
+				21408988405564F3724D2DC9 /* BrowserCommand.swift in Sources */,
+				37CCBFEEB3D839597DF3D027 /* BrowserClient.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -20786,6 +20896,11 @@
 				7EEE54D6E32CB7E497ED532B /* iTermFileUIExportController.swift in Sources */,
 				6E5361313B47EF6E9CA7555A /* iTermFileUIImagePicker.swift in Sources */,
 				C7DEE269286227A4FC15B024 /* iTermGitWorktreeRemover.swift in Sources */,
+				14254E9E59FB9EE5F01D4EC5 /* iTermSidebarWorkspaceState.swift in Sources */,
+				51B8BA5B76869C7530B575C6 /* iTermSidebarWorkspaceView.swift in Sources */,
+				6DC985DFF3F84BB6607FE563 /* iTermBrowserAutomationRequest.swift in Sources */,
+				8E74403A591C2E3643DD0F9B /* iTermBrowserAutomationBroker.swift in Sources */,
+				3B948BD99A9A3AB1E57C1AA4 /* iTermSidebarWorkspaceContentStore.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

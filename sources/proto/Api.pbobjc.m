@@ -32,6 +32,8 @@ GPBObjCClassDeclaration(ITMActivateRequest_App);
 GPBObjCClassDeclaration(ITMActivateResponse);
 GPBObjCClassDeclaration(ITMBroadcastDomain);
 GPBObjCClassDeclaration(ITMBroadcastDomainsChangedNotification);
+GPBObjCClassDeclaration(ITMBrowserRequest);
+GPBObjCClassDeclaration(ITMBrowserResponse);
 GPBObjCClassDeclaration(ITMCellStyle);
 GPBObjCClassDeclaration(ITMCloseRequest);
 GPBObjCClassDeclaration(ITMCloseRequest_CloseSessions);
@@ -569,6 +571,7 @@ BOOL ITMImagePlaceholderType_IsValidValue(int32_t value__) {
 @dynamic invokeFunctionRequest;
 @dynamic listPromptsRequest;
 @dynamic screenshotRequest;
+@dynamic browserRequest;
 
 typedef struct ITMClientOriginatedMessage__storage_ {
   uint32_t _has_storage_[2];
@@ -607,6 +610,7 @@ typedef struct ITMClientOriginatedMessage__storage_ {
   ITMInvokeFunctionRequest *invokeFunctionRequest;
   ITMListPromptsRequest *listPromptsRequest;
   ITMScreenshotRequest *screenshotRequest;
+  ITMBrowserRequest *browserRequest;
   int64_t id_p;
 } ITMClientOriginatedMessage__storage_;
 
@@ -940,6 +944,15 @@ typedef struct ITMClientOriginatedMessage__storage_ {
         .flags = GPBFieldOptional,
         .dataType = GPBDataTypeMessage,
       },
+      {
+        .name = "browserRequest",
+        .dataTypeSpecific.clazz = GPBObjCClass(ITMBrowserRequest),
+        .number = ITMClientOriginatedMessage_FieldNumber_BrowserRequest,
+        .hasIndex = -1,
+        .offset = (uint32_t)offsetof(ITMClientOriginatedMessage__storage_, browserRequest),
+        .flags = GPBFieldOptional,
+        .dataType = GPBDataTypeMessage,
+      },
     };
     GPBDescriptor *localDescriptor =
         [GPBDescriptor allocDescriptorForClass:[ITMClientOriginatedMessage class]
@@ -1012,6 +1025,7 @@ void ITMClientOriginatedMessage_ClearSubmessageOneOfCase(ITMClientOriginatedMess
 @dynamic invokeFunctionResponse;
 @dynamic listPromptsResponse;
 @dynamic screenshotResponse;
+@dynamic browserResponse;
 @dynamic notification;
 
 typedef struct ITMServerOriginatedMessage__storage_ {
@@ -1052,6 +1066,7 @@ typedef struct ITMServerOriginatedMessage__storage_ {
   ITMInvokeFunctionResponse *invokeFunctionResponse;
   ITMListPromptsResponse *listPromptsResponse;
   ITMScreenshotResponse *screenshotResponse;
+  ITMBrowserResponse *browserResponse;
   ITMNotification *notification;
   int64_t id_p;
 } ITMServerOriginatedMessage__storage_;
@@ -1396,6 +1411,15 @@ typedef struct ITMServerOriginatedMessage__storage_ {
         .dataType = GPBDataTypeMessage,
       },
       {
+        .name = "browserResponse",
+        .dataTypeSpecific.clazz = GPBObjCClass(ITMBrowserResponse),
+        .number = ITMServerOriginatedMessage_FieldNumber_BrowserResponse,
+        .hasIndex = -1,
+        .offset = (uint32_t)offsetof(ITMServerOriginatedMessage__storage_, browserResponse),
+        .flags = GPBFieldOptional,
+        .dataType = GPBDataTypeMessage,
+      },
+      {
         .name = "notification",
         .dataTypeSpecific.clazz = GPBObjCClass(ITMNotification),
         .number = ITMServerOriginatedMessage_FieldNumber_Notification,
@@ -1434,6 +1458,201 @@ void ITMServerOriginatedMessage_ClearSubmessageOneOfCase(ITMServerOriginatedMess
   GPBOneofDescriptor *oneof = [descriptor.oneofs objectAtIndex:0];
   GPBClearOneof(message, oneof);
 }
+#pragma mark - ITMBrowserRequest
+
+@implementation ITMBrowserRequest
+
+@dynamic hasOriginSessionId, originSessionId;
+@dynamic hasBrowserSessionId, browserSessionId;
+@dynamic hasAction, action;
+@dynamic hasArgumentsJson, argumentsJson;
+@dynamic hasTimeoutMs, timeoutMs;
+@dynamic hasRequestId, requestId;
+
+typedef struct ITMBrowserRequest__storage_ {
+  uint32_t _has_storage_[1];
+  uint32_t timeoutMs;
+  NSString *originSessionId;
+  NSString *browserSessionId;
+  NSString *action;
+  NSString *argumentsJson;
+  NSString *requestId;
+} ITMBrowserRequest__storage_;
+
+// This method is threadsafe because it is initially called
+// in +initialize for each subclass.
++ (GPBDescriptor *)descriptor {
+  static GPBDescriptor *descriptor = nil;
+  if (!descriptor) {
+    static GPBMessageFieldDescriptionWithDefault fields[] = {
+      {
+        .defaultValue.valueString = nil,
+        .core.name = "originSessionId",
+        .core.dataTypeSpecific.clazz = Nil,
+        .core.number = ITMBrowserRequest_FieldNumber_OriginSessionId,
+        .core.hasIndex = 0,
+        .core.offset = (uint32_t)offsetof(ITMBrowserRequest__storage_, originSessionId),
+        .core.flags = GPBFieldOptional,
+        .core.dataType = GPBDataTypeString,
+      },
+      {
+        .defaultValue.valueString = nil,
+        .core.name = "browserSessionId",
+        .core.dataTypeSpecific.clazz = Nil,
+        .core.number = ITMBrowserRequest_FieldNumber_BrowserSessionId,
+        .core.hasIndex = 1,
+        .core.offset = (uint32_t)offsetof(ITMBrowserRequest__storage_, browserSessionId),
+        .core.flags = GPBFieldOptional,
+        .core.dataType = GPBDataTypeString,
+      },
+      {
+        .defaultValue.valueString = nil,
+        .core.name = "action",
+        .core.dataTypeSpecific.clazz = Nil,
+        .core.number = ITMBrowserRequest_FieldNumber_Action,
+        .core.hasIndex = 2,
+        .core.offset = (uint32_t)offsetof(ITMBrowserRequest__storage_, action),
+        .core.flags = GPBFieldOptional,
+        .core.dataType = GPBDataTypeString,
+      },
+      {
+        .defaultValue.valueString = @"{}",
+        .core.name = "argumentsJson",
+        .core.dataTypeSpecific.clazz = Nil,
+        .core.number = ITMBrowserRequest_FieldNumber_ArgumentsJson,
+        .core.hasIndex = 3,
+        .core.offset = (uint32_t)offsetof(ITMBrowserRequest__storage_, argumentsJson),
+        .core.flags = (GPBFieldFlags)(GPBFieldOptional | GPBFieldHasDefaultValue),
+        .core.dataType = GPBDataTypeString,
+      },
+      {
+        .defaultValue.valueUInt32 = 30000U,
+        .core.name = "timeoutMs",
+        .core.dataTypeSpecific.clazz = Nil,
+        .core.number = ITMBrowserRequest_FieldNumber_TimeoutMs,
+        .core.hasIndex = 4,
+        .core.offset = (uint32_t)offsetof(ITMBrowserRequest__storage_, timeoutMs),
+        .core.flags = (GPBFieldFlags)(GPBFieldOptional | GPBFieldHasDefaultValue),
+        .core.dataType = GPBDataTypeUInt32,
+      },
+      {
+        .defaultValue.valueString = nil,
+        .core.name = "requestId",
+        .core.dataTypeSpecific.clazz = Nil,
+        .core.number = ITMBrowserRequest_FieldNumber_RequestId,
+        .core.hasIndex = 5,
+        .core.offset = (uint32_t)offsetof(ITMBrowserRequest__storage_, requestId),
+        .core.flags = GPBFieldOptional,
+        .core.dataType = GPBDataTypeString,
+      },
+    };
+    GPBDescriptor *localDescriptor =
+        [GPBDescriptor allocDescriptorForClass:[ITMBrowserRequest class]
+                                     rootClass:[ITMApiRoot class]
+                                          file:ITMApiRoot_FileDescriptor()
+                                        fields:fields
+                                    fieldCount:(uint32_t)(sizeof(fields) / sizeof(GPBMessageFieldDescriptionWithDefault))
+                                   storageSize:sizeof(ITMBrowserRequest__storage_)
+                                         flags:(GPBDescriptorInitializationFlags)(GPBDescriptorInitializationFlag_UsesClassRefs | GPBDescriptorInitializationFlag_Proto3OptionalKnown | GPBDescriptorInitializationFlag_FieldsWithDefault)];
+    #if defined(DEBUG) && DEBUG
+      NSAssert(descriptor == nil, @"Startup recursed!");
+    #endif  // DEBUG
+    descriptor = localDescriptor;
+  }
+  return descriptor;
+}
+
+@end
+
+#pragma mark - ITMBrowserResponse
+
+@implementation ITMBrowserResponse
+
+@dynamic hasResultJson, resultJson;
+@dynamic hasErrorCode, errorCode;
+@dynamic hasErrorMessage, errorMessage;
+@dynamic hasPngData, pngData;
+@dynamic capabilitiesArray, capabilitiesArray_Count;
+
+typedef struct ITMBrowserResponse__storage_ {
+  uint32_t _has_storage_[1];
+  NSString *resultJson;
+  NSString *errorCode;
+  NSString *errorMessage;
+  NSData *pngData;
+  NSMutableArray *capabilitiesArray;
+} ITMBrowserResponse__storage_;
+
+// This method is threadsafe because it is initially called
+// in +initialize for each subclass.
++ (GPBDescriptor *)descriptor {
+  static GPBDescriptor *descriptor = nil;
+  if (!descriptor) {
+    static GPBMessageFieldDescription fields[] = {
+      {
+        .name = "resultJson",
+        .dataTypeSpecific.clazz = Nil,
+        .number = ITMBrowserResponse_FieldNumber_ResultJson,
+        .hasIndex = 0,
+        .offset = (uint32_t)offsetof(ITMBrowserResponse__storage_, resultJson),
+        .flags = GPBFieldOptional,
+        .dataType = GPBDataTypeString,
+      },
+      {
+        .name = "errorCode",
+        .dataTypeSpecific.clazz = Nil,
+        .number = ITMBrowserResponse_FieldNumber_ErrorCode,
+        .hasIndex = 1,
+        .offset = (uint32_t)offsetof(ITMBrowserResponse__storage_, errorCode),
+        .flags = GPBFieldOptional,
+        .dataType = GPBDataTypeString,
+      },
+      {
+        .name = "errorMessage",
+        .dataTypeSpecific.clazz = Nil,
+        .number = ITMBrowserResponse_FieldNumber_ErrorMessage,
+        .hasIndex = 2,
+        .offset = (uint32_t)offsetof(ITMBrowserResponse__storage_, errorMessage),
+        .flags = GPBFieldOptional,
+        .dataType = GPBDataTypeString,
+      },
+      {
+        .name = "pngData",
+        .dataTypeSpecific.clazz = Nil,
+        .number = ITMBrowserResponse_FieldNumber_PngData,
+        .hasIndex = 3,
+        .offset = (uint32_t)offsetof(ITMBrowserResponse__storage_, pngData),
+        .flags = GPBFieldOptional,
+        .dataType = GPBDataTypeBytes,
+      },
+      {
+        .name = "capabilitiesArray",
+        .dataTypeSpecific.clazz = Nil,
+        .number = ITMBrowserResponse_FieldNumber_CapabilitiesArray,
+        .hasIndex = GPBNoHasBit,
+        .offset = (uint32_t)offsetof(ITMBrowserResponse__storage_, capabilitiesArray),
+        .flags = GPBFieldRepeated,
+        .dataType = GPBDataTypeString,
+      },
+    };
+    GPBDescriptor *localDescriptor =
+        [GPBDescriptor allocDescriptorForClass:[ITMBrowserResponse class]
+                                     rootClass:[ITMApiRoot class]
+                                          file:ITMApiRoot_FileDescriptor()
+                                        fields:fields
+                                    fieldCount:(uint32_t)(sizeof(fields) / sizeof(GPBMessageFieldDescription))
+                                   storageSize:sizeof(ITMBrowserResponse__storage_)
+                                         flags:(GPBDescriptorInitializationFlags)(GPBDescriptorInitializationFlag_UsesClassRefs | GPBDescriptorInitializationFlag_Proto3OptionalKnown)];
+    #if defined(DEBUG) && DEBUG
+      NSAssert(descriptor == nil, @"Startup recursed!");
+    #endif  // DEBUG
+    descriptor = localDescriptor;
+  }
+  return descriptor;
+}
+
+@end
+
 #pragma mark - ITMInvokeFunctionRequest
 
 @implementation ITMInvokeFunctionRequest
@@ -13365,6 +13584,7 @@ typedef struct ITMListSessionsResponse_Window__storage_ {
 @dynamic hasTabGroupCollapsed, tabGroupCollapsed;
 @dynamic floatingPanesArray, floatingPanesArray_Count;
 @dynamic hasFloatingPanesHidden, floatingPanesHidden;
+@dynamic sidebarSessionsArray, sidebarSessionsArray_Count;
 
 typedef struct ITMListSessionsResponse_Tab__storage_ {
   uint32_t _has_storage_[1];
@@ -13378,6 +13598,7 @@ typedef struct ITMListSessionsResponse_Tab__storage_ {
   NSString *tabGroupName;
   NSString *tabGroupColor;
   NSMutableArray *floatingPanesArray;
+  NSMutableArray *sidebarSessionsArray;
 } ITMListSessionsResponse_Tab__storage_;
 
 // This method is threadsafe because it is initially called
@@ -13493,6 +13714,15 @@ typedef struct ITMListSessionsResponse_Tab__storage_ {
         .offset = 11,  // Stored in _has_storage_ to save space.
         .flags = GPBFieldOptional,
         .dataType = GPBDataTypeBool,
+      },
+      {
+        .name = "sidebarSessionsArray",
+        .dataTypeSpecific.clazz = GPBObjCClass(ITMSessionSummary),
+        .number = ITMListSessionsResponse_Tab_FieldNumber_SidebarSessionsArray,
+        .hasIndex = GPBNoHasBit,
+        .offset = (uint32_t)offsetof(ITMListSessionsResponse_Tab__storage_, sidebarSessionsArray),
+        .flags = GPBFieldRepeated,
+        .dataType = GPBDataTypeMessage,
       },
     };
     GPBDescriptor *localDescriptor =

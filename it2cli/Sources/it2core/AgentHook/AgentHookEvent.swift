@@ -258,7 +258,7 @@ extension AgentHookRunner {
                 // working-because-background session to idle, resurrecting the
                 // false-idle bug.
                 let current = try storedStatus()
-                let running = try AgentHookDetail.backgroundTaskCount(json) ?? current?.backgroundTasks ?? 0
+                let running = AgentHookDetail.backgroundTaskCount(json) ?? current?.backgroundTasks ?? 0
                 // The nudge repeats a turn ending that Stop already reported. When
                 // the tab still shows that ending, leave it: the nudge carries no
                 // message, and re-sending done would replace Stop's with nothing,

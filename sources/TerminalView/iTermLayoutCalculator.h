@@ -28,6 +28,9 @@ typedef struct {
     /// Toolbelt dimensions
     CGFloat toolbeltWidth;
     BOOL shouldShowToolbelt;
+    CGFloat sidebarWorkspaceWidth;
+    BOOL shouldShowSidebarWorkspace;
+    BOOL sidebarWorkspaceExpanded;
 
     /// Independent left project panel. Zero width uses the 220 point default.
     CGFloat projectSidebarWidth;
@@ -87,6 +90,7 @@ typedef struct {
 
     /// Frame for the toolbelt
     CGRect toolbeltFrame;
+    CGRect sidebarWorkspaceFrame;
 
     /// Frame for the tab bar
     CGRect tabBarFrame;

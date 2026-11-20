@@ -31,8 +31,11 @@ final class SocketChannel: APIChannel {
         let key: String?
         switch CookieAuth.policy {
         case .appleScript:
-            socket = try SocketConnection.connect()
+            // Authorization may take longer than the server's idle handshake deadline.
+            // Resolve the advertiser first, then connect only after credentials arrive.
+            let path = SocketConnection.resolvePath()
             (cookie, key) = CookieAuth.getCredentials()
+            socket = try SocketConnection.connect(toPath: path)
         case .agentHook:
             // Credentials first: getting them can wait for the user to answer a consent prompt,
             // and iTerm2 drops a connection that sends nothing for 30 seconds.
@@ -50,6 +53,10 @@ final class SocketChannel: APIChannel {
         }
 
         return SocketChannel(ws: ws)
+    }
+
+    func configureBrowserTimeout(_ timeoutMS: UInt32) {
+        ws.configureBrowserTimeout(timeoutMS)
     }
 
     func send(_ request: ITMClientOriginatedMessage) throws {
