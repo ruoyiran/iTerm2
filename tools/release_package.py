@@ -17,6 +17,8 @@ MACHO_MAGICS = {bytes.fromhex(value) for value in (
     "feedface", "cefaedfe", "feedfacf", "cffaedfe", "cafebabe", "bebafeca",
     "cafebabf", "bfbafeca",
 )}
+DEPENDENCY_SYMBOL_PATHS = ("ThirdParty", "BetterFontPicker", "ColorPicker", "SearchableComboListView",
+                           "submodules/Highlightr", "submodules/SwiftyMarkdown", "submodules/Sparkle", "pwmplugin")
 
 
 def bundle_files(app):
@@ -113,10 +115,28 @@ def prepare_app(app, symbols, dsym_roots=()):
         resolved = destination.resolve()
         if destination.is_symlink() or resolved == source or resolved in source.parents or source in resolved.parents:
             raise ValueError(f"Release symbols overlap an input dSYM: {source}")
+    matching = []
     for source in sources:
-        if not wanted.intersection(binary_uuids(source).items()):
-            continue  # Ignore stale dependency dSYMs from another build.
+        identifiers = binary_uuids(source)
+        if wanted.intersection(identifiers.items()):
+            matching.append((source, identifiers))
+    names = {}
+    for source, identifiers in matching:
+        names.setdefault(source.name, set()).add(tuple(sorted(identifiers.items())))
+    copies = []
+    for source, identifiers in matching:
         destination = symbols / "dSYMs" / source.name
+        if len(names[source.name]) > 1:
+            identity = "_".join(arch + "-" + uuid for arch, uuid in sorted(identifiers.items()))
+            destination = symbols / "dSYMs" / identity / source.name
+        resolved = destination.resolve()
+        if not resolved.is_relative_to(symbols):
+            raise ValueError(f"Release symbols destination is outside the symbols directory: {destination}")
+        if destination.is_symlink() or any(resolved == item or resolved in item.parents or item in resolved.parents
+                                           for item in sources):
+            raise ValueError(f"Release symbols overlap an input dSYM: {destination}")
+        copies.append((source, destination))
+    for source, destination in copies:
         if destination.exists():
             shutil.rmtree(destination)
         shutil.copytree(source, destination)
@@ -172,8 +192,7 @@ def main():
     identity = arguments.sign_identity or (authorities[0] if authorities else "-")
     symbols = arguments.symbols_dir or arguments.app.parent / "ReleaseSymbols"
     repository = Path(__file__).resolve().parents[1]
-    roots = arguments.dsym_root if arguments.dsym_root is not None else [repository / name for name in (
-        "ThirdParty", "BetterFontPicker", "ColorPicker", "SearchableComboListView")]
+    roots = arguments.dsym_root if arguments.dsym_root is not None else [repository / name for name in DEPENDENCY_SYMBOL_PATHS]
     prepare_app(arguments.app, symbols, dsym_roots=roots)
     from build_release import sign_app, verify_app
     sign_app(arguments.app, identity=identity)

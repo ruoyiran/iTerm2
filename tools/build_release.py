@@ -285,11 +285,10 @@ def main():
              f"SYMROOT={cache / 'products'}", f"OBJROOT={cache / 'intermediates'}", "ENABLE_ADDRESS_SANITIZER=NO"],
             cwd=source, log=cache / "build.log")
         app = cache / "products/Deployment/iTerm2.app"
-        from release_package import prepare_app, write_size_report, check_size
+        from release_package import prepare_app, write_size_report, check_size, DEPENDENCY_SYMBOL_PATHS
         symbols = cache / "products/Deployment/ReleaseSymbols"
         print("Archiving release symbols and compacting the application…", flush=True)
-        prepare_app(app, symbols, dsym_roots=[source / name for name in (
-            "ThirdParty", "BetterFontPicker", "ColorPicker", "SearchableComboListView")])
+        prepare_app(app, symbols, dsym_roots=[source / name for name in DEPENDENCY_SYMBOL_PATHS])
         print("Signing and verifying the local release…", flush=True)
         sign_app(app)
         verify_app(app)

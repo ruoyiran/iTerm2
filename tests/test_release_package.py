@@ -212,6 +212,43 @@ class ReleasePackageTests(unittest.TestCase):
             self.assertEqual(set(package.binary_uuids(self.symbols / "unstripped/Contents/MacOS" / name)), {"arm64", "x86_64"})
             subprocess.run([str(path)], check=True)
 
+    def make_same_named_dependency_dsyms(self):
+        other_arch = "arm64" if "x86_64" in package.binary_uuids(self.executable) else "x86_64"
+        source = self.root / "other.c"
+        source.write_text("int main(void) { return 0; }\n")
+        obj, executable = self.root / "other.o", self.root / "other"
+        subprocess.run(["xcrun", "clang", "-arch", other_arch, "-g", "-c", str(source), "-o", str(obj)], check=True)
+        subprocess.run(["xcrun", "clang", "-arch", other_arch, "-g", str(obj), "-o", str(executable)], check=True)
+        dependency = self.root / "dependencies"
+        arm = dependency / "one/helper.dSYM"
+        other = dependency / "two/helper.dSYM"
+        shutil.copytree(self.dsym, arm)
+        other.parent.mkdir(parents=True)
+        subprocess.run(["xcrun", "dsymutil", str(executable), "-o", str(other)], check=True)
+        helper = self.app / "Contents/MacOS/iterm2-keeper-adapter"
+        subprocess.run(["lipo", "-create", str(self.executable), str(executable), "-output", str(helper)], check=True)
+        return dependency, arm, other
+
+    def test_archives_same_named_dsyms_for_both_universal_helper_slices(self):
+        dependency, arm, other = self.make_same_named_dependency_dsyms()
+        package.prepare_app(self.app, self.symbols, dsym_roots=[dependency])
+        archived = list((self.symbols / "dSYMs").rglob('helper.dSYM'))
+        self.assertEqual(len(archived), 2)
+        uuids = {item for path in archived for item in package.binary_uuids(path).items()}
+        self.assertEqual(uuids, set(package.binary_uuids(arm).items()) | set(package.binary_uuids(other).items()))
+
+    def test_rejects_intermediate_symbol_symlink_before_overwriting_another_input(self):
+        dependency, first, second = self.make_same_named_dependency_dsyms()
+        identity = "_".join(arch + "-" + uuid for arch, uuid in sorted(package.binary_uuids(first).items()))
+        output = self.symbols / "dSYMs"
+        output.mkdir(parents=True)
+        (output / identity).symlink_to(second.parent, target_is_directory=True)
+        second.joinpath("marker").write_text("preserve input")
+        before = {p: p.read_bytes() for root in (self.app, first, second) for p in root.rglob("*") if p.is_file()}
+        with self.assertRaisesRegex(ValueError, "overlap|outside"):
+            package.prepare_app(self.app, self.symbols, dsym_roots=[dependency])
+        self.assertTrue(all(path.read_bytes() == data for path, data in before.items()))
+
 
 if __name__ == "__main__":
     unittest.main()
