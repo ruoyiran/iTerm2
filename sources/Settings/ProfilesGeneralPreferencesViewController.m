@@ -905,33 +905,12 @@ static NSString *const iTermProfilePreferencesUpdateSessionName = @"iTermProfile
 }
 
 - (void)updateDownloadBrowserPluginButtonHidden {
-    if (![iTermAdvancedSettingsModel browserProfiles]) {
-        // Browser disabled by user default
-        _downloadBrowserPluginButton.hidden = YES;
-        _revealBrowserPlugin.hidden = YES;
-        _locatePlugin.hidden = _downloadBrowserPluginButton.hidden;
-        return;
-    }
-    if (![[self stringForKey:KEY_CUSTOM_COMMAND] isEqualToString:kProfilePreferenceCommandTypeBrowserValue]) {
-        // Selected type is terminal
-        _downloadBrowserPluginButton.hidden = YES;
-        _revealBrowserPlugin.hidden = YES;
-        _locatePlugin.hidden = _downloadBrowserPluginButton.hidden;
-        return;
-    }
-    // NO here to prevent reentrancy
-    if ([iTermBrowserGateway browserAllowedCheckingIfNot:NO])  {
-        // Plugin already installed
-        _downloadBrowserPluginButton.hidden = YES;
-        _revealBrowserPlugin.hidden = NO;
-        _locatePlugin.hidden = _downloadBrowserPluginButton.hidden;
-        return;
-    }
+    // Native browsing is linked into the main application.
     [_pluginTimer invalidate];
     _pluginTimer = nil;
-    _downloadBrowserPluginButton.hidden = NO;
+    _downloadBrowserPluginButton.hidden = YES;
     _revealBrowserPlugin.hidden = YES;
-    _locatePlugin.hidden = _downloadBrowserPluginButton.hidden;
+    _locatePlugin.hidden = YES;
 }
 
 - (IBAction)revealBrowserPlugin:(id)sender {

@@ -7,6 +7,8 @@ Major New Features:
   Open or close it with the upper-right button.
   Files and web pages share the same tab bar.
   New workspaces start at the minimum width.
+  Web pages open without a separate plugin.
+  The three-dot button opens a tools menu.
 - The project sidebar organizes local folders
   with reusable terminals and a File Tree. Open
   it with the button in the upper-left corner.

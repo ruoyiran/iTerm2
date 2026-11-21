@@ -81,7 +81,8 @@ class iTermSidebarWorkspaceView: NSView, NSTextFieldDelegate {
                           comment: "Button to expand the right workspace"), action: #selector(expand))
         configureButton(moreButton, symbol: .ellipsis, identifier: "SidebarWorkspace.more",
             label: String(localized: "SidebarWorkspace.More", defaultValue: "More Sidebar Tools",
-                          comment: "More tools button beside the Open heading"), action: #selector(showTools), parent: landing)
+                          comment: "More tools button beside the Open heading"), action: #selector(showMoreMenu), parent: landing)
+        moreButton.menu = makeMoreMenu()
 
         addressField.isBezeled = false
         addressField.drawsBackground = false
@@ -302,6 +303,41 @@ class iTermSidebarWorkspaceView: NSView, NSTextFieldDelegate {
         if !text.isEmpty { delegate?.sidebarWorkspaceView(self, navigateToText: text) }
     }
     @objc private func expand() { delegate?.sidebarWorkspaceViewDidRequestExpand(self) }
+    private func makeMoreMenu() -> NSMenu {
+        let menu = NSMenu()
+        let entries: [(String, String, SFSymbol)] = [
+            ("home", String(localized: "SidebarWorkspace.NewTab", defaultValue: "New Tab", comment: "Title and accessibility label for a new sidebar tab"), .plus),
+            ("terminal", String(localized: "SidebarWorkspace.Terminal", defaultValue: "Terminal", comment: "Card that opens a terminal in the sidebar"), .terminal),
+            ("files", String(localized: "SidebarWorkspace.Files", defaultValue: "Files", comment: "Card that opens a file browser in the sidebar"), .folder),
+            ("changes", String(localized: "SidebarWorkspace.Changes", defaultValue: "Changes", comment: "Card that opens repository changes in the sidebar"), .docBadgePlus)
+        ]
+        for (kind, title, symbol) in entries {
+            let item = NSMenuItem(title: title, action: #selector(selectMoreMenuItem(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = kind
+            item.image = NSImage(systemSymbolName: symbol.rawValue, accessibilityDescription: nil)
+            menu.addItem(item)
+        }
+        menu.addItem(.separator())
+        let tools = NSMenuItem(title: String(localized: "SidebarWorkspace.OtherTools", defaultValue: "Other Tools…",
+            comment: "Workspace menu item for the existing iTerm2 Toolbelt"), action: #selector(showTools), keyEquivalent: "")
+        tools.target = self
+        tools.representedObject = "tools"
+        tools.image = NSImage(systemSymbolName: SFSymbol.sidebarRight.rawValue, accessibilityDescription: nil)
+        menu.addItem(tools)
+        return menu
+    }
+
+    @objc private func showMoreMenu() {
+        guard window != nil else { return }
+        moreButton.menu?.popUp(positioning: nil, at: NSPoint(x: 0, y: 0), in: moreButton)
+    }
+
+    @objc private func selectMoreMenuItem(_ sender: NSMenuItem) {
+        guard let kind = sender.representedObject as? String else { return }
+        delegate?.sidebarWorkspaceView(self, createItemOfKind: kind)
+    }
+
     @objc private func showTools() { delegate?.sidebarWorkspaceViewDidRequestTools(self) }
     fileprivate func requestWidth(_ width: CGFloat) {
         guard width.isFinite else { return }

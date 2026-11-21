@@ -155,6 +155,18 @@ final class SidebarWorkspaceViewTests: XCTestCase {
         try XCTUnwrap(button(in: view, identifier: "SidebarWorkspace.more")).performClick(nil)
         XCTAssertEqual(delegate.created, ["terminal", "files", "changes", "home"])
         XCTAssertEqual(delegate.expanded, 1)
+        XCTAssertEqual(delegate.tools, 0)
+        let more = try XCTUnwrap(button(in: view, identifier: "SidebarWorkspace.more"))
+        let menu = try XCTUnwrap(more.menu)
+        XCTAssertTrue(menu.items.contains { $0.representedObject as? String == "files" })
+        XCTAssertTrue(menu.items.contains { $0.representedObject as? String == "terminal" })
+        XCTAssertTrue(menu.items.contains { $0.representedObject as? String == "changes" })
+        for kind in ["home", "terminal", "files", "changes", "tools"] {
+            let item = try XCTUnwrap(menu.items.first { $0.representedObject as? String == kind })
+            let action = try XCTUnwrap(item.action)
+            XCTAssertTrue(NSApp.sendAction(action, to: item.target, from: item))
+        }
+        XCTAssertEqual(delegate.created, ["terminal", "files", "changes", "home", "home", "terminal", "files", "changes"])
         XCTAssertEqual(delegate.tools, 1)
     }
 

@@ -146435,9 +146435,33 @@
         }
       }
     },
+    "PTYSession.BrowserDisabledHeading" : {
+      "comment" : "Heading for a warning that built-in browsing is disabled",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Built-in Browser Disabled"
+          }
+        }
+      }
+    },
+    "PTYSession.BrowserDisabledMessage" : {
+      "comment" : "Warning shown when the built-in browser is disabled in advanced settings",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Built-in browsing is disabled. Enable browser-style profiles in Settings > Advanced and restart iTerm2."
+          }
+        }
+      }
+    },
     "PTYSession.BrowserPluginMissingHeading" : {
       "comment" : "Heading for a warning that the browser plugin is missing",
-      "extractionState" : "extracted_with_value",
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -146485,7 +146509,7 @@
     },
     "PTYSession.BrowserPluginMissingMessage" : {
       "comment" : "Warning that a browser session could not start because the browser plugin is missing",
-      "extractionState" : "extracted_with_value",
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -147685,7 +147709,7 @@
     },
     "PTYSession.Download" : {
       "comment" : "Button that downloads a plugin",
-      "extractionState" : "extracted_with_value",
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -211719,6 +211743,18 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Original contents"
+          }
+        }
+      }
+    },
+    "SidebarWorkspace.OtherTools" : {
+      "comment" : "Workspace menu item for the existing iTerm2 Toolbelt",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Other Tools…"
           }
         }
       }
