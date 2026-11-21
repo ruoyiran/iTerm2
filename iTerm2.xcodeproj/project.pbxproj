@@ -4903,7 +4903,6 @@
 		21408988405564F3724D2DC9 /* BrowserCommand.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8168B67B68A701F54FC3F60D /* BrowserCommand.swift */; };
 		32A6FD8C1D381CC7A048D095 /* it2-browser-mcp in CopyFiles */ = {isa = PBXBuildFile; fileRef = D6E927CED6B4CA20B3EABC7A /* it2-browser-mcp */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 		37CCBFEEB3D839597DF3D027 /* BrowserClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83B39C58D63C67343BD5AA0B /* BrowserClient.swift */; };
-		391EB304E405C165D9B1A2D9 /* it2-browser-mcp in Resources */ = {isa = PBXBuildFile; fileRef = D6E927CED6B4CA20B3EABC7A /* it2-browser-mcp */; };
 		3B948BD99A9A3AB1E57C1AA4 /* iTermSidebarWorkspaceContentStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = D79CEE91CD5FF6E16C8F05D8 /* iTermSidebarWorkspaceContentStore.swift */; };
 		420E48A5AA95834B1737EC6C /* browser-automation.js in Resources */ = {isa = PBXBuildFile; fileRef = D74A6874F6BC097DBB4D6A0C /* browser-automation.js */; };
 		5090FF6A0DC1000D6B04A388 /* browser-automation.js in Resources */ = {isa = PBXBuildFile; fileRef = D74A6874F6BC097DBB4D6A0C /* browser-automation.js */; };
@@ -4911,7 +4910,6 @@
 		6DC985DFF3F84BB6607FE563 /* iTermBrowserAutomationRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = 492A52710F8C07FE879C4C42 /* iTermBrowserAutomationRequest.swift */; };
 		7200B1B4D09B138794203AF4 /* browser-automation-evaluate.js in Resources */ = {isa = PBXBuildFile; fileRef = 5DE067FA67C0D3E94C197FE9 /* browser-automation-evaluate.js */; };
 		8E74403A591C2E3643DD0F9B /* iTermBrowserAutomationBroker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37DAC4A86248B9BBC18CDF38 /* iTermBrowserAutomationBroker.swift */; };
-		98082DE078825E9668D558F4 /* it2-browser-mcp in Resources */ = {isa = PBXBuildFile; fileRef = D6E927CED6B4CA20B3EABC7A /* it2-browser-mcp */; };
 		B58DB898129BDAD02EB5DACD /* browser-automation.js in Resources */ = {isa = PBXBuildFile; fileRef = D74A6874F6BC097DBB4D6A0C /* browser-automation.js */; };
 		D1BB6C6734D96E229358E32A /* browser-automation-evaluate.js in Resources */ = {isa = PBXBuildFile; fileRef = 5DE067FA67C0D3E94C197FE9 /* browser-automation-evaluate.js */; };
 		E6214765646636BFE52C6DB4 /* browser-automation-evaluate.js in Resources */ = {isa = PBXBuildFile; fileRef = 5DE067FA67C0D3E94C197FE9 /* browser-automation-evaluate.js */; };
@@ -18087,7 +18085,6 @@
 				A4DA57992DB5D9D843661F94 /* it2-remote in Resources */,
 				5090FF6A0DC1000D6B04A388 /* browser-automation.js in Resources */,
 				7200B1B4D09B138794203AF4 /* browser-automation-evaluate.js in Resources */,
-				391EB304E405C165D9B1A2D9 /* it2-browser-mcp in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -18824,7 +18821,6 @@
 				A6A5BDFF2A070C3D00F5FD44 /* MainMenu.xib in Resources */,
 				420E48A5AA95834B1737EC6C /* browser-automation.js in Resources */,
 				E6214765646636BFE52C6DB4 /* browser-automation-evaluate.js in Resources */,
-				98082DE078825E9668D558F4 /* it2-browser-mcp in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

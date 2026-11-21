@@ -196,6 +196,21 @@ class ReleasePackageTests(unittest.TestCase):
         package.thin_local_executable(cli, {"arm64", "x86_64"})
         self.assertEqual(cli.read_bytes(), original)
 
+    def test_browser_mcp_matches_app_architecture_and_preserves_universal_symbols(self):
+        other = self.root / "other-architecture"
+        architecture = "arm64" if "x86_64" in package.binary_uuids(self.executable) else "x86_64"
+        subprocess.run(["xcrun", "clang", "-arch", architecture, "-x", "c", "-", "-o", str(other)],
+                       input="int main(void) { return 0; }\n", text=True, check=True)
+        utilities = self.resources / "utilities"
+        utilities.mkdir()
+        helper = utilities / "it2-browser-mcp"
+        subprocess.run(["lipo", "-create", str(self.executable), str(other), "-output", str(helper)], check=True)
+        original = helper.read_bytes()
+        package.prepare_app(self.app, self.symbols)
+        self.assertEqual(set(package.binary_uuids(helper)), set(package.binary_uuids(self.executable)))
+        self.assertEqual((self.symbols / "unstripped/Contents/Resources/utilities/it2-browser-mcp").read_bytes(), original)
+        subprocess.run([str(helper)], check=True)
+
     def test_local_password_adapters_match_the_native_app_architecture(self):
         other = self.root / "other-architecture"
         architecture = "arm64" if "x86_64" in package.binary_uuids(self.executable) else "x86_64"
