@@ -40,7 +40,6 @@ class iTermSidebarWorkspaceView: NSView, NSTextFieldDelegate {
         defaultValue: "Open", comment: "Heading above the sidebar’s Terminal, Files, and Changes cards"))
     private let newTabButton = SidebarChromeButton()
     private let expandButton = SidebarChromeButton()
-    private let toolsButton = SidebarChromeButton()
     private let moreButton = SidebarChromeButton()
     private let resizeHandle = SidebarResizeHandle()
     private var cards: [SidebarChromeButton] = []
@@ -60,6 +59,8 @@ class iTermSidebarWorkspaceView: NSView, NSTextFieldDelegate {
     }
 
     private func configure() {
+        clipsToBounds = true
+        contentHost.clipsToBounds = true
         setAccessibilityLabel(String(localized: "SidebarWorkspace.AccessibilityLabel",
             defaultValue: "Sidebar workspace", comment: "Accessibility label for the right workspace pane"))
         tabStrip.drawsBackground = false
@@ -78,10 +79,6 @@ class iTermSidebarWorkspaceView: NSView, NSTextFieldDelegate {
         configureButton(expandButton, symbol: .arrowUpLeftAndArrowDownRight, identifier: "SidebarWorkspace.expand",
             label: String(localized: "SidebarWorkspace.Expand", defaultValue: "Expand Sidebar",
                           comment: "Button to expand the right workspace"), action: #selector(expand))
-        configureButton(toolsButton, symbol: .sidebarRight, identifier: "SidebarWorkspace.tools",
-            label: String(localized: "SidebarWorkspace.Tools", defaultValue: "Sidebar Tools",
-                          comment: "Button to show sidebar tools"), action: #selector(showTools))
-        toolsButton.roundBackground = true
         configureButton(moreButton, symbol: .ellipsis, identifier: "SidebarWorkspace.more",
             label: String(localized: "SidebarWorkspace.More", defaultValue: "More Sidebar Tools",
                           comment: "More tools button beside the Open heading"), action: #selector(showTools), parent: landing)
@@ -180,6 +177,7 @@ class iTermSidebarWorkspaceView: NSView, NSTextFieldDelegate {
         switch kind {
         case "terminal": return .terminal
         case "files": return .folder
+        case "file": return .docText
         case "changes": return .docBadgePlus
         case "browser": return .globe
         default: return .plus
@@ -199,10 +197,9 @@ class iTermSidebarWorkspaceView: NSView, NSTextFieldDelegate {
         let width = bounds.width
         let padding: CGFloat = width < 400 ? 16 : 22
         let headerHeight: CGFloat = 46
-        toolsButton.frame = NSRect(x: width - 38, y: 7, width: 30, height: 30)
-        expandButton.frame = NSRect(x: width - 72, y: 8, width: 28, height: 28)
-        newTabButton.frame = NSRect(x: width - 104, y: 8, width: 28, height: 28)
-        tabStrip.frame = NSRect(x: 10, y: 7, width: max(0, width - 118), height: 32)
+        expandButton.frame = NSRect(x: width - 38, y: 8, width: 28, height: 28)
+        newTabButton.frame = NSRect(x: width - 70, y: 8, width: 28, height: 28)
+        tabStrip.frame = NSRect(x: 10, y: 7, width: max(0, width - 84), height: 32)
         let tabWidth = min(180, max(112, tabStrip.bounds.width / CGFloat(max(1, tabs.count))))
         for (index, tab) in tabs.enumerated() {
             tab.frame = NSRect(x: CGFloat(index) * (tabWidth + 4), y: 0, width: tabWidth, height: 32)
@@ -238,7 +235,9 @@ class iTermSidebarWorkspaceView: NSView, NSTextFieldDelegate {
 
     override func draw(_ dirtyRect: NSRect) {
         NSColor.textBackgroundColor.setFill()
-        dirtyRect.fill()
+        // AppKit can include sibling regions in a dirty rectangle. Keep the
+        // workspace background from covering the terminal or project sidebar.
+        bounds.intersection(dirtyRect).fill()
         NSColor.separatorColor.setFill()
         NSRect(x: 0, y: 0, width: 1, height: bounds.height).fill()
     }

@@ -347,11 +347,11 @@ typedef struct {
         // The hope is that the window controller will call updateToolbeltProportionsIfNeeded during this spin
         // of the runloop, but if not we'll get it next time 'round.
         [self setToolbeltProportions:[iTermToolbeltView savedProportions]];
-        _toolbelt.autoresizingMask = (NSViewMinXMargin | NSViewHeightSizable);
+        _toolbelt.autoresizingMask = iTermMaskWithoutFixedMarginsOnFlexibleAxes(NSViewMinXMargin | NSViewHeightSizable);
         [self addSubview:_toolbelt];
         [self updateToolbeltForWindow:nil];
-        _sidebarWorkspaceWidth = 480;
-        self.sidebarWorkspace = [[iTermSidebarWorkspaceView alloc] initWithFrame:NSMakeRect(0, 0, 480, NSHeight(frameRect))];
+        _sidebarWorkspaceWidth = 360;
+        self.sidebarWorkspace = [[iTermSidebarWorkspaceView alloc] initWithFrame:NSMakeRect(0, 0, 360, NSHeight(frameRect))];
         self.sidebarWorkspace.hidden = YES;
         self.sidebarWorkspace.autoresizingMask = iTermMaskWithoutFixedMarginsOnFlexibleAxes(NSViewMinXMargin | NSViewHeightSizable);
         [self addSubview:self.sidebarWorkspace];
@@ -1741,7 +1741,7 @@ static NSColor *iTermWindowBorderColorFromSetting(NSString *setting) {
 }
 
 - (void)setSidebarWorkspaceWidth:(CGFloat)width {
-    _sidebarWorkspaceWidth = isfinite(width) ? MIN(720, MAX(360, width)) : 480;
+    _sidebarWorkspaceWidth = isfinite(width) ? MIN(720, MAX(360, width)) : 360;
 }
 
 - (void)constrainToolbeltWidth {
@@ -2449,7 +2449,7 @@ static NSColor *iTermWindowBorderColorFromSetting(NSString *setting) {
     self.leftSidebarToggleButton.foregroundColor = textColor;
     self.rightSidebarToggleButton.foregroundColor = textColor;
     [self.leftSidebarToggleButton setExpanded:!self.projectSidebar.hidden];
-    [self.rightSidebarToggleButton setExpanded:self.rightSidebarVisible];
+    [self.rightSidebarToggleButton setExpanded:self.shouldShowSidebarWorkspace && !self.sidebarWorkspace.hidden];
     if (container != self) { return; }
     if (!_windowNameBesideTabsLabel.hidden && NSMinX(_windowNameBesideTabsLabel.frame) < NSWidth(self.bounds) / 2) {
         _windowNameBesideTabsLabel.frame = NSOffsetRect(_windowNameBesideTabsLabel.frame, 36, 0);

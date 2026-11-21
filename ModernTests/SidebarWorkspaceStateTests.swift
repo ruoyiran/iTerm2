@@ -87,18 +87,18 @@ final class SidebarWorkspaceStateTests: XCTestCase {
     // Non-finite saved widths otherwise poison the split layout with NaN or infinity.
     func testWidthIsSanitizedForRestorationAndInteractiveUpdates() {
         for input in [Double.nan, Double.infinity, -Double.infinity] {
-            XCTAssertEqual(iTermSidebarWorkspaceState(dictionary: ["width": input]).width, 480)
+            XCTAssertEqual(iTermSidebarWorkspaceState(dictionary: ["width": input]).width, 360)
         }
         XCTAssertEqual(iTermSidebarWorkspaceState(dictionary: ["width": 1]).width, 360)
         XCTAssertEqual(iTermSidebarWorkspaceState(dictionary: ["width": 9000]).width, 720)
-        XCTAssertEqual(iTermSidebarWorkspaceState(dictionary: [:]).width, 480)
+        XCTAssertEqual(iTermSidebarWorkspaceState(dictionary: [:]).width, 360)
         let state = iTermSidebarWorkspaceState()
         state.width = -2
         XCTAssertEqual(state.width, 360)
         state.width = 800
         XCTAssertEqual(state.width, 720)
         state.width = .nan
-        XCTAssertEqual(state.width, 480)
+        XCTAssertEqual(state.width, 360)
         XCTAssertFalse(state.visible)
     }
 

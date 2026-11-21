@@ -107,6 +107,7 @@ import AppKit
     func focusQuery(contents: Bool, query: String? = nil) { pendingQueryFocus = contents; pendingQueryText = query; deliverQueryFocus() }
     private func deliverQueryFocus() {
         guard surfaceReady, let renderer = renderer, let contents = pendingQueryFocus else { return }
+        renderer.window?.makeFirstResponder(renderer)
         var payload: [String: Any] = ["contents": contents]
         if let pendingQueryText { payload["query"] = pendingQueryText }
         pendingQueryFocus = nil; pendingQueryText = nil; renderer.send("focusQuery", payload: payload)

@@ -100773,30 +100773,6 @@
         }
       }
     },
-    "FileTree.HideSidebar" : {
-      "comment" : "Tooltip for the top-right sidebar button when the file tree is visible",
-      "extractionState" : "extracted_with_value",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Hide File Tree"
-          }
-        }
-      }
-    },
-    "FileTree.ShowSidebar" : {
-      "comment" : "Tooltip for the top-right sidebar button when the file tree is collapsed",
-      "extractionState" : "extracted_with_value",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Show File Tree"
-          }
-        }
-      }
-    },
     "FileWorkspace.Reload" : {
       "comment" : "Reload a file from disk",
       "extractionState" : "extracted_with_value",
@@ -211651,6 +211627,18 @@
         }
       }
     },
+    "SidebarWorkspace.Hide" : {
+      "comment" : "Command to hide the right workspace",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Hide Workspace"
+          }
+        }
+      }
+    },
     "SidebarWorkspace.LoadingChanges" : {
       "comment" : "Git status loading indicator",
       "extractionState" : "extracted_with_value",
@@ -211791,18 +211779,6 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Terminal"
-          }
-        }
-      }
-    },
-    "SidebarWorkspace.Tools" : {
-      "comment" : "Button to show sidebar tools",
-      "extractionState" : "extracted_with_value",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Sidebar Tools"
           }
         }
       }

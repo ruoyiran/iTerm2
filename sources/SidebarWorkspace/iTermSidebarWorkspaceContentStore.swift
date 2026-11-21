@@ -11,19 +11,33 @@ import AppKit
     func view(for item: iTermSidebarWorkspaceItem, context: iTermFileBrowserContext) -> NSView? {
         switch item.kind {
         case "files":
+            var created = false
             if explorers[item.identifier] == nil {
                 let explorer = iTermFileBrowserCoordinator(native: iTermFileWorkspaceService.bootstrap().coordinator)
                 explorer.applyContext(context)
                 explorer.nativeRequest = { [weak self] request in self?.fileRequest?(request) }
                 explorers[item.identifier] = explorer
+                created = true
             }
             explorers[item.identifier]?.setVisible(item.identifier == visibleIdentifier)
+            if created, let query = item.state["contentQuery"] as? String {
+                explorers[item.identifier]?.controller.focusQuery(contents: true, query: query)
+            }
             return explorers[item.identifier]?.controller.view
         case "changes":
             if changes[item.identifier] == nil { changes[item.identifier] = SidebarGitChangesView(context: context) }
             return changes[item.identifier]
         default: return nil
         }
+    }
+
+    @objc(findInFiles:item:context:)
+    func findInFiles(_ query: String, item: iTermSidebarWorkspaceItem, context: iTermFileBrowserContext) -> NSResponder? {
+        _ = view(for: item, context: context)
+        guard let explorer = explorers[item.identifier] else { return nil }
+        explorer.applyContext(context)
+        explorer.controller.focusQuery(contents: true, query: query)
+        return explorer.controller.preferredFirstResponder
     }
 
     @objc(setVisibleItemIdentifier:)

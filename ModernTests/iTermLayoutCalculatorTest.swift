@@ -12,6 +12,20 @@ import XCTest
 @testable import iTerm2SharedARC
 
 final class iTermLayoutCalculatorTest: XCTestCase {
+    func testDefaultWorkspaceWidthUsesMinimumAndLeavesBothSidebarsSeparate() {
+        var input = makeDefaultInputs()
+        input.contentViewWidth = 1400
+        input.shouldShowProjectSidebar = true
+        input.projectSidebarWidth = 220
+        input.shouldShowSidebarWorkspace = true
+        input.sidebarWorkspaceWidth = 0
+        input.minimumTerminalWidth = 300
+        let result = iTermLayoutCalculator.calculateLayout(with: input)
+        XCTAssertEqual(result.sidebarWorkspaceFrame.width, 360)
+        XCTAssertEqual(result.projectSidebarFrame.width, 220)
+        XCTAssertEqual(result.tabViewFrame.width, 820)
+        XCTAssertFalse(result.projectSidebarFrame.intersects(result.sidebarWorkspaceFrame))
+    }
 
     func testSidebarWorkspaceKeepsPrimaryGeometryAndToolbeltSeparate() {
         var input = makeDefaultInputs()

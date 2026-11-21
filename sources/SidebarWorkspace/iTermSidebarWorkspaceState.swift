@@ -67,7 +67,7 @@ class iTermSidebarWorkspaceItem: NSObject {
 /// Per-primary-tab workspace state. Geometry is bounded again by the window layout owner.
 @objcMembers
 class iTermSidebarWorkspaceState: NSObject {
-    static let defaultWidth: CGFloat = 480
+    static let defaultWidth: CGFloat = 360
     static let minimumWidth: CGFloat = 360
     static let maximumWidth: CGFloat = 720
 

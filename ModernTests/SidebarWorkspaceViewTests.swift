@@ -5,6 +5,26 @@ import XCTest
 #endif
 
 final class SidebarWorkspaceViewTests: XCTestCase {
+    func testBackgroundDrawingStaysWithinWorkspaceBounds() throws {
+        let bitmap = try XCTUnwrap(NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 400, pixelsHigh: 100,
+            bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+            colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0))
+        let context = try XCTUnwrap(NSGraphicsContext(bitmapImageRep: bitmap))
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = context
+        NSColor.red.setFill()
+        NSRect(x: 0, y: 0, width: 400, height: 100).fill()
+        let transform = NSAffineTransform()
+        transform.translateX(by: 200, yBy: 0)
+        transform.concat()
+        let workspace = iTermSidebarWorkspaceView(frame: NSRect(x: 0, y: 0, width: 100, height: 100))
+        workspace.draw(NSRect(x: -200, y: 0, width: 400, height: 100))
+        NSGraphicsContext.restoreGraphicsState()
+        let outside = try XCTUnwrap(bitmap.colorAt(x: 100, y: 50)?.usingColorSpace(.deviceRGB))
+        XCTAssertGreaterThan(outside.redComponent - outside.greenComponent, 0.9,
+                             "Workspace repaint must not cover the adjacent project or terminal area")
+    }
+
     override func setUp() {
         super.setUp()
         _ = NSApplication.shared
@@ -132,7 +152,7 @@ final class SidebarWorkspaceViewTests: XCTestCase {
         }
         try XCTUnwrap(button(in: view, identifier: "SidebarWorkspace.newTab")).performClick(nil)
         try XCTUnwrap(button(in: view, identifier: "SidebarWorkspace.expand")).performClick(nil)
-        try XCTUnwrap(button(in: view, identifier: "SidebarWorkspace.tools")).performClick(nil)
+        try XCTUnwrap(button(in: view, identifier: "SidebarWorkspace.more")).performClick(nil)
         XCTAssertEqual(delegate.created, ["terminal", "files", "changes", "home"])
         XCTAssertEqual(delegate.expanded, 1)
         XCTAssertEqual(delegate.tools, 1)

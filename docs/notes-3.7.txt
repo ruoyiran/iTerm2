@@ -4,9 +4,9 @@ Major New Features:
 - Sidebar Workspace keeps web pages, terminals,
   files, and local Git changes beside your main
   terminal. Each main tab keeps its own workspace.
-  Open it with the upper-right sidebar button.
-  Right-click that button to return to Workspace
-  after switching to the existing Toolbelt.
+  Open or close it with the upper-right button.
+  Files and web pages share the same tab bar.
+  New workspaces start at the minimum width.
 - The project sidebar organizes local folders
   with reusable terminals and a File Tree. Open
   it with the button in the upper-left corner.

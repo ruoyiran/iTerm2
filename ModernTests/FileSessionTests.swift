@@ -685,6 +685,34 @@ final class FileSessionTests: XCTestCase {
     }
 
     #if canImport(iTerm2SharedARC)
+    func testFindInFilesKeepsSearchInVisibleUnifiedWorkspace() throws {
+        try OnscreenTestGate.skipUnlessEnabled()
+        let files = try Fixture(resourceDirectory: Bundle.main.resourceURL?.appendingPathComponent("FileWorkspaceUI"))
+        let window = TerminalWindowTestFixture()
+        defer { window.close(); files.cleanup() }
+        window.window.setFrame(NSRect(x: 50, y: 50, width: 1200, height: 800), display: true)
+        let tab = try XCTUnwrap(window.terminal.currentTab())
+        let pane = files.open(StableSessionID.generate())
+        let session = try XCTUnwrap(PTYSession.fileSession(with: pane, profile: tab.activeSession?.profile))
+        window.terminal.setupSession(session, with: nil)
+        tab.installSidebarSession(session)
+        defer { session.terminate() }
+        window.terminal.selectSidebarSession(session)
+        XCTAssertTrue(window.terminal.find(inWorkspaceFiles: "original", from: session))
+        let root = try XCTUnwrap(window.window.contentView)
+        XCTAssertEqual(root.value(forKey: "shouldShowSidebarWorkspace") as? Bool, true)
+        XCTAssertEqual(root.value(forKey: "shouldShowToolbelt") as? Bool, false)
+        let selected = try XCTUnwrap(tab.sidebarWorkspaceState.items.first { $0.identifier == tab.sidebarWorkspaceState.selectedIdentifier })
+        XCTAssertEqual(selected.kind, "files")
+        XCTAssertEqual(selected.state["rootDirectory"] as? String, files.root.path)
+        XCTAssertEqual(selected.state["contentQuery"] as? String, "original")
+        let workspace = try XCTUnwrap(root.value(forKey: "sidebarWorkspace") as? NSView)
+        let focused = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            (window.window.firstResponder as? NSView)?.isDescendant(of: workspace) == true
+        }, object: nil)
+        wait(for: [focused], timeout: 15)
+    }
+
     func testSidebarFileClosePreparesNativeDecisionBeforeSaveOrDiscard() throws {
         try OnscreenTestGate.skipUnlessEnabled()
         for direct in [false, true] {

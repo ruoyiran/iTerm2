@@ -344,6 +344,7 @@ deferringExpansion:(BOOL)deferExpansion;
 - (void)refreshSidebarWorkspace;
 - (void)showSidebarWorkspace:(id)sender;
 + (NSDictionary *)localSidebarTerminalProfile:(NSDictionary *)profile;
++ (NSDictionary *)sidebarBrowserProfile:(NSDictionary *)profile url:(NSURL *)url;
 - (iTermBrowserWebView *)openSidebarPopupWithURL:(NSURL *)url
                                  originSession:(PTYSession *)originSession
                                  configuration:(WKWebViewConfiguration *)configuration;

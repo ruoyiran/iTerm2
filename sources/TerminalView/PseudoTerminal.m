@@ -1343,9 +1343,8 @@ ITERM_WEAKLY_REFERENCEABLE
 }
 
 - (void)rootTerminalViewToggleFileTree {
-    if (_sidebarUsesTools) {
-        _contentView.shouldShowToolbelt = !_contentView.shouldShowToolbelt;
-        [self repositionWidgets];
+    if (_sidebarUsesTools || _contentView.shouldShowToolbelt) {
+        [self showSidebarWorkspace:nil];
     } else {
         self.currentTab.sidebarWorkspaceState.visible = !self.currentTab.sidebarWorkspaceState.visible;
         if (!self.currentTab.sidebarWorkspaceState.visible) {
@@ -1370,7 +1369,8 @@ ITERM_WEAKLY_REFERENCEABLE
     return [[[iTermFileBrowserContext alloc] initWithRootDirectory:root
         projectIdentifier:[NSString castFrom:state[@"projectIdentifier"]] ?: tab.projectIdentifier ?: @""
         worktreeIdentifier:[NSString castFrom:state[@"worktreeIdentifier"]] ?: @""
-        generation:0 showsHiddenFiles:NO showsGitIgnoredFiles:NO] autorelease];
+        generation:0 showsHiddenFiles:[state[@"showsHiddenFiles"] boolValue]
+        showsGitIgnoredFiles:[state[@"showsGitIgnoredFiles"] boolValue]] autorelease];
 }
 
 - (void)refreshSidebarWorkspace {
@@ -1435,13 +1435,41 @@ ITERM_WEAKLY_REFERENCEABLE
     [_sidebarContentStore pruneKeepingItemIdentifiers:live];
     [self repositionWidgets];
     if (session) {
-        [session setScreenSize:session.view.bounds.size parent:self];
+        [tab fitSessionToCurrentViewSize:session];
         [session.fileSessionHost updateVisibility];
     }
     _refreshingSidebarWorkspace = NO;
 }
 
+- (iTermSidebarWorkspaceItem *)sidebarFileBrowserItemInTab:(PTYTab *)tab context:(iTermFileBrowserContext *)context {
+    iTermSidebarWorkspaceState *state = tab.sidebarWorkspaceState;
+    for (iTermSidebarWorkspaceItem *item in state.items) {
+        if ([item.kind isEqualToString:@"files"] && [item.state[@"rootDirectory"] isEqual:context.rootDirectory] &&
+            [([NSString castFrom:item.state[@"projectIdentifier"]] ?: @"") isEqual:context.projectIdentifier] &&
+            [([NSString castFrom:item.state[@"worktreeIdentifier"]] ?: @"") isEqual:context.worktreeIdentifier]) { return item; }
+    }
+    NSDictionary *metadata = @{ @"rootDirectory": context.rootDirectory,
+        @"projectIdentifier": context.projectIdentifier, @"worktreeIdentifier": context.worktreeIdentifier,
+        @"showsHiddenFiles": @(context.showsHiddenFiles), @"showsGitIgnoredFiles": @(context.showsGitIgnoredFiles) };
+    iTermSidebarWorkspaceItem *item = [[[iTermSidebarWorkspaceItem alloc]
+        initWithIdentifier:[NSUUID UUID].UUIDString
+        title:NSLocalizedStringWithDefaultValue(@"SidebarWorkspace.Files", nil, [NSBundle mainBundle], @"Files", @"File browser sidebar tab title")
+        kind:@"files" sessionIdentifier:nil state:metadata] autorelease];
+    [state appendItem:item];
+    return item;
+}
+
+- (void)adoptVisibleFileTreeIntoSidebarWorkspace:(PTYTab *)tab {
+    if (!_contentView.shouldShowToolbelt || !tab) { return; }
+    iTermFileBrowserContext *context = _contentView.toolbelt.fileBrowserContext ?: [self sidebarContextForItem:nil tab:tab];
+    iTermSidebarWorkspaceState *state = tab.sidebarWorkspaceState;
+    NSString *selected = [[state.selectedIdentifier copy] autorelease];
+    [self sidebarFileBrowserItemInTab:tab context:context];
+    if (selected) { [state selectItemWithIdentifier:selected]; }
+}
+
 - (void)showSidebarWorkspace:(id)sender {
+    [self adoptVisibleFileTreeIntoSidebarWorkspace:self.currentTab];
     _sidebarUsesTools = NO;
     _contentView.shouldShowToolbelt = NO;
     self.currentTab.sidebarWorkspaceState.visible = YES;
@@ -1468,6 +1496,7 @@ ITERM_WEAKLY_REFERENCEABLE
     }
     tab.sidebarWorkspaceState.visible = YES;
     if (tab != self.currentTab) { [_contentView.tabView selectTabViewItem:tab.tabViewItem]; }
+    [self adoptVisibleFileTreeIntoSidebarWorkspace:tab];
     _sidebarUsesTools = NO;
     _contentView.shouldShowToolbelt = NO;
     [self refreshSidebarWorkspace];
@@ -1498,14 +1527,19 @@ ITERM_WEAKLY_REFERENCEABLE
     completion(closed && ![tab sessionIsSidebar:session]);
 }
 
++ (NSDictionary *)sidebarBrowserProfile:(NSDictionary *)base url:(NSURL *)url {
+    NSMutableDictionary *profile = [[[ProfileModel profileForCreatingNewSessionBasedOn:base] mutableCopy] autorelease];
+    profile[KEY_CUSTOM_COMMAND] = kProfilePreferenceCommandTypeBrowserValue;
+    profile[KEY_INITIAL_URL] = url.absoluteString ?: @"about:blank";
+    return profile;
+}
+
 - (PTYSession *)createSidebarBrowserWithURL:(NSURL *)url originSession:(PTYSession *)origin configuration:(WKWebViewConfiguration *)configuration completion:(void (^)(PTYSession *, NSError *))completion {
     PTYTab *tab = [self tabForSession:origin];
     if (_closing || _deallocing || !origin || origin.exited || ![self.tabs containsObject:tab]) {
         completion(nil, [NSError errorWithDomain:@"com.iterm2.sidebar" code:1 userInfo:nil]); return nil;
     }
-    NSMutableDictionary *profile = [[origin.profile mutableCopy] autorelease];
-    profile[KEY_CUSTOM_COMMAND] = kProfilePreferenceCommandTypeBrowserValue;
-    profile[KEY_INITIAL_URL] = url.absoluteString ?: @"about:blank";
+    NSDictionary *profile = [PseudoTerminal sidebarBrowserProfile:origin.profile url:url];
     PTYSession *session = [[self.sessionFactory newSessionWithProfile:profile parent:origin] autorelease];
     [self setupSession:session withSize:nil];
     [tab installSidebarSession:session];
@@ -5683,12 +5717,16 @@ hidingToolbeltShouldResizeWindow:(BOOL)hidingToolbeltShouldResizeWindow
 
 - (BOOL)findInWorkspaceFiles:(NSString *)query fromSession:(PTYSession *)session {
     if (_closing || session != self.currentSession || !session.fileSessionPane) { return NO; }
-    if (![_contentView.toolbelt showingToolWithName:kFileTreeToolName]) {
-        [_contentView.toolbelt toggleToolWithName:kFileTreeToolName];
-    }
-    if (!_contentView.shouldShowToolbelt) { [self rootTerminalViewToggleFileTree]; }
+    PTYTab *tab = [self tabForSession:session];
     iTermFileBrowserContext *context = session.fileSessionPane.descriptor.context;
-    [_contentView.toolbelt.fileTreeView findInFiles:query context:context];
+    iTermSidebarWorkspaceItem *item = [self sidebarFileBrowserItemInTab:tab context:context];
+    NSMutableDictionary *metadata = [[item.state mutableCopy] autorelease];
+    metadata[@"contentQuery"] = query ?: @"";
+    item.state = metadata;
+    [tab.sidebarWorkspaceState selectItemWithIdentifier:item.identifier];
+    [self showSidebarWorkspace:nil];
+    NSResponder *responder = [_sidebarContentStore findInFiles:query ?: @"" item:item context:context];
+    if (responder) { [self.window makeFirstResponder:responder]; }
     return YES;
 }
 
@@ -15301,7 +15339,7 @@ static BOOL iTermApproximatelyEqualRects(NSRect lhs, NSRect rhs, double epsilon)
     }
     PTYSession *sidebar = self.currentTab.selectedSidebarSession;
     if (sidebar && !_contentView.sidebarWorkspace.hidden) {
-        [sidebar setScreenSize:sidebar.view.bounds.size parent:self];
+        [self.currentTab fitSessionToCurrentViewSize:sidebar];
         [sidebar.fileSessionHost updateVisibility];
     }
     for (PTYSession *session in self.allSessions) {
