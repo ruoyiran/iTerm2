@@ -490,7 +490,10 @@ NSString *const SessionViewWasSelectedForInspectionNotification = @"SessionViewW
     NSResponder *prev = self.nextResponder;
     [self setMainResponder:_browserViewController];
     _browserViewController.nextResponder = prev;
-    [self.window makeFirstResponder:_browserViewController];
+    PTYSession *session = [PTYSession castFrom:self.delegate];
+    if (self.window.isKeyWindow && [session.delegate sessionIsActiveInSelectedTab:session]) {
+        [self.window makeFirstResponder:_browserViewController];
+    }
 }
 
 - (BOOL)hasNonTerminalContent { return self.isBrowser || _fileViewController != nil || [(PTYSession *)self.delegate isFileSession]; }

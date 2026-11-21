@@ -29,6 +29,7 @@ struct IT2: ParsableCommand {
             AliasCommand.self,
             App.self,
             Auth.self,
+            Browser.self,
             ClearShortcut.self,
             ConfigPath.self,
             ConfigReload.self,
@@ -69,6 +70,12 @@ public func it2CLIMain() {
 /// driver and the in-process embedding so exit codes and messages stay identical.
 /// `arguments` excludes the executable name.
 func runToExitCode(_ arguments: [String], _ context: IT2Context) -> Int32 {
+    let browserInvocation = arguments.first == "browser" && !it2IsHelpRequest(arguments)
+    let browserErrorOutput = browserInvocation && arguments.contains("mcp") ? context.err : context.out
+    if browserInvocation && context.isRemote {
+        browserErrorOutput(BrowserClientError(code: "unsupported", message: "Browser commands are unavailable over SSH integration. Run locally on your Mac.").json)
+        return 1
+    }
     // Defense in depth for the embedded/over-SSH path: block the whole `auth` subtree by
     // name before parsing, so even a future `auth` subcommand that forgets to conform to
     // RemoteForbiddenCommand cannot be reached by a direct `it2 auth ...` from the remote.
@@ -88,10 +95,21 @@ func runToExitCode(_ arguments: [String], _ context: IT2Context) -> Int32 {
         return 0
     } catch let exit as IT2Exit {
         return exit.code
+    } catch let error as BrowserClientError {
+        browserErrorOutput(error.json)
+        return 1
     } catch let error as IT2Error {
+        if browserInvocation {
+            browserErrorOutput(BrowserClientError.converting(error).json)
+            return error.exitCode
+        }
         context.err(error.displayMessage)
         return error.exitCode
     } catch {
+        if browserInvocation {
+            browserErrorOutput(BrowserClientError(code: "invalid_request", message: IT2.fullMessage(for: error)).json)
+            return 1
+        }
         // ArgumentParser outcomes: --help, --version, validation, unknown command.
         let message = IT2.fullMessage(for: error)
         let exitCode = IT2.exitCode(for: error)

@@ -14,7 +14,8 @@ CMAKE ?= $(HOMEBREW_PREFIX)/bin/cmake
 PKG_CONFIG ?= $(HOMEBREW_PREFIX)/bin/pkg-config
 RUSTUP ?= $(shell PATH="$(ORIG_PATH):$(HOME)/.cargo/bin" which rustup 2>/dev/null)
 DEPLOYMENT_TARGET=13.0
-RELEASE_MAX_MIB ?= 85
+# Includes the native browser MCP helper bundled with the local CLI.
+RELEASE_MAX_MIB ?= 90
 
 # Build product directory: defaults to xcodebuild's SYMROOT.
 # Override with BUILD_DIR=/path/to/dir on the command line.
@@ -651,7 +652,7 @@ companion-iphone-archive: force
 
 it2cli: force
 	cd it2cli/ && UNIVERSAL=$(UNIVERSAL) ./build.sh
-	cp it2cli/.build/release/it2 it2cli/bin
+	cp it2cli/.build/release/it2 it2cli/.build/release/it2-browser-mcp it2cli/bin
 
 # Limit PATH to system directories so SwiftPM clones dependencies with
 # /usr/bin/git. The PATH set at the top of this file puts Homebrew first, and

@@ -20,6 +20,7 @@
 @class PTYTab;
 @class SessionView;
 @class SolidColorView;
+@class iTermSidebarWorkspaceState;
 @class TmuxController;
 
 extern NSString *const iTermTabDidChangeWindowNotification;
@@ -298,6 +299,19 @@ typedef NS_ENUM(NSInteger, iTermHiddenFloatingPanesActivity) {
 
 // All sessions: the tiled ones first, then the floating ones back to front.
 - (NSArray<PTYSession *> *)sessions;
+
+// Lifecycle/API enumeration, including sessions hosted outside the primary split tree.
+- (NSArray<PTYSession *> *)allSessions;
+@property(nonatomic, readonly) NSArray<PTYSession *> *sidebarSessions;
+@property(nonatomic, readonly) PTYSession *selectedSidebarSession;
+@property(nonatomic, strong) iTermSidebarWorkspaceState *sidebarWorkspaceState;
+- (BOOL)sessionIsSidebar:(PTYSession *)session;
+- (void)installSidebarSession:(PTYSession *)session;
++ (NSDictionary *)arrangementWithoutSidebarSessions:(NSDictionary *)arrangement;
+// Sidebar records use the existing session arrangement leaf and stay outside the split tree.
++ (NSDictionary *)sidebarSessionRecordForSessionWithGUID:(NSString *)guid inArrangement:(NSDictionary *)arrangement;
+- (void)addRevivedSidebarSession:(PTYSession *)session fromArrangement:(NSDictionary *)arrangement;
+- (PTYSession *)addArchivedSidebarSessionWithGUID:(NSString *)guid fromArrangement:(NSDictionary *)arrangement;
 
 // Sessions in the tiled layout only. May be empty in a tmux tab whose window has only floating
 // panes.

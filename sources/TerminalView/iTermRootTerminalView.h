@@ -18,6 +18,7 @@
 @protocol iTermTabBarControlViewDelegate;
 @class iTermToolbeltView;
 @class iTermProjectSidebarView;
+@class iTermSidebarWorkspaceView;
 @protocol iTermToolbeltViewDelegate;
 @protocol PSMTabBarControlDelegate;
 @protocol PSMPUAFontProvider;
@@ -120,6 +121,12 @@ extern const NSInteger iTermRootTerminalViewWindowNumberLabelWidth;
 
 // Toolbelt view. Goes on the right side of the terminal window, if visible.
 @property(nonatomic, readonly) iTermToolbeltView *toolbelt;
+@property(nonatomic, readonly) iTermSidebarWorkspaceView *sidebarWorkspace;
+@property(nonatomic) BOOL shouldShowSidebarWorkspace;
+@property(nonatomic) CGFloat sidebarWorkspaceWidth;
+@property(nonatomic) BOOL sidebarWorkspaceExpanded;
+@property(nonatomic, readonly) BOOL rightSidebarVisible;
+@property(nonatomic, readonly) CGFloat effectiveRightSidebarWidth;
 
 // Should the toolbelt be visible?
 @property(nonatomic) BOOL shouldShowToolbelt;

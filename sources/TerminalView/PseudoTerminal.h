@@ -335,6 +335,20 @@ deferringExpansion:(BOOL)deferExpansion;
 // Accessor for toolbelt view.
 - (iTermToolbeltView *)toolbelt;
 
+// The sidebar is scoped to the tab containing originSession, regardless of focus.
+- (void)openSidebarBrowserWithURL:(NSURL *)url
+                   originSession:(PTYSession *)originSession
+                      completion:(void (^)(PTYSession *, NSError *))completion;
+- (void)selectSidebarSession:(PTYSession *)session;
+- (void)closeSidebarSession:(PTYSession *)session completion:(void (^)(BOOL))completion;
+- (void)refreshSidebarWorkspace;
+- (void)showSidebarWorkspace:(id)sender;
++ (NSDictionary *)localSidebarTerminalProfile:(NSDictionary *)profile;
++ (NSDictionary *)sidebarBrowserProfile:(NSDictionary *)profile url:(NSURL *)url;
+- (iTermBrowserWebView *)openSidebarPopupWithURL:(NSURL *)url
+                                 originSession:(PTYSession *)originSession
+                                 configuration:(WKWebViewConfiguration *)configuration;
+
 // Tries to grow (or shrink, for negative values) the toolbelt. Returns the amount it was actually
 // grown by, in case it hits a limit.
 - (CGFloat)growToolbeltBy:(CGFloat)diff;

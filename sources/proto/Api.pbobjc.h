@@ -32,6 +32,8 @@ CF_EXTERN_C_BEGIN
 @class ITMActivateResponse;
 @class ITMBroadcastDomain;
 @class ITMBroadcastDomainsChangedNotification;
+@class ITMBrowserRequest;
+@class ITMBrowserResponse;
 @class ITMCellStyle;
 @class ITMCloseRequest;
 @class ITMCloseRequest_CloseSessions;
@@ -1134,6 +1136,7 @@ typedef GPB_ENUM(ITMClientOriginatedMessage_FieldNumber) {
   ITMClientOriginatedMessage_FieldNumber_InvokeFunctionRequest = 132,
   ITMClientOriginatedMessage_FieldNumber_ListPromptsRequest = 133,
   ITMClientOriginatedMessage_FieldNumber_ScreenshotRequest = 134,
+  ITMClientOriginatedMessage_FieldNumber_BrowserRequest = 137,
 };
 
 typedef GPB_ENUM(ITMClientOriginatedMessage_Submessage_OneOfCase) {
@@ -1173,6 +1176,7 @@ typedef GPB_ENUM(ITMClientOriginatedMessage_Submessage_OneOfCase) {
   ITMClientOriginatedMessage_Submessage_OneOfCase_InvokeFunctionRequest = 132,
   ITMClientOriginatedMessage_Submessage_OneOfCase_ListPromptsRequest = 133,
   ITMClientOriginatedMessage_Submessage_OneOfCase_ScreenshotRequest = 134,
+  ITMClientOriginatedMessage_Submessage_OneOfCase_BrowserRequest = 137,
 };
 
 /**
@@ -1256,6 +1260,8 @@ GPB_FINAL @interface ITMClientOriginatedMessage : GPBMessage
 
 @property(nonatomic, readwrite, strong, null_resettable) ITMScreenshotRequest *screenshotRequest;
 
+@property(nonatomic, readwrite, strong, null_resettable) ITMBrowserRequest *browserRequest;
+
 @end
 
 /**
@@ -1303,6 +1309,7 @@ typedef GPB_ENUM(ITMServerOriginatedMessage_FieldNumber) {
   ITMServerOriginatedMessage_FieldNumber_InvokeFunctionResponse = 132,
   ITMServerOriginatedMessage_FieldNumber_ListPromptsResponse = 133,
   ITMServerOriginatedMessage_FieldNumber_ScreenshotResponse = 134,
+  ITMServerOriginatedMessage_FieldNumber_BrowserResponse = 137,
   ITMServerOriginatedMessage_FieldNumber_Notification = 1000,
 };
 
@@ -1344,6 +1351,7 @@ typedef GPB_ENUM(ITMServerOriginatedMessage_Submessage_OneOfCase) {
   ITMServerOriginatedMessage_Submessage_OneOfCase_InvokeFunctionResponse = 132,
   ITMServerOriginatedMessage_Submessage_OneOfCase_ListPromptsResponse = 133,
   ITMServerOriginatedMessage_Submessage_OneOfCase_ScreenshotResponse = 134,
+  ITMServerOriginatedMessage_Submessage_OneOfCase_BrowserResponse = 137,
   ITMServerOriginatedMessage_Submessage_OneOfCase_Notification = 1000,
 };
 
@@ -1432,6 +1440,8 @@ GPB_FINAL @interface ITMServerOriginatedMessage : GPBMessage
 
 @property(nonatomic, readwrite, strong, null_resettable) ITMScreenshotResponse *screenshotResponse;
 
+@property(nonatomic, readwrite, strong, null_resettable) ITMBrowserResponse *browserResponse;
+
 /** This is the only response that is sent spontaneously. The 'id' field will not be set. */
 @property(nonatomic, readwrite, strong, null_resettable) ITMNotification *notification;
 
@@ -1441,6 +1451,83 @@ GPB_FINAL @interface ITMServerOriginatedMessage : GPBMessage
  * Clears whatever value was set for the oneof 'submessage'.
  **/
 void ITMServerOriginatedMessage_ClearSubmessageOneOfCase(ITMServerOriginatedMessage *message);
+
+#pragma mark - ITMBrowserRequest
+
+typedef GPB_ENUM(ITMBrowserRequest_FieldNumber) {
+  ITMBrowserRequest_FieldNumber_OriginSessionId = 1,
+  ITMBrowserRequest_FieldNumber_BrowserSessionId = 2,
+  ITMBrowserRequest_FieldNumber_Action = 3,
+  ITMBrowserRequest_FieldNumber_ArgumentsJson = 4,
+  ITMBrowserRequest_FieldNumber_TimeoutMs = 5,
+  ITMBrowserRequest_FieldNumber_RequestId = 6,
+};
+
+/**
+ * Authenticated, explicitly scoped browser automation. No active/all target aliases.
+ **/
+GPB_FINAL @interface ITMBrowserRequest : GPBMessage
+
+@property(nonatomic, readwrite, copy, null_resettable) NSString *originSessionId;
+/** Test to see if @c originSessionId has been set. */
+@property(nonatomic, readwrite) BOOL hasOriginSessionId;
+
+@property(nonatomic, readwrite, copy, null_resettable) NSString *browserSessionId;
+/** Test to see if @c browserSessionId has been set. */
+@property(nonatomic, readwrite) BOOL hasBrowserSessionId;
+
+@property(nonatomic, readwrite, copy, null_resettable) NSString *action;
+/** Test to see if @c action has been set. */
+@property(nonatomic, readwrite) BOOL hasAction;
+
+@property(nonatomic, readwrite, copy, null_resettable) NSString *argumentsJson;
+/** Test to see if @c argumentsJson has been set. */
+@property(nonatomic, readwrite) BOOL hasArgumentsJson;
+
+@property(nonatomic, readwrite) uint32_t timeoutMs;
+
+@property(nonatomic, readwrite) BOOL hasTimeoutMs;
+/** Client-generated ID used to cancel this operation on the same connection. */
+@property(nonatomic, readwrite, copy, null_resettable) NSString *requestId;
+/** Test to see if @c requestId has been set. */
+@property(nonatomic, readwrite) BOOL hasRequestId;
+
+@end
+
+#pragma mark - ITMBrowserResponse
+
+typedef GPB_ENUM(ITMBrowserResponse_FieldNumber) {
+  ITMBrowserResponse_FieldNumber_ResultJson = 1,
+  ITMBrowserResponse_FieldNumber_ErrorCode = 2,
+  ITMBrowserResponse_FieldNumber_ErrorMessage = 3,
+  ITMBrowserResponse_FieldNumber_PngData = 4,
+  ITMBrowserResponse_FieldNumber_CapabilitiesArray = 5,
+};
+
+GPB_FINAL @interface ITMBrowserResponse : GPBMessage
+
+@property(nonatomic, readwrite, copy, null_resettable) NSString *resultJson;
+/** Test to see if @c resultJson has been set. */
+@property(nonatomic, readwrite) BOOL hasResultJson;
+
+/** Stable code; clients must not match localized error_message text. */
+@property(nonatomic, readwrite, copy, null_resettable) NSString *errorCode;
+/** Test to see if @c errorCode has been set. */
+@property(nonatomic, readwrite) BOOL hasErrorCode;
+
+@property(nonatomic, readwrite, copy, null_resettable) NSString *errorMessage;
+/** Test to see if @c errorMessage has been set. */
+@property(nonatomic, readwrite) BOOL hasErrorMessage;
+
+@property(nonatomic, readwrite, copy, null_resettable) NSData *pngData;
+/** Test to see if @c pngData has been set. */
+@property(nonatomic, readwrite) BOOL hasPngData;
+
+@property(nonatomic, readwrite, strong, null_resettable) NSMutableArray<NSString*> *capabilitiesArray;
+/** The number of items in @c capabilitiesArray without causing the array to be created. */
+@property(nonatomic, readonly) NSUInteger capabilitiesArray_Count;
+
+@end
 
 #pragma mark - ITMInvokeFunctionRequest
 
@@ -5414,6 +5501,7 @@ typedef GPB_ENUM(ITMListSessionsResponse_Tab_FieldNumber) {
   ITMListSessionsResponse_Tab_FieldNumber_TabGroupCollapsed = 11,
   ITMListSessionsResponse_Tab_FieldNumber_FloatingPanesArray = 12,
   ITMListSessionsResponse_Tab_FieldNumber_FloatingPanesHidden = 13,
+  ITMListSessionsResponse_Tab_FieldNumber_SidebarSessionsArray = 14,
 };
 
 GPB_FINAL @interface ITMListSessionsResponse_Tab : GPBMessage
@@ -5481,6 +5569,11 @@ GPB_FINAL @interface ITMListSessionsResponse_Tab : GPBMessage
 @property(nonatomic, readwrite) BOOL floatingPanesHidden;
 
 @property(nonatomic, readwrite) BOOL hasFloatingPanesHidden;
+/** Sidebar sessions belong to this tab but do not participate in its split geometry. */
+@property(nonatomic, readwrite, strong, null_resettable) NSMutableArray<ITMSessionSummary*> *sidebarSessionsArray;
+/** The number of items in @c sidebarSessionsArray without causing the array to be created. */
+@property(nonatomic, readonly) NSUInteger sidebarSessionsArray_Count;
+
 @end
 
 #pragma mark - ITMCreateTabRequest

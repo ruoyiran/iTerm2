@@ -142,7 +142,8 @@ def prepare_app(app, symbols, dsym_roots=()):
         shutil.copytree(source, destination)
 
     (app / "Contents/MacOS/iterm2-test-adapter").unlink(missing_ok=True)
-    local_helpers = {"Contents/Resources/utilities/it2", "Contents/MacOS/iterm2-bitwarden-adapter",
+    local_helpers = {"Contents/Resources/utilities/it2", "Contents/Resources/utilities/it2-browser-mcp",
+                     "Contents/MacOS/iterm2-bitwarden-adapter",
                      "Contents/MacOS/iterm2-keepassxc-adapter", "Contents/MacOS/iterm2-keeper-adapter"}
     for path in binaries:
         before = archive_binary(path, app, symbols)

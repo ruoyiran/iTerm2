@@ -59,6 +59,12 @@ class SocketConnection {
         return conn
     }
 
+    /// Browser waits may exceed the ordinary API transport’s 30-second read timeout.
+    func configureBrowserTimeout(_ timeoutMS: UInt32) {
+        var timeout = timeval(tv_sec: Int(timeoutMS / 1000) + 5, tv_usec: 0)
+        setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
+    }
+
     /// Send raw bytes.
     func send(_ data: Data) throws {
         try data.withUnsafeBytes { buf in
@@ -122,6 +128,7 @@ class SocketConnection {
 
     func disconnect() {
         if fd >= 0 {
+            Darwin.shutdown(fd, SHUT_RDWR)
             Darwin.close(fd)
             fd = -1
         }

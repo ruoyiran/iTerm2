@@ -103,6 +103,12 @@ static NSString* TAB_ARRANGEMENT_GROUP_NAME = @"Tab Group Name";
 static NSString* TAB_ARRANGEMENT_GROUP_COLOR = @"Tab Group Color";
 static NSString* TAB_ARRANGEMENT_GROUP_COLLAPSED = @"Tab Group Collapsed";
 
+// Localization unneeded: persisted arrangement keys.
+static NSString *const TAB_ARRANGEMENT_SIDEBAR_WORKSPACE = @"Sidebar Workspace";
+static NSString *const TAB_ARRANGEMENT_SIDEBAR_SESSIONS = @"Sidebar Sessions";
+static NSString *const SIDEBAR_SESSION_NODE = @"Node";
+static NSString *const SIDEBAR_SESSION_ITEM_IDENTIFIER = @"Item Identifier";
+
 // Floating panes are an additive sibling of the tiled tree. Older builds ignore them.
 NSString *const TAB_ARRANGEMENT_FLOATING_PANES = @"Floating Panes";  // array, back to front
 static NSString *const TAB_ARRANGEMENT_FLOATING_PANES_HIDDEN = @"Floating Panes Hidden";
@@ -165,6 +171,8 @@ static void SetAgainstGrainDim(BOOL isVertical, NSSize *dest, CGFloat value) {
 @end
 
 @implementation PTYTab {
+    NSMutableArray<PTYSession *> *_sidebarSessions;
+    NSMapTable<PTYSession *, NSString *> *_sidebarItemIdentifiers;
     int _activityCounter;
 
     // Not really unique because it starts at 0 when the app is relaunched
@@ -381,24 +389,40 @@ static void SetAgainstGrainDim(BOOL isVertical, NSSize *dest, CGFloat value) {
     return nodes;
 }
 
-// A copy of the arrangement with `transform` applied to the tiled root and to each float's node.
+// Detached session nodes participate in identity, profile, attachment and revival traversals.
++ (NSArray<NSDictionary *> *)detachedNodesInArrangement:(NSDictionary *)arrangement {
+    NSMutableArray<NSDictionary *> *nodes = [[self floatingNodesInArrangement:arrangement] mutableCopy];
+    for (NSDictionary *record in [NSArray castFrom:arrangement[TAB_ARRANGEMENT_SIDEBAR_SESSIONS]]) {
+        NSDictionary *node = [NSDictionary castFrom:[NSDictionary castFrom:record][SIDEBAR_SESSION_NODE]];
+        if (node) { [nodes addObject:node]; }
+    }
+    return nodes;
+}
+
+// A copy with `transform` applied to the tiled root and each detached session's node.
 + (NSDictionary *)arrangement:(NSDictionary *)arrangement
             transformingNodes:(NSDictionary *(^NS_NOESCAPE)(NSDictionary *node))transform {
     NSMutableDictionary *result = [arrangement mutableCopy];
     result[TAB_ARRANGEMENT_ROOT] = transform(arrangement[TAB_ARRANGEMENT_ROOT]);
-    NSArray *records = [NSArray castFrom:arrangement[TAB_ARRANGEMENT_FLOATING_PANES]];
-    if (records) {
-        result[TAB_ARRANGEMENT_FLOATING_PANES] = [records mapWithBlock:^id(id record) {
+    for (NSString *key in @[ TAB_ARRANGEMENT_FLOATING_PANES, TAB_ARRANGEMENT_SIDEBAR_SESSIONS ]) {
+        NSArray *records = [NSArray castFrom:arrangement[key]];
+        if (!records) { continue; }
+        result[key] = [records mapWithBlock:^id(id record) {
             NSDictionary *dict = [NSDictionary castFrom:record];
-            NSDictionary *node = [NSDictionary castFrom:dict[FLOATING_PANE_NODE]];
-            if (!node) {
-                return record;
-            }
+            NSDictionary *node = [NSDictionary castFrom:dict[SIDEBAR_SESSION_NODE]];
+            if (!node) { return record; }
             NSMutableDictionary *copy = [dict mutableCopy];
-            copy[FLOATING_PANE_NODE] = transform(node) ?: node;
+            copy[SIDEBAR_SESSION_NODE] = transform(node) ?: node;
             return copy;
         }];
     }
+    return result;
+}
+
++ (NSDictionary *)arrangementWithoutSidebarSessions:(NSDictionary *)arrangement {
+    NSMutableDictionary *result = [arrangement mutableCopy];
+    [result removeObjectForKey:TAB_ARRANGEMENT_SIDEBAR_WORKSPACE];
+    [result removeObjectForKey:TAB_ARRANGEMENT_SIDEBAR_SESSIONS];
     return result;
 }
 
@@ -422,7 +446,7 @@ static void SetAgainstGrainDim(BOOL isVertical, NSSize *dest, CGFloat value) {
 
 + (void)registerSessionsInArrangement:(NSDictionary *)arrangement {
     [self _recursiveRegisterSessionsInArrangement:arrangement[TAB_ARRANGEMENT_ROOT]];
-    for (NSDictionary *node in [self floatingNodesInArrangement:arrangement]) {
+    for (NSDictionary *node in [self detachedNodesInArrangement:arrangement]) {
         [self _recursiveRegisterSessionsInArrangement:node];
     }
 }
@@ -567,6 +591,7 @@ static void SetAgainstGrainDim(BOOL isVertical, NSSize *dest, CGFloat value) {
     _containerView.autoresizesSubviews = YES;
     _containerView.rootFillsBounds = YES;
     _floatingPanes = [[NSMutableArray alloc] init];
+    _sidebarItemIdentifiers = [NSMapTable weakToStrongObjectsMapTable];
     __weak __typeof(self) weakTab = self;
     _containerView.sizeDidChange = ^(NSSize oldSize) {
         [weakTab containerDidChangeSizeFrom:oldSize];
@@ -643,6 +668,10 @@ static void SetAgainstGrainDim(BOOL isVertical, NSSize *dest, CGFloat value) {
         aSession.active = NO;
     }
 
+    for (PTYSession *session in self.allSessions) {
+        session.active = NO;
+        if (session.delegate == self) { session.delegate = nil; }
+    }
     root_ = nil;
     _containerView = nil;
 }
@@ -948,6 +977,12 @@ static void SetAgainstGrainDim(BOOL isVertical, NSSize *dest, CGFloat value) {
 }
 
 - (void)nameOfSession:(PTYSession *)session didChangeTo:(NSString*)newName {
+    if ([self sessionIsSidebar:session]) {
+        [self sidebarItemForSession:session].title = newName ?: @"";
+        [realParentWindow_ refreshSidebarWorkspace];
+        [realParentWindow_ invalidateRestorableState];
+        return;
+    }
     if ([self activeSession] == session) {
         [self updateTabTitleForCurrentSessionName:newName];
     }
@@ -1033,7 +1068,7 @@ static void SetAgainstGrainDim(BOOL isVertical, NSSize *dest, CGFloat value) {
         [self updateIcon];
     }
     [[iTermDockBadgeController sharedInstance] tabWasSelected:self];
-    for (PTYSession *session in self.sessions) {
+    for (PTYSession *session in self.allSessions) {
         [session enclosingTabDidBecomeSelected];
     }
     // A tab switch changes the focused session without changing any tab's
@@ -1075,10 +1110,22 @@ static void SetAgainstGrainDim(BOOL isVertical, NSSize *dest, CGFloat value) {
 
 - (void)setActiveSession:(PTYSession *)session updateActivityCounter:(BOOL)updateActivityCounter {
     PtyLog(@"PTYTab setActiveSession:%p", session);
+    if ([self sessionIsSidebar:session]) {
+        iTermSidebarWorkspaceItem *item = [self sidebarItemForSession:session];
+        if (item) { [self.sidebarWorkspaceState selectItemWithIdentifier:item.identifier]; }
+        if (updateActivityCounter) { [session setActivityCounter:@(_activityCounter++)]; }
+        [realParentWindow_ selectSidebarSession:session];
+        [realParentWindow_ invalidateRestorableState];
+        return;
+    }
     if (activeSession_ &&  activeSession_ != session && [activeSession_ dvr]) {
         [realParentWindow_ closeInstantReplay:self orTerminateSession:NO];
     }
     BOOL changed = session != activeSession_;
+    if (session && realParentWindow_.currentTab == self &&
+        [realParentWindow_ respondsToSelector:@selector(sessionFocusChanged:)]) {
+        changed = [realParentWindow_ sessionFocusChanged:session] || changed;
+    }
     if (changed && updateActivityCounter) {
         [activeSession_ setActivityCounter:@(_activityCounter++)];
         [session setActivityCounter:@(_activityCounter++)];
@@ -1183,6 +1230,10 @@ static void SetAgainstGrainDim(BOOL isVertical, NSSize *dest, CGFloat value) {
 }
 
 - (void)sessionActivate:(PTYSession *)session {
+    if ([self sessionIsSidebar:session]) {
+        [self setActiveSession:session];
+        return;
+    }
     if (self.activeSession == session) {
         return;
     }
@@ -1221,6 +1272,9 @@ static void SetAgainstGrainDim(BOOL isVertical, NSSize *dest, CGFloat value) {
             break;
         }
         sv = [self _recursiveSessionViewWithId:viewId atNode:pane.splitView];
+    }
+    for (PTYSession *session in _sidebarSessions) {
+        if (session.view.viewId == viewId) { return session; }
     }
     return [self sessionForSessionView:sv];
 }
@@ -1444,7 +1498,7 @@ static void SetAgainstGrainDim(BOOL isVertical, NSSize *dest, CGFloat value) {
     }
     parentWindow_ = realParentWindow_ = theParent;
     [self updateFlexibleViewColors];
-    for (PTYSession *session in self.sessions) {
+    for (PTYSession *session in self.allSessions) {
         [session useTransparencyDidChange];
         [session didMoveSession];
     }
@@ -1820,7 +1874,7 @@ static void SetAgainstGrainDim(BOOL isVertical, NSSize *dest, CGFloat value) {
 }
 
 - (void)terminateAllSessions {
-    [self.sessions makeObjectsPerformSelector:@selector(terminate)];
+    [self.allSessions makeObjectsPerformSelector:@selector(terminate)];
 }
 
 - (NSArray<NSNumber *> *)windowPanes {
@@ -1847,6 +1901,67 @@ static void SetAgainstGrainDim(BOOL isVertical, NSSize *dest, CGFloat value) {
         [self _recursiveSessions:result atNode:pane.splitView];
     }
     return result;
+}
+
+- (NSArray<PTYSession *> *)allSessions {
+    return [[self sessions] arrayByAddingObjectsFromArray:self.sidebarSessions];
+}
+
+- (NSArray<PTYSession *> *)sidebarSessions {
+    return [_sidebarSessions copy] ?: @[];
+}
+
+- (BOOL)sessionIsSidebar:(PTYSession *)session {
+    return session && [_sidebarSessions containsObject:session];
+}
+
+- (iTermSidebarWorkspaceState *)sidebarWorkspaceState {
+    if (!_sidebarWorkspaceState) {
+        _sidebarWorkspaceState = [[iTermSidebarWorkspaceState alloc] init];
+    }
+    return _sidebarWorkspaceState;
+}
+
+- (PTYSession *)selectedSidebarSession {
+    for (iTermSidebarWorkspaceItem *item in self.sidebarWorkspaceState.items) {
+        if (![item.identifier isEqualToString:self.sidebarWorkspaceState.selectedIdentifier]) { continue; }
+        for (PTYSession *session in _sidebarSessions) {
+            if ([session.guid isEqualToString:item.sessionIdentifier] ||
+                [[_sidebarItemIdentifiers objectForKey:session] isEqualToString:item.identifier]) { return session; }
+        }
+    }
+    return nil;
+}
+
+- (iTermSidebarWorkspaceItem *)sidebarItemForSession:(PTYSession *)session {
+    NSString *identifier = [_sidebarItemIdentifiers objectForKey:session];
+    return [self.sidebarWorkspaceState.items objectPassingTest:^BOOL(iTermSidebarWorkspaceItem *item, NSUInteger index, BOOL *stop) {
+        return [item.identifier isEqualToString:identifier] || [item.sessionIdentifier isEqualToString:session.guid];
+    }];
+}
+
+- (void)installSidebarSession:(PTYSession *)session {
+    if (!session || [self sessionIsSidebar:session]) { return; }
+    ITAssertWithMessage(session.view && session.guid.length, @"A sidebar session requires a view and GUID");
+    if (!session.view || !session.guid.length || [self.sessions containsObject:session]) { return; }
+    if (!_sidebarSessions) { _sidebarSessions = [NSMutableArray array]; }
+    [_sidebarSessions addObject:session];
+    session.delegate = self;
+    [self.viewToSessionMap setObject:session forKey:session.view];
+    [session.view removeFromSuperview];
+    iTermSidebarWorkspaceItem *existing = [self sidebarItemForSession:session];
+    if (!existing) {
+        // Localization unneeded: item kinds are stable persisted identifiers.
+        NSString *kind = session.isBrowserSession ? @"browser" : (session.isFileSession ? @"file" : @"terminal");
+        iTermSidebarWorkspaceItem *item = [[iTermSidebarWorkspaceItem alloc]
+            initWithIdentifier:session.guid title:session.name ?: @"" kind:kind
+            sessionIdentifier:session.guid state:@{}];
+        [self.sidebarWorkspaceState appendItem:item];
+        existing = item;
+    }
+    [_sidebarItemIdentifiers setObject:existing.identifier forKey:session];
+    DLog(@"Installed sidebar session %@ in tab %@", session.guid, _guid);
+    [realParentWindow_ invalidateRestorableState];
 }
 
 - (NSArray<SessionView *> *)floatingSessionViews {
@@ -3036,6 +3151,30 @@ static void SetAgainstGrainDim(BOOL isVertical, NSSize *dest, CGFloat value) {
 
 - (void)removeSession:(PTYSession *)aSession activatingSuccessor:(BOOL)activatingSuccessor {
     SessionView *theView = aSession.view;
+    if ([self sessionIsSidebar:aSession]) {
+        const BOOL wasFocused = [realParentWindow_ currentTab] == self && [realParentWindow_ currentSession] == aSession;
+        [theView removeFromSuperview];
+        [_sidebarSessions removeObject:aSession];
+        [self.viewToSessionMap removeObjectForKey:theView];
+        NSString *identifier = [_sidebarItemIdentifiers objectForKey:aSession];
+        for (iTermSidebarWorkspaceItem *item in [self.sidebarWorkspaceState.items copy]) {
+            if ([item.identifier isEqualToString:identifier] || [item.sessionIdentifier isEqualToString:aSession.guid]) {
+                [self.sidebarWorkspaceState removeItemWithIdentifier:item.identifier];
+            }
+        }
+        [_sidebarItemIdentifiers removeObjectForKey:aSession];
+        if (aSession.delegate == self) { aSession.delegate = nil; }
+        DLog(@"Removed sidebar session %@ from tab %@", aSession.guid, _guid);
+        [realParentWindow_ refreshSidebarWorkspace];
+        if (activatingSuccessor && wasFocused) {
+            PTYSession *successor = self.selectedSidebarSession;
+            if (successor) { [self setActiveSession:successor]; }
+            else { [self restoreActiveSessionFirstResponder]; }
+        }
+        [realParentWindow_ invalidateRestorableState];
+        if (activatingSuccessor) { [realParentWindow_ sessionWasRemoved]; }
+        return;
+    }
 
     // Unmaximize if the session's view is in idMap_ (the normal maximized case,
     // where every pane's view is in idMap_). Also unmaximize if the view being
@@ -3953,11 +4092,8 @@ static void SetAgainstGrainDim(BOOL isVertical, NSSize *dest, CGFloat value) {
 }
 
 - (SessionView *)sessionViewWithGUID:(NSString *)guid {
-    for (SessionView *view in [self sessionViews]) {
-        PTYSession *session = [self sessionForSessionView:view];
-        if ([session.guid isEqualToString:guid]) {
-            return view;
-        }
+    for (PTYSession *session in self.allSessions) {
+        if ([session.guid isEqualToString:guid]) { return session.view; }
     }
     return nil;
 }
@@ -4448,15 +4584,14 @@ static void SetAgainstGrainDim(BOOL isVertical, NSSize *dest, CGFloat value) {
 
 + (void)openPartialAttachmentsForArrangement:(NSDictionary *)arrangement
                                   completion:(void (^)(NSDictionary *))completion {
-    NSArray<NSDictionary *> *floatingNodes = [self floatingNodesInArrangement:arrangement];
-    if (floatingNodes.count == 0) {
+    NSArray<NSDictionary *> *detachedNodes = [self detachedNodesInArrangement:arrangement];
+    if (detachedNodes.count == 0) {
         [self _recursiveOpenPartialAttachments:arrangement[TAB_ARRANGEMENT_ROOT]
                                     completion:completion];
         return;
     }
-    // Without the floats, their processes would not be reattached: each float would start fresh
-    // and its old process would be adopted as an orphan.
-    NSArray<NSDictionary *> *nodes = [@[ arrangement[TAB_ARRANGEMENT_ROOT] ?: @{} ] arrayByAddingObjectsFromArray:floatingNodes];
+    // Every detached session must participate or its old process would be adopted as an orphan.
+    NSArray<NSDictionary *> *nodes = [@[ arrangement[TAB_ARRANGEMENT_ROOT] ?: @{} ] arrayByAddingObjectsFromArray:detachedNodes];
     __block NSDictionary *result = @{};
     NSObject *lock = [[NSObject alloc] init];
     dispatch_group_t group = dispatch_group_create();
@@ -4534,8 +4669,13 @@ static void SetAgainstGrainDim(BOOL isVertical, NSSize *dest, CGFloat value) {
     if (activeFloat) {
         [theTab setActiveSession:activeFloat];
     }
+    [theTab restoreSidebarSessionsFromArrangement:arrangement
+                                               named:arrangementName
+                                          sessionMap:sessionMap
+                                  partialAttachments:partialAttachments
+                                             options:options];
     theTab.projectIdentifier = [NSString castFrom:arrangement[@"Project Identifier"]];
-    for (PTYSession *session in theTab.sessions) {
+    for (PTYSession *session in theTab.allSessions) {
         if (session.projectIdentifier == nil) { session.projectIdentifier = theTab.projectIdentifier; }
     }
     theTab.titleOverride = [arrangement[TAB_ARRANGEMENT_TITLE_OVERRIDE] nilIfNull];
@@ -4565,7 +4705,7 @@ static void SetAgainstGrainDim(BOOL isVertical, NSSize *dest, CGFloat value) {
     if ([PTYTab recursiveArrangementNode:arrangement[TAB_ARRANGEMENT_ROOT] passesTest:closure]) {
         return YES;
     }
-    for (NSDictionary *node in [self floatingNodesInArrangement:arrangement]) {
+    for (NSDictionary *node in [self detachedNodesInArrangement:arrangement]) {
         if ([PTYTab recursiveArrangementNode:node passesTest:closure]) {
             return YES;
         }
@@ -4618,7 +4758,7 @@ static void SetAgainstGrainDim(BOOL isVertical, NSSize *dest, CGFloat value) {
                                   inArrangement:(NSDictionary *)arrangement {
     NSDictionary *found = [PTYTab recursiveFindSessionArrangementWithGUID:sessionGUID
                                                                     node:arrangement[TAB_ARRANGEMENT_ROOT]];
-    for (NSDictionary *node in [self floatingNodesInArrangement:arrangement]) {
+    for (NSDictionary *node in [self detachedNodesInArrangement:arrangement]) {
         if (found) {
             break;
         }
@@ -4649,8 +4789,17 @@ static void SetAgainstGrainDim(BOOL isVertical, NSSize *dest, CGFloat value) {
     } else {
         [term updateTabColors];
     }
-    for (PTYSession *session in self.sessions) {
+    for (PTYSession *session in self.allSessions) {
         [session didFinishRestoration];
+    }
+    if ([term currentTab] == self && self.sidebarWorkspaceState.visible) {
+        NSString *selected = self.sidebarWorkspaceState.selectedIdentifier;
+        NSDictionary *record = [[NSArray castFrom:arrangement[TAB_ARRANGEMENT_SIDEBAR_SESSIONS]] objectPassingTest:^BOOL(NSDictionary *record, NSUInteger index, BOOL *stop) {
+            return [[NSDictionary castFrom:record][SIDEBAR_SESSION_ITEM_IDENTIFIER] isEqual:selected];
+        }];
+        NSDictionary *node = [NSDictionary castFrom:record[SIDEBAR_SESSION_NODE]];
+        PTYSession *session = self.selectedSidebarSession;
+        if (session && [node[TAB_ARRANGEMENT_IS_ACTIVE] boolValue]) { [self setActiveSession:session]; }
     }
 }
 
@@ -4940,10 +5089,76 @@ NSString *const PTYTabArrangementOptionsPendingJumps = @"PTYTabArrangementOption
     if (!ok) {
         return NO;
     }
-    return [self encodeFloatingPanesWithContents:contents
-                                         encoder:encoder
-                                         options:options
-                                   activeSession:sessionToEncode];
+    if (![self encodeFloatingPanesWithContents:contents
+                                       encoder:encoder
+                                       options:options
+                                 activeSession:sessionToEncode]) { return NO; }
+    return [self encodeSidebarSessionsWithContents:contents encoder:encoder options:options];
+}
+
+// The workspace description and detached leaves share stable item identifiers. A duplicate gets
+// independent item identities; restoration binds sessionIdentifier to each new session GUID.
+- (BOOL)encodeSidebarSessionsWithContents:(BOOL)contents
+                                  encoder:(id<iTermEncoderAdapter>)encoder
+                                  options:(NSDictionary *)options {
+    if (options[PTYTabArrangementOptionsOnlySessionID] != nil) { return YES; }
+    NSMutableDictionary *workspace = [self.sidebarWorkspaceState.dictionaryRepresentation mutableCopy];
+    NSMutableDictionary<NSString *, NSString *> *itemIdentifiers = [NSMutableDictionary dictionary];
+    NSMutableArray *items = [NSMutableArray array];
+    const BOOL duplicating = [options[PTYSessionArrangementOptionsForDuplication] boolValue];
+    for (iTermSidebarWorkspaceItem *item in self.sidebarWorkspaceState.items) {
+        NSString *identifier = duplicating ? [[NSUUID UUID] UUIDString] : item.identifier;
+        itemIdentifiers[item.identifier] = identifier;
+        NSMutableDictionary *copy = [item.dictionaryRepresentation mutableCopy];
+        PTYSession *boundSession = [_sidebarSessions objectPassingTest:^BOOL(PTYSession *session, NSUInteger index, BOOL *stop) {
+            return [self sidebarItemForSession:session] == item;
+        }];
+        if (boundSession) { copy[@"sessionIdentifier"] = boundSession.guid; }
+        copy[@"identifier"] = identifier;
+        [items addObject:copy];
+    }
+    workspace[@"items"] = items;
+    NSString *selected = self.sidebarWorkspaceState.selectedIdentifier ? itemIdentifiers[self.sidebarWorkspaceState.selectedIdentifier] : nil;
+    if (selected) { workspace[@"selectedIdentifier"] = selected; }
+    else { [workspace removeObjectForKey:@"selectedIdentifier"]; }
+    encoder[TAB_ARRANGEMENT_SIDEBAR_WORKSPACE] = workspace;
+    NSMutableArray<NSString *> *identifiers = [NSMutableArray array];
+    NSMutableDictionary<NSString *, PTYSession *> *sessions = [NSMutableDictionary dictionary];
+    NSMutableDictionary<NSString *, NSString *> *sessionItems = [NSMutableDictionary dictionary];
+    for (PTYSession *session in _sidebarSessions) {
+        iTermSidebarWorkspaceItem *item = [self sidebarItemForSession:session];
+        if (!item || !session.view || !session.guid.length) { continue; }
+        [identifiers addObject:session.guid];
+        sessions[session.guid] = session;
+        sessionItems[session.guid] = itemIdentifiers[item.identifier];
+    }
+    PTYSession *focused = [realParentWindow_ currentTab] == self ? [realParentWindow_ currentSession] : nil;
+    [encoder encodeArrayWithKey:TAB_ARRANGEMENT_SIDEBAR_SESSIONS
+                   identifiers:identifiers
+                    generation:iTermGenerationAlwaysEncode
+                         block:^BOOL(id<iTermEncoderAdapter> encoder, NSInteger i, NSString *identifier, BOOL *stop) {
+        PTYSession *session = sessions[identifier];
+        encoder[SIDEBAR_SESSION_ITEM_IDENTIFIER] = sessionItems[identifier];
+        return [encoder encodeDictionaryWithKey:SIDEBAR_SESSION_NODE
+                                     generation:iTermGenerationAlwaysEncode
+                                          block:^BOOL(id<iTermEncoderAdapter> encoder) {
+            return [PTYTab _recursiveEncodeArrangementForView:session.view
+                                                        idMap:nil
+                                                  isMaximized:NO
+                                                     contents:contents
+                                                      encoder:encoder
+                                                      options:options
+                                                activeSession:focused
+                                            sessionViewFinder:^SessionView *(NSString *guid) {
+                return [self sessionViewWithGUID:guid];
+            }
+                                                sessionFinder:^PTYSession *(SessionView *view) {
+                PTYSession *candidate = [self sessionForSessionView:view];
+                return candidate.liveSession ?: candidate;
+            }];
+        }];
+    }];
+    return YES;
 }
 
 // Floats are encoded live, also while the tab is maximized, since they are never part of the
@@ -5068,6 +5283,107 @@ NSString *const PTYTabArrangementOptionsPendingJumps = @"PTYTabArrangementOption
     [self didInstallFloatingPane:pane session:session activate:YES];
 }
 
++ (NSDictionary *)sidebarSessionRecordForSessionWithGUID:(NSString *)guid inArrangement:(NSDictionary *)arrangement {
+    for (NSDictionary *record in [NSArray castFrom:arrangement[TAB_ARRANGEMENT_SIDEBAR_SESSIONS]]) {
+        NSDictionary *dict = [NSDictionary castFrom:record];
+        NSDictionary *node = [NSDictionary castFrom:dict[SIDEBAR_SESSION_NODE]];
+        if ([[PTYSession guidInArrangement:node[TAB_ARRANGEMENT_SESSION]] isEqualToString:guid]) { return dict; }
+    }
+    return nil;
+}
+
+// Restore a detached leaf with the same process reattachment and file/archive paths as the tree.
+- (PTYSession *)restoreDetachedSessionNode:(NSDictionary *)node
+                                    named:(NSString *)arrangementName
+                               sessionMap:(NSDictionary<NSString *, PTYSession *> *)sessionMap
+                       partialAttachments:(NSDictionary *)partialAttachments
+                                  options:(NSDictionary *)options
+                                   active:(PTYSession **)activeOut {
+    if (![node[TAB_ARRANGEMENT_VIEW_TYPE] isEqual:VIEW_TYPE_SESSIONVIEW] ||
+        ![NSDictionary castFrom:node[TAB_ARRANGEMENT_SESSION]]) { return nil; }
+    NSMutableArray<PTYSession *> *revived = [NSMutableArray array];
+    NSView *view = [PTYTab _recursiveRestoreSplitters:node
+                                            fromIdMap:nil
+                                           sessionMap:sessionMap
+                                      revivedSessions:revived];
+    if (![view isKindOfClass:[SessionView class]]) { return nil; }
+    for (PTYSession *session in revived) {
+        [self.viewToSessionMap setObject:session forKey:session.view];
+    }
+    PTYSession *maybeActive = [self _recursiveRestoreSessions:node
+                                                        named:arrangementName
+                                                       atNode:view
+                                                        inTab:self
+                                                forObjectType:iTermPaneObject
+                                           partialAttachments:partialAttachments
+                                                      options:options];
+    if (activeOut) { *activeOut = maybeActive; }
+    return [self sessionForSessionView:(SessionView *)view];
+}
+
+- (void)adoptSidebarSession:(PTYSession *)session
+                    record:(NSDictionary *)record
+                 workspace:(NSDictionary *)workspace {
+    NSString *identifier = [NSString castFrom:record[SIDEBAR_SESSION_ITEM_IDENTIFIER]];
+    NSDictionary *savedItem = [[NSArray castFrom:workspace[@"items"]] objectPassingTest:^BOOL(NSDictionary *item, NSUInteger index, BOOL *stop) {
+        return [[NSDictionary castFrom:item][@"identifier"] isEqual:identifier];
+    }];
+    if (savedItem) {
+        NSMutableDictionary *item = [savedItem mutableCopy];
+        item[@"sessionIdentifier"] = session.guid;
+        iTermSidebarWorkspaceItem *descriptor = [[iTermSidebarWorkspaceItem alloc] initWithDictionary:item];
+        if (descriptor) { [self.sidebarWorkspaceState appendItem:descriptor]; }
+    }
+    [self installSidebarSession:session];
+}
+
+- (void)restoreSidebarSessionsFromArrangement:(NSDictionary *)arrangement
+                                        named:(NSString *)arrangementName
+                                   sessionMap:(NSDictionary<NSString *, PTYSession *> *)sessionMap
+                           partialAttachments:(NSDictionary *)partialAttachments
+                                      options:(NSDictionary *)options {
+    NSDictionary *workspace = [NSDictionary castFrom:arrangement[TAB_ARRANGEMENT_SIDEBAR_WORKSPACE]] ?: @{};
+    self.sidebarWorkspaceState = [[iTermSidebarWorkspaceState alloc] initWithDictionary:workspace];
+    NSString *selected = self.sidebarWorkspaceState.selectedIdentifier;
+    for (NSDictionary *record in [NSArray castFrom:arrangement[TAB_ARRANGEMENT_SIDEBAR_SESSIONS]]) {
+        NSDictionary *dict = [NSDictionary castFrom:record];
+        PTYSession *session = [self restoreDetachedSessionNode:[NSDictionary castFrom:dict[SIDEBAR_SESSION_NODE]]
+                                                           named:arrangementName
+                                                      sessionMap:sessionMap
+                                              partialAttachments:partialAttachments
+                                                         options:options
+                                                          active:NULL];
+        if (session) { [self adoptSidebarSession:session record:dict workspace:workspace]; }
+        else { DLog(@"Could not restore sidebar session record %@", dict); }
+    }
+    if (selected) { self.sidebarWorkspaceState.selectedIdentifier = selected; }
+}
+
+- (void)addRevivedSidebarSession:(PTYSession *)session fromArrangement:(NSDictionary *)arrangement {
+    NSDictionary *record = [PTYTab sidebarSessionRecordForSessionWithGUID:session.guid inArrangement:arrangement];
+    if (!record) { return; }
+    [self adoptSidebarSession:session record:record workspace:[NSDictionary castFrom:arrangement[TAB_ARRANGEMENT_SIDEBAR_WORKSPACE]]];
+    [realParentWindow_ refreshSidebarWorkspace];
+    [self setActiveSession:session];
+}
+
+- (PTYSession *)addArchivedSidebarSessionWithGUID:(NSString *)guid fromArrangement:(NSDictionary *)arrangement {
+    NSDictionary *record = [PTYTab sidebarSessionRecordForSessionWithGUID:guid inArrangement:arrangement];
+    if (!record) { return nil; }
+    PTYSession *session = [self restoreDetachedSessionNode:[NSDictionary castFrom:record[SIDEBAR_SESSION_NODE]]
+                                                       named:nil
+                                                  sessionMap:nil
+                                          partialAttachments:nil
+                                                     options:nil
+                                                      active:NULL];
+    if (!session) { return nil; }
+    [self adoptSidebarSession:session record:record workspace:[NSDictionary castFrom:arrangement[TAB_ARRANGEMENT_SIDEBAR_WORKSPACE]]];
+    [session didFinishRestoration];
+    [realParentWindow_ refreshSidebarWorkspace];
+    [self setActiveSession:session];
+    return session;
+}
+
 // Restores the floats recorded in a tab arrangement. Returns the active session if it is one of
 // them. arrangementName is the saved arrangement's name, or nil if it doesn't come from one.
 - (PTYSession *)restoreFloatingPanesFromArrangement:(NSDictionary *)arrangement
@@ -5110,28 +5426,14 @@ NSString *const PTYTabArrangementOptionsPendingJumps = @"PTYTabArrangementOption
         DLog(@"Skip floating pane record without a session node: %@", record);
         return nil;
     }
-    NSMutableArray<PTYSession *> *revived = [NSMutableArray array];
-    NSView *view = [PTYTab _recursiveRestoreSplitters:node
-                                            fromIdMap:nil
-                                           sessionMap:sessionMap
-                                      revivedSessions:revived];
-    if (![view isKindOfClass:[SessionView class]]) {
-        return nil;
-    }
-    for (PTYSession *session in revived) {
-        [self.viewToSessionMap setObject:session forKey:session.view];
-    }
-    PTYSession *maybeActive = [self _recursiveRestoreSessions:node
-                                                        named:arrangementName
-                                                       atNode:view
-                                                        inTab:self
-                                                forObjectType:iTermPaneObject
-                                           partialAttachments:partialAttachments
-                                                      options:options];
-    PTYSession *session = [self sessionForSessionView:(SessionView *)view];
-    if (!session) {
-        return nil;
-    }
+    PTYSession *maybeActive = nil;
+    PTYSession *session = [self restoreDetachedSessionNode:node
+                                                       named:arrangementName
+                                                  sessionMap:sessionMap
+                                          partialAttachments:partialAttachments
+                                                     options:options
+                                                      active:&maybeActive];
+    if (!session) { return nil; }
     const NSRect frame = [PTYTab dictToFrame:record[FLOATING_PANE_FRAME]];
     const NSSize containerSize = [PTYTab dictToFrame:record[FLOATING_PANE_CONTAINER_SIZE]].size;
     iTermFloatingPaneView *pane = [self installFloatingSession:session outlineFrame:frame];
@@ -7451,7 +7753,7 @@ typedef struct {
 
 - (iTermPromptOnCloseReason *)promptOnCloseReason {
     iTermPromptOnCloseReason *reason = [iTermPromptOnCloseReason noReason];
-    for (PTYSession *aSession in [self sessions]) {
+    for (PTYSession *aSession in self.allSessions) {
         [reason addReason:[aSession promptOnCloseReason]];
     }
     return reason;
@@ -8889,6 +9191,9 @@ typedef struct {
 }
 
 - (BOOL)sessionIsActiveInTab:(PTYSession *)session {
+    if ([self sessionIsSidebar:session]) {
+        return self.sidebarWorkspaceState.visible && self.selectedSidebarSession == session;
+    }
     return [self activeSession] == session;
 }
 
@@ -8900,7 +9205,8 @@ typedef struct {
     if (![self tabIsSelected]) {
         return NO;
     }
-    return [self activeSession] == session;
+    if ([realParentWindow_ currentTab] == self) { return [realParentWindow_ currentSession] == session; }
+    return [self sessionIsActiveInTab:session];
 }
 
 - (BOOL)sessionIsInSelectedTab:(PTYSession *)session {
@@ -9365,6 +9671,19 @@ typedef struct {
 }
 
 - (void)sessionDidRestart:(PTYSession *)session {
+    if ([self sessionIsSidebar:session]) {
+        iTermSidebarWorkspaceItem *existing = [self sidebarItemForSession:session];
+        if (existing) {
+            NSMutableDictionary *dictionary = [existing.dictionaryRepresentation mutableCopy];
+            dictionary[@"sessionIdentifier"] = session.guid;
+            iTermSidebarWorkspaceItem *item = [[iTermSidebarWorkspaceItem alloc] initWithDictionary:dictionary];
+            NSString *selected = self.sidebarWorkspaceState.selectedIdentifier;
+            if (item) { [self.sidebarWorkspaceState appendItem:item]; }
+            self.sidebarWorkspaceState.selectedIdentifier = selected;
+        }
+        [realParentWindow_ refreshSidebarWorkspace];
+        [realParentWindow_ invalidateRestorableState];
+    }
     [self.delegate tab:self sessionDidRestart:session];
 }
 
@@ -9375,7 +9694,12 @@ typedef struct {
 }
 
 - (void)sessionRemoveSession:(PTYSession *)session {
-    BOOL removeTab = (self.sessions.count == 1);
+    if (![self sessionIsSidebar:session] && self.sessions.count == 1 && self.sidebarSessions.count > 0 &&
+        [realParentWindow_ respondsToSelector:@selector(handleLastPrimarySessionRemoval:)] &&
+        [realParentWindow_ handleLastPrimarySessionRemoval:session]) {
+        return;
+    }
+    BOOL removeTab = (![self sessionIsSidebar:session] && self.sessions.count == 1);
     [self removeSession:session];
     if (removeTab) {
         [_delegate tabRemoveTab:self];
@@ -9500,7 +9824,7 @@ typedef struct {
 }
 
 - (PTYSession *)sessionWithGUID:(NSString *)guid {
-    return [self.sessions objectPassingTest:^BOOL(PTYSession *session, NSUInteger index, BOOL *stop) {
+    return [self.allSessions objectPassingTest:^BOOL(PTYSession *session, NSUInteger index, BOOL *stop) {
         return [session.guid isEqualToString:guid];
     }];
 }
@@ -9801,6 +10125,11 @@ backgroundColor:(NSColor *)backgroundColor {
                  NSStringFromRect(sessionToActivate.view.scrollview.frame));
             break;
         }
+    }
+    if ([self sessionIsSidebar:sessionToActivate]) {
+        [self setActiveSession:sessionToActivate];
+        [sessionToActivate.view layoutContentsForNewlyActiveSession];
+        return;
     }
     if ([self.sessions containsObject:sessionToActivate]) {
         [self setActiveSession:sessionToActivate];

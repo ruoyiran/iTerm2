@@ -26,6 +26,9 @@ import Foundation
         for record in tab["Floating Panes"] as? [[String: Any]] ?? [] {
             if let node = record["Node"] as? [String: Any], !visit(node, depth: 0) { return nil }
         }
+        for record in tab["Sidebar Sessions"] as? [[String: Any]] ?? [] {
+            guard let node = record["Node"] as? [String: Any], visit(node, depth: 0) else { return nil }
+        }
         return result
     }
 }

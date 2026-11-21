@@ -50,6 +50,7 @@ message ClientOriginatedMessage {
     InvokeFunctionRequest invoke_function_request = 132;
     ListPromptsRequest list_prompts_request = 133;
     ScreenshotRequest screenshot_request = 134;
+    BrowserRequest browser_request = 137;
   }
 }
 
@@ -97,10 +98,31 @@ message ServerOriginatedMessage {
     InvokeFunctionResponse invoke_function_response = 132;
     ListPromptsResponse list_prompts_response = 133;
     ScreenshotResponse screenshot_response = 134;
+    BrowserResponse browser_response = 137;
 
     // This is the only response that is sent spontaneously. The 'id' field will not be set.
     Notification notification = 1000;
   }
+}
+
+// Authenticated, explicitly scoped browser automation. No active/all target aliases.
+message BrowserRequest {
+  optional string origin_session_id = 1;
+  optional string browser_session_id = 2;
+  optional string action = 3;
+  optional string arguments_json = 4 [default = "{}"];
+  optional uint32 timeout_ms = 5 [default = 30000];
+  // Client-generated ID used to cancel this operation on the same connection.
+  optional string request_id = 6;
+}
+
+message BrowserResponse {
+  optional string result_json = 1;
+  // Stable code; clients must not match localized error_message text.
+  optional string error_code = 2;
+  optional string error_message = 3;
+  optional bytes png_data = 4;
+  repeated string capabilities = 5;
 }
 
 message InvokeFunctionRequest {
@@ -1646,6 +1668,8 @@ message ListSessionsResponse {
     repeated FloatingPane floating_panes = 12;
     // Whether the tab's floating panes are hidden. Added in protocol 1.21.
     optional bool floating_panes_hidden = 13;
+    // Sidebar sessions belong to this tab but do not participate in its split geometry.
+    repeated SessionSummary sidebar_sessions = 14;
   }
   repeated Window windows = 1;
   repeated SessionSummary buried_sessions = 2;

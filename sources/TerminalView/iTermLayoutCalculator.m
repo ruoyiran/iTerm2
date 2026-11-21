@@ -72,6 +72,30 @@ const int kLayoutTabPositionRight = 3;
 #pragma mark - Main Entry Point
 
 + (iTermLayoutOutputs)calculateLayoutWithInputs:(iTermLayoutInputs)inputs {
+    if (inputs.shouldShowSidebarWorkspace && !inputs.shouldShowToolbelt) {
+        const BOOL vertical = inputs.tabBarVisible && !inputs.tabBarFlashing &&
+            (inputs.tabPosition == kLayoutTabPositionLeft || inputs.tabPosition == kLayoutTabPositionRight);
+        const CGFloat project = [self effectiveProjectSidebarWidthWithInputs:inputs];
+        const CGFloat available = inputs.contentViewWidth - project -
+            (vertical ? inputs.leftTabBarWidth : 0) - MAX(0, inputs.minimumTerminalWidth);
+        const CGFloat preferred = isfinite(inputs.sidebarWorkspaceWidth) && inputs.sidebarWorkspaceWidth > 0 ?
+            inputs.sidebarWorkspaceWidth : 360;
+        const CGFloat width = available >= 360 ? MIN(available, MIN(720, MAX(360, preferred))) : 0;
+        iTermLayoutInputs base = inputs;
+        base.shouldShowSidebarWorkspace = NO;
+        base.shouldShowToolbelt = width > 0;
+        base.toolbeltWidth = width;
+        iTermLayoutOutputs outputs = [self calculateLayoutWithInputs:base];
+        outputs.sidebarWorkspaceFrame = outputs.toolbeltFrame;
+        outputs.toolbeltFrame = CGRectZero;
+        if (width > 0 && inputs.sidebarWorkspaceExpanded) {
+            outputs.sidebarWorkspaceFrame = CGRectMake(CGRectGetMinX(outputs.tabViewFrame),
+                CGRectGetMinY(outputs.tabViewFrame),
+                CGRectGetMaxX(outputs.sidebarWorkspaceFrame) - CGRectGetMinX(outputs.tabViewFrame),
+                CGRectGetHeight(outputs.tabViewFrame));
+        }
+        return outputs;
+    }
     if (inputs.sidebarControlsVisible) {
         const BOOL sharedTopBar = !inputs.tabBarOnLoan && !inputs.tabBarFlashing &&
             ((inputs.tabBarVisible && inputs.tabPosition == kLayoutTabPositionTop) ||

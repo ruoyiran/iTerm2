@@ -1,4 +1,4 @@
-// swift-tools-version: 5.9
+// swift-tools-version: 6.1
 
 import PackageDescription
 
@@ -8,11 +8,13 @@ let package = Package(
         .macOS(.v13)
     ],
     products: [
-        .executable(name: "it2", targets: ["it2"])
+        .executable(name: "it2", targets: ["it2"]),
+        .executable(name: "it2-browser-mcp", targets: ["it2-browser-mcp"])
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.3.0"),
-        .package(url: "https://github.com/jpsim/Yams.git", from: "5.0.0")
+        .package(url: "https://github.com/jpsim/Yams.git", from: "5.0.0"),
+        .package(url: "https://github.com/modelcontextprotocol/swift-sdk.git", exact: "0.12.1")
     ],
     targets: [
         .target(
@@ -43,6 +45,16 @@ let package = Package(
             ],
             path: "Sources/it2"
         ),
+        .executableTarget(
+            name: "it2-browser-mcp",
+            dependencies: ["it2core", .product(name: "MCP", package: "swift-sdk")],
+            path: "Sources/it2-browser-mcp"
+        ),
+        .testTarget(
+            name: "BrowserMCPTests",
+            dependencies: ["it2-browser-mcp", "it2core", .product(name: "MCP", package: "swift-sdk")],
+            path: "Tests/BrowserMCPTests"
+        ),
         .testTarget(
             name: "it2coreTests",
             dependencies: [
@@ -55,5 +67,6 @@ let package = Package(
                 .copy("Resources/agent-hooks")
             ]
         )
-    ]
+    ],
+    swiftLanguageModes: [.v5]
 )

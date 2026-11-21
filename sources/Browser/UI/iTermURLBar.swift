@@ -300,10 +300,10 @@ class iTermURLBarGuts: NSView {
         let textFieldWidth: CGFloat
         if _isLoading && !(progressIndicator?.isHidden ?? true) {
             // When progress indicator is visible, shrink text field
-            textFieldWidth = progressX - textFieldX - 4
+            textFieldWidth = max(0, progressX - textFieldX - 4)
         } else {
             // When no progress indicator, text field takes full width
-            textFieldWidth = bounds.width - textFieldX - inset
+            textFieldWidth = max(0, bounds.width - textFieldX - inset)
         }
         
         textFieldBackground.frame = NSRect(x: textFieldX, y: 2,

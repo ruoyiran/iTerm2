@@ -45,7 +45,14 @@ extension Window {
                 createTab.profileName = profile
             }
             if let command = command {
-                createTab.command = command // deprecated in proto but still functional
+                // Localization unneeded: stable profile-property keys and command-type value.
+                let type = ITMProfileProperty()
+                type.key = "Custom Command"
+                type.jsonValue = "\"Yes\""
+                let line = ITMProfileProperty()
+                line.key = "Command"
+                line.jsonValue = String(data: try JSONSerialization.data(withJSONObject: command, options: [.fragmentsAllowed]), encoding: .utf8) ?? "\"\""
+                createTab.customProfilePropertiesArray.addObjects(from: [type, line])
             }
             // No window_id = create in new window
 

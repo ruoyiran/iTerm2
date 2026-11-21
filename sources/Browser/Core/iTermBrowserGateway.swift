@@ -7,46 +7,16 @@
 
 import Security
 
-struct ExpiringValue<T> {
-    private let duration: TimeInterval
-    private var _value: T?
-    private var _expiration: TimeInterval
-
-    var value: T? {
-        get {
-            if NSDate.it_timeSinceBoot() > _expiration {
-                return nil
-            }
-            return _value
-        }
-        set {
-            _value = newValue
-            _expiration = NSDate.it_timeSinceBoot() + duration
-        }
-    }
-
-    mutating func expire() {
-        _value = nil
-        _expiration = 0
-    }
-
-    init(value: T?, duration: TimeInterval) {
-        self.duration = duration
-        _expiration = 0
-        self.value = value
-    }
-}
-
 @objc
 class iTermBrowserGateway: NSObject {
-    private static var cached = ExpiringValue<Bool>(value: nil, duration: 30)
+    private static var cached: Bool?
     private static let bundleID = "com.googlecode.iterm2.iTermBrowserPlugin"
     private static let teamID = "H7V7XYVQ7D"
     @objc static let didChange = Notification.Name(rawValue: "iTermBrowserGatewayDidChange")
 
     @objc
     static func reload() {
-        cached.expire()
+        cached = nil
     }
 
     // Web schemes the GetURL Apple event handler should route to the built-in web
@@ -73,24 +43,20 @@ class iTermBrowserGateway: NSObject {
             return String(localized: "BrowserGateway.InvalidCodeSignature", defaultValue: "The code signature of the plugin at \(url.path) is invalid. Download it again, and ensure your anti-virus does not quarantine it.", comment: "Error shown when the browser plugin fails code signature verification")
         }
         iTermAdvancedSettingsModel.setBrowserPluginPathHint(url.path)
-        cached.expire()
+        cached = nil
         return nil
     }
 
     @objc(browserAllowedCheckingIfNot:)
     static func browserAllowed(checkIfNo: Bool) -> Bool {
-        if let cached = cached.value {
-            if !checkIfNo || cached {
-                return cached
-            }
+        let allowed = iTermAdvancedSettingsModel.browserProfiles()
+        // The browser engine is linked into the application. A separate signed
+        // marker app is not a runtime dependency of this build.
+        if cached != allowed {
+            cached = allowed
+            NotificationCenter.default.post(name: didChange, object: nil)
         }
-        if !iTermAdvancedSettingsModel.browserProfiles() {
-            return false
-        }
-        let value = checkPluginInstalled()
-        cached.value = value
-        NotificationCenter.default.post(name: didChange, object: nil)
-        return value
+        return allowed
     }
 
     @objc
@@ -102,7 +68,7 @@ class iTermBrowserGateway: NSObject {
 
     @objc
     static func shouldOfferPlugin() -> Bool {
-        return iTermAdvancedSettingsModel.browserProfiles() && !checkPluginInstalled()
+        return false
     }
 
     @objc
@@ -153,7 +119,7 @@ class iTermBrowserGateway: NSObject {
         let selection = warning.runModal()
         switch selection {
         case .kiTermWarningSelection0:
-            cached.expire()
+            cached = nil
             openDownloadPage()
             return .true
         case .kiTermWarningSelection1:
@@ -168,7 +134,7 @@ class iTermBrowserGateway: NSObject {
     @objc
     static func openDownloadPage() {
         NSWorkspace.shared.open(URL(string: "https://iterm2.com/browser-plugin.html")!)
-        cached.expire()
+        cached = nil
     }
 
     private static func checkPluginInstalled() -> Bool {

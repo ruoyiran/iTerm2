@@ -102,6 +102,12 @@
 // The full interface for a window controller, as seen by objects that treat it
 // like a delegate.
 @protocol iTermWindowController <WindowControllerInterface, PTYTabDelegate>
+@optional
+- (void)selectSidebarSession:(PTYSession *)session;
+- (void)refreshSidebarWorkspace;
+- (BOOL)handleLastPrimarySessionRemoval:(PTYSession *)session;
+- (BOOL)sessionFocusChanged:(PTYSession *)session;
+@required
 
 // Whether a floating pane can move into the tab's split pane layout now, and doing it.
 - (BOOL)canDockFloatingSession:(PTYSession *)session;

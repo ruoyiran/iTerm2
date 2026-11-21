@@ -684,6 +684,117 @@ final class FileSessionTests: XCTestCase {
         XCTAssertEqual(fixture.prompts, 0); XCTAssertEqual(fixture.snapshot(pane)?.text, "dirty")
     }
 
+    #if canImport(iTerm2SharedARC)
+    func testFindInFilesKeepsSearchInVisibleUnifiedWorkspace() throws {
+        try OnscreenTestGate.skipUnlessEnabled()
+        let files = try Fixture(resourceDirectory: Bundle.main.resourceURL?.appendingPathComponent("FileWorkspaceUI"))
+        let window = TerminalWindowTestFixture()
+        defer { window.close(); files.cleanup() }
+        window.window.setFrame(NSRect(x: 50, y: 50, width: 1200, height: 800), display: true)
+        let tab = try XCTUnwrap(window.terminal.currentTab())
+        let pane = files.open(StableSessionID.generate())
+        let session = try XCTUnwrap(PTYSession.fileSession(with: pane, profile: tab.activeSession?.profile))
+        window.terminal.setupSession(session, with: nil)
+        tab.installSidebarSession(session)
+        defer { session.terminate() }
+        window.terminal.selectSidebarSession(session)
+        XCTAssertTrue(window.terminal.find(inWorkspaceFiles: "original", from: session))
+        let root = try XCTUnwrap(window.window.contentView)
+        XCTAssertEqual(root.value(forKey: "shouldShowSidebarWorkspace") as? Bool, true)
+        XCTAssertEqual(root.value(forKey: "shouldShowToolbelt") as? Bool, false)
+        let selected = try XCTUnwrap(tab.sidebarWorkspaceState.items.first { $0.identifier == tab.sidebarWorkspaceState.selectedIdentifier })
+        XCTAssertEqual(selected.kind, "files")
+        XCTAssertEqual(selected.state["rootDirectory"] as? String, files.root.path)
+        XCTAssertEqual(selected.state["contentQuery"] as? String, "original")
+        let workspace = try XCTUnwrap(root.value(forKey: "sidebarWorkspace") as? NSView)
+        let focused = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            (window.window.firstResponder as? NSView)?.isDescendant(of: workspace) == true
+        }, object: nil)
+        wait(for: [focused], timeout: 15)
+    }
+
+    func testSidebarFileClosePreparesNativeDecisionBeforeSaveOrDiscard() throws {
+        try OnscreenTestGate.skipUnlessEnabled()
+        for direct in [false, true] {
+            for decision in [iTermFileCloseDecision.discard, .save] {
+                for nativeAllows in [false, true] {
+                    let fixture = try Fixture(resourceDirectory: Bundle.main.resourceURL?.appendingPathComponent("FileWorkspaceUI"))
+                    let previous = iTermFileSessionCoordinator.installed
+                    let profile = try XCTUnwrap(ProfileModel.sharedInstance().defaultBookmark())
+                    let terminal = try XCTUnwrap(ClosePreparationTerminal(smartLayout: false,
+                        windowType: .WINDOW_TYPE_NORMAL, savedWindowType: .WINDOW_TYPE_NORMAL,
+                        percentage: iTermPercentage(width: 0, height: 0), screen: -1, profile: profile))
+                    iTermController.sharedInstance()?.addTerminalWindow(terminal)
+                    let primary = try XCTUnwrap(PTYSession(synthetic: false))
+                    primary.profile = profile
+                    terminal.setupSession(primary, with: nil)
+                    terminal.insert(primary, at: 0)
+                    let tab = try XCTUnwrap(terminal.currentTab())
+                    let pane = fixture.open(StableSessionID.generate())
+                    let sidebar = try XCTUnwrap(PTYSession.fileSession(with: pane, profile: profile))
+                    terminal.setupSession(sidebar, with: nil)
+                    tab.installSidebarSession(sidebar)
+                    defer {
+                        fixture.coordinator.cancelOperation()
+                        sidebar.terminate()
+                        terminal.window?.close()
+                        iTermFileSessionCoordinator.installed = previous
+                        fixture.cleanup()
+                    }
+                    fixture.edit(pane, "dirty sidebar")
+                    fixture.wait { done in fixture.store.persistDraft(documentIdentifier: pane.documentIdentifier!) { error in
+                        XCTAssertNil(error); done()
+                    } }
+                    fixture.coordinator.delegate = fixture
+                    iTermFileSessionCoordinator.installed = fixture.coordinator
+                    fixture.decision = decision
+                    terminal.nativeAllows = nativeAllows
+                    if direct { terminal.close(tab) }
+                    else {
+                        let selector = NSSelectorFromString("tabView:shouldCloseTabViewItem:")
+                        typealias CloseDecision = @convention(c) (AnyObject, Selector, NSTabView, NSTabViewItem) -> Bool
+                        let decision = unsafeBitCast(try XCTUnwrap(terminal.method(for: selector)), to: CloseDecision.self)
+                        XCTAssertFalse(decision(terminal, selector, NSTabView(), try XCTUnwrap(tab.tabViewItem)))
+                    }
+                    let finished = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+                        !fixture.coordinator.operationInProgress
+                    }, object: nil)
+                    wait(for: [finished], timeout: 10)
+                    fixture.wait { done in fixture.store.flushDrafts { error in XCTAssertNil(error); done() } }
+                    XCTAssertEqual(terminal.preparedCount, 1)
+                    XCTAssertEqual(terminal.committedCount, nativeAllows ? 1 : 0)
+                    XCTAssertTrue(terminal.tabs()?.contains { $0 === tab } == true)
+                    XCTAssertEqual(fixture.snapshot(pane)?.text,
+                                   nativeAllows && decision == .discard ? "original" : "dirty sidebar")
+                    XCTAssertEqual(try String(contentsOf: fixture.file, encoding: .utf8),
+                                   nativeAllows && decision == .save ? "dirty sidebar" : "original")
+                    if !nativeAllows {
+                        let recovery = iTermFileDocumentStore(storageDirectory: fixture.drafts)
+                        fixture.wait { done in recovery.recoverDrafts { values, error in
+                            XCTAssertNil(error); XCTAssertEqual(values.first?.text, "dirty sidebar"); done()
+                        } }
+                    }
+                }
+            }
+        }
+    }
+
+    // Override the private ObjC confirmation selectors without changing production
+    // warnings. The real PTYTab, sidebar file, host and close coordinator still run.
+    private final class ClosePreparationTerminal: PseudoTerminal {
+        var nativeAllows = false
+        var preparedCount = 0
+        var committedCount = 0
+        @objc(confirmCloseTab:suppressConfirmation:)
+        func confirmCloseForTest(_ tab: PTYTab, suppressConfirmation: Bool) -> Bool { true }
+        @objc(preparedTabClose:)
+        func prepareCloseForTest(_ tab: PTYTab) -> (() -> Void)? {
+            preparedCount += 1
+            return nativeAllows ? { self.committedCount += 1 } : nil
+        }
+    }
+    #endif
+
     func testNativeMixedRevivalMapKeepsTerminalAndReconstructsFileLeaves() throws {
         let terminal = NSObject()
         for malformed in [false, true] {
@@ -988,14 +1099,14 @@ final class FileSessionTests: XCTestCase {
         func fileSessionPaneDidReceiveFocus(_ pane: iTermFileSessionPane) {}
         func fileSessionPane(_ pane: iTermFileSessionPane, request command: iTermFileViewCommand) {}
 
-        init(testing: Bool = true, fileName: String = "file.txt") throws {
+        init(testing: Bool = true, fileName: String = "file.txt", resourceDirectory: URL? = nil) throws {
             root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
             try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
             file = root.appendingPathComponent(fileName); drafts = root.appendingPathComponent("drafts")
             try Data("original".utf8).write(to: file)
             store = iTermFileDocumentStore(storageDirectory: drafts)
             runtime = iTermFileWorkspaceUIRuntime(documentStore: store,
-                resourceDirectory: ProcessInfo.processInfo.environment["FILE_UI_RESOURCE_DIR"].map { URL(fileURLWithPath: $0) }, makeRenderer: { dataStore in
+                resourceDirectory: resourceDirectory ?? ProcessInfo.processInfo.environment["FILE_UI_RESOURCE_DIR"].map { URL(fileURLWithPath: $0) }, makeRenderer: { dataStore in
                     let web = iTermFileWorkspaceWebView(dataStore: dataStore)
                     web.configuration.userContentController.addUserScript(WKUserScript(source: "globalThis.MonacoEnvironment = { globalAPI: true };", injectionTime: .atDocumentStart, forMainFrameOnly: true))
                     return web

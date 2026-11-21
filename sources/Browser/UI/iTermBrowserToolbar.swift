@@ -204,6 +204,7 @@ class iTermBrowserToolbar: NSView {
         leftHelper.add(backButton)
         leftHelper.add(forwardButton)
         leftHelper.add(reloadButton)
+        stopButton.frame = reloadButton.frame
         leftHelper.x += 12.0
 
         var rightHelper = HorizontalLayoutHelper(direction: .rtl, x: bounds.maxX, spacing: 0)
@@ -239,8 +240,8 @@ class iTermBrowserToolbar: NSView {
         }
         
         // Now center URL bar in remaining space
-        let remainingSpace = rightHelper.x - leftHelper.x
-        let urlBarWidth = max(remainingSpace * 0.6, minUrlBarWidth)
+        let remainingSpace = max(0, rightHelper.x - leftHelper.x)
+        let urlBarWidth = min(remainingSpace, max(remainingSpace * 0.6, minUrlBarWidth))
         let urlBarX = leftHelper.x + (remainingSpace - urlBarWidth) / 2.0
         urlBar.frame = NSRect(x: urlBarX, y: 0, width: urlBarWidth, height: bounds.height)
 

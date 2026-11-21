@@ -37,8 +37,8 @@ import AppKit
                 : String(localized: "Projects.ShowSidebar", defaultValue: "Show Project Sidebar", comment: "Tooltip for the top-left sidebar button when projects are collapsed")
         } else {
             label = expanded
-                ? String(localized: "FileTree.HideSidebar", defaultValue: "Hide File Tree", comment: "Tooltip for the top-right sidebar button when the file tree is visible")
-                : String(localized: "FileTree.ShowSidebar", defaultValue: "Show File Tree", comment: "Tooltip for the top-right sidebar button when the file tree is collapsed")
+                ? String(localized: "SidebarWorkspace.Hide", defaultValue: "Hide Workspace", comment: "Command to hide the right workspace")
+                : String(localized: "SidebarWorkspace.Show", defaultValue: "Show Workspace", comment: "Context menu command to show the right workspace")
         }
         if toolTip != label {
             toolTip = label

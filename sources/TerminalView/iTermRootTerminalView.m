@@ -131,6 +131,7 @@ typedef struct {
 @property(nonatomic, strong) iTermTabBarControlView *tabBarControl;
 @property(nonatomic, strong) SolidColorView *divisionView;
 @property(nonatomic, strong) iTermToolbeltView *toolbelt;
+@property(nonatomic, strong) iTermSidebarWorkspaceView *sidebarWorkspace;
 @property(nonatomic, strong) iTermProjectSidebarView *projectSidebar;
 @property(nonatomic, strong) iTermDragHandleView *projectSidebarDragHandle;
 @property(nonatomic, strong) iTermSidebarToggleButton *leftSidebarToggleButton;
@@ -346,9 +347,14 @@ typedef struct {
         // The hope is that the window controller will call updateToolbeltProportionsIfNeeded during this spin
         // of the runloop, but if not we'll get it next time 'round.
         [self setToolbeltProportions:[iTermToolbeltView savedProportions]];
-        _toolbelt.autoresizingMask = (NSViewMinXMargin | NSViewHeightSizable);
+        _toolbelt.autoresizingMask = iTermMaskWithoutFixedMarginsOnFlexibleAxes(NSViewMinXMargin | NSViewHeightSizable);
         [self addSubview:_toolbelt];
         [self updateToolbeltForWindow:nil];
+        _sidebarWorkspaceWidth = 360;
+        self.sidebarWorkspace = [[iTermSidebarWorkspaceView alloc] initWithFrame:NSMakeRect(0, 0, 360, NSHeight(frameRect))];
+        self.sidebarWorkspace.hidden = YES;
+        self.sidebarWorkspace.autoresizingMask = iTermMaskWithoutFixedMarginsOnFlexibleAxes(NSViewMinXMargin | NSViewHeightSizable);
+        [self addSubview:self.sidebarWorkspace];
 
         _windowNumberLabel = [NSTextField newLabelStyledTextField];
         _windowNumberLabel.font = [NSFont titleBarFontOfSize:[NSFont systemFontSize]];
@@ -400,6 +406,14 @@ typedef struct {
         self.rightSidebarToggleButton.action = @selector(toggleFileTree:);
         self.rightSidebarToggleButton.autoresizingMask = NSViewMinXMargin | NSViewMinYMargin;
         [self addSubview:self.rightSidebarToggleButton];
+        NSMenu *sidebarMenu = [[NSMenu alloc] init];
+        NSMenuItem *workspaceItem = [[NSMenuItem alloc] initWithTitle:
+            NSLocalizedStringWithDefaultValue(@"SidebarWorkspace.Show", nil, [NSBundle mainBundle], @"Show Workspace", @"Context menu command to show the right workspace")
+            action:@selector(showSidebarWorkspace:) keyEquivalent:@""];
+        workspaceItem.target = _delegate;
+        [sidebarMenu addItem:workspaceItem];
+        self.rightSidebarToggleButton.menu = sidebarMenu;
+
         [[NSNotificationCenter defaultCenter] addObserver:self
                                                  selector:@selector(advancedSettingsDidChange:)
                                                      name:iTermAdvancedSettingsDidChange
@@ -809,11 +823,9 @@ typedef struct {
     // near the overflow boundary squeezes a cell under its minimum for that frame.
     // -constrainToolbeltWidth has not run yet either, so take the clamp it is about
     // to apply rather than the raw ivar: this is the value the layout inputs floor.
-    const CGFloat toolbeltWidth = ([self shouldShowToolbelt]
-                                   ? floor([self maximumToolbeltWidthForViewWidth:NSWidth(self.frame)])
-                                   : 0);
+    const CGFloat toolbeltWidth = self.effectiveRightSidebarWidth;
     const CGFloat projectWidth = self.effectiveProjectSidebarWidth;
-    const CGFloat trailingControls = self.sidebarControlsShareTopBar && !self.shouldShowToolbelt ? 36 : 0;
+    const CGFloat trailingControls = self.sidebarControlsShareTopBar && !self.rightSidebarVisible ? 36 : 0;
     const CGFloat leadingControls = self.sidebarControlsShareTopBar && projectWidth == 0 ? 36 : 0;
     const CGFloat stripWidth = NSWidth(self.frame) - toolbeltWidth - projectWidth - trailingControls;
     // -tabBarInsetsForCompactWindow reserves this after the name, so it is space
@@ -944,7 +956,7 @@ typedef struct {
     // left-align it and make it as wide as the available space.
     // This mirrors what NSWindow's title does.
     const CGFloat mostGenerousInset = MAX(MAX(insets.left, insets.right), iTermRootTerminalViewWindowNumberLabelMargin);
-    const CGFloat containerWidth = NSWidth(self.frame) - self.effectiveProjectSidebarWidth - ([self shouldShowToolbelt] ? NSWidth(_toolbelt.frame) : 0);
+    const CGFloat containerWidth = NSWidth(self.frame) - self.effectiveProjectSidebarWidth - self.effectiveRightSidebarWidth;
     const NSSize fittingSize = textField.fittingSize;
     const CGFloat desiredWidth = fittingSize.width;
     CGFloat leftInset = mostGenerousInset;
@@ -1493,7 +1505,7 @@ static NSColor *iTermWindowBorderColorFromSetting(NSString *setting) {
                                                  textColor:_windowTitleLabel.textColor
                                                       font:_windowTitleLabel.font
                                                      width:NSWidth(self.frame) - self.effectiveProjectSidebarWidth
-                                             toolbeltWidth:[self shouldShowToolbelt] ? NSWidth(_toolbelt.frame) : 0.0
+                                             toolbeltWidth:self.effectiveRightSidebarWidth
                                                     insets:[self.delegate tabBarInsets]
                                        tabBarControlOnLoan:_tabBarControlOnLoan
                                                  parseHTML:[iTermPreferences boolForKey:kPreferenceKeyHTMLTabTitles]
@@ -1712,6 +1724,26 @@ static NSColor *iTermWindowBorderColorFromSetting(NSString *setting) {
     [_toolbelt relayoutAllTools];
 }
 
+- (CGFloat)effectiveRightSidebarWidth {
+    iTermLayoutInputs inputs = [self layoutInputsForWindow:self.window];
+    inputs.sidebarWorkspaceExpanded = NO;
+    const iTermLayoutOutputs layout = [iTermLayoutCalculator calculateLayoutWithInputs:inputs];
+    return NSWidth(layout.sidebarWorkspaceFrame) + NSWidth(layout.toolbeltFrame);
+}
+
+- (BOOL)rightSidebarVisible { return self.effectiveRightSidebarWidth > 0; }
+
+- (void)setShouldShowSidebarWorkspace:(BOOL)visible {
+    _shouldShowSidebarWorkspace = visible;
+    if (visible) { _shouldShowToolbelt = NO; _toolbelt.hidden = YES; }
+    if (!visible) { _sidebarWorkspaceExpanded = NO; }
+    self.sidebarWorkspace.hidden = !visible;
+}
+
+- (void)setSidebarWorkspaceWidth:(CGFloat)width {
+    _sidebarWorkspaceWidth = isfinite(width) ? MIN(720, MAX(360, width)) : 360;
+}
+
 - (void)constrainToolbeltWidth {
     _toolbeltWidth = [self maximumToolbeltWidthForViewWidth:self.frame.size.width];
 }
@@ -1753,6 +1785,7 @@ static NSColor *iTermWindowBorderColorFromSetting(NSString *setting) {
         _haveShownToolbelt = YES;
     }
     _shouldShowToolbelt = shouldShowToolbelt;
+    if (shouldShowToolbelt) { self.shouldShowSidebarWorkspace = NO; }
     _toolbelt.hidden = !shouldShowToolbelt;
 }
 
@@ -1908,6 +1941,9 @@ static NSColor *iTermWindowBorderColorFromSetting(NSString *setting) {
     // Toolbelt
     inputs.toolbeltWidth = floor(self.toolbeltWidth);
     inputs.shouldShowToolbelt = self.shouldShowToolbelt;
+    inputs.shouldShowSidebarWorkspace = self.shouldShowSidebarWorkspace;
+    inputs.sidebarWorkspaceWidth = self.sidebarWorkspaceWidth;
+    inputs.sidebarWorkspaceExpanded = self.sidebarWorkspaceExpanded;
 
     inputs.shouldShowProjectSidebar = self.shouldShowProjectSidebar;
     inputs.projectSidebarWidth = self.projectSidebarWidth;
@@ -2029,7 +2065,7 @@ static NSColor *iTermWindowBorderColorFromSetting(NSString *setting) {
         frame = NSMakeRect(NSMinX(self.bounds), NSMaxY(self.bounds), NSWidth(self.bounds), 0);
     }
     const CGFloat trailingControls = (!NSIsEmptyRect(frame) && self.sidebarControlsShareTopBar &&
-                                     !self.shouldShowToolbelt) ? 36 : 0;
+                                     !self.rightSidebarVisible) ? 36 : 0;
     NSRect backingFrame = frame;
     backingFrame.size.width += trailingControls;
     _tabBarBacking.frame = backingFrame;
@@ -2278,7 +2314,7 @@ static NSColor *iTermWindowBorderColorFromSetting(NSString *setting) {
     // the tab bar's settings -- may have moved since the last pass.
     [self invalidateWindowNameBesideTabsTextWidth];
 
-    const BOOL showToolbeltInline = self.shouldShowToolbelt;
+    const BOOL showToolbeltInline = self.rightSidebarVisible;
     NSWindow *thisWindow = _delegate.window;
     if (!_tabBarControlOnLoan) {
         [self.tabBarControl updateHeightWithDefault:[_delegate rootTerminalViewHeightOfTabBar:self]];
@@ -2320,6 +2356,12 @@ static NSColor *iTermWindowBorderColorFromSetting(NSString *setting) {
     projectInputs.sidebarControlsLeadingInset = [self leadingInsetForSidebarControls];
     const iTermLayoutOutputs projectLayout = [iTermLayoutCalculator calculateLayoutWithInputs:projectInputs];
     const NSRect projectFrame = projectLayout.projectSidebarFrame;
+    const NSRect workspaceFrame = projectLayout.sidebarWorkspaceFrame;
+    self.sidebarWorkspace.hidden = NSIsEmptyRect(workspaceFrame);
+    self.sidebarWorkspace.frame = self.sidebarWorkspace.hidden ?
+        NSMakeRect(MAX(0, NSWidth(self.bounds) - self.sidebarWorkspaceWidth), 0,
+                   self.sidebarWorkspaceWidth, NSHeight(self.bounds)) : workspaceFrame;
+    self.tabView.hidden = self.sidebarWorkspaceExpanded && !self.sidebarWorkspace.hidden;
     self.projectSidebar.hidden = NSIsEmptyRect(projectFrame);
     self.projectSidebar.frame = projectFrame;
     self.projectSidebarDragHandle.hidden = self.projectSidebar.hidden;
@@ -2407,7 +2449,7 @@ static NSColor *iTermWindowBorderColorFromSetting(NSString *setting) {
     self.leftSidebarToggleButton.foregroundColor = textColor;
     self.rightSidebarToggleButton.foregroundColor = textColor;
     [self.leftSidebarToggleButton setExpanded:!self.projectSidebar.hidden];
-    [self.rightSidebarToggleButton setExpanded:self.shouldShowToolbelt];
+    [self.rightSidebarToggleButton setExpanded:self.shouldShowSidebarWorkspace && !self.sidebarWorkspace.hidden];
     if (container != self) { return; }
     if (!_windowNameBesideTabsLabel.hidden && NSMinX(_windowNameBesideTabsLabel.frame) < NSWidth(self.bounds) / 2) {
         _windowNameBesideTabsLabel.frame = NSOffsetRect(_windowNameBesideTabsLabel.frame, 36, 0);

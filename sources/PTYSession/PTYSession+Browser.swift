@@ -76,6 +76,9 @@ extension PTYSession: iTermBrowserViewControllerDelegate {
          completion: {})
          */
         let term = (delegate?.realParentWindow() as? PseudoTerminal)
+        if (delegate as? PTYTab)?.sessionIsSidebar(self) == true {
+            return term?.openSidebarPopup(with: url, originSession: self, configuration: configuration)
+        }
         let baseProfile = ProfileModel.profileForCreatingNewSessionBased(on: profile)
         return term?.openTab(with: url,
                              baseProfile: baseProfile,
@@ -86,6 +89,10 @@ extension PTYSession: iTermBrowserViewControllerDelegate {
     func browserViewController(_ controller: iTermBrowserViewController,
                                openNewTabForURL url: URL) {
         let term = (delegate?.realParentWindow() as? PseudoTerminal)
+        if (delegate as? PTYTab)?.sessionIsSidebar(self) == true {
+            term?.openSidebarBrowser(with: url, originSession: self) { _, _ in }
+            return
+        }
         let baseProfile = ProfileModel.profileForCreatingNewSessionBased(on: profile)
         term?.openTab(with: url,
                       baseProfile: baseProfile,
@@ -97,6 +104,10 @@ extension PTYSession: iTermBrowserViewControllerDelegate {
                                openNewSplitPaneForURL url: URL,
                                vertical: Bool) {
         let term = (delegate?.realParentWindow() as? PseudoTerminal)
+        if (delegate as? PTYTab)?.sessionIsSidebar(self) == true {
+            term?.openSidebarBrowser(with: url, originSession: self) { _, _ in }
+            return
+        }
         let baseProfile = ProfileModel.profileForCreatingNewSessionBased(on: profile)
         term?.openSplitPane(with: url,
                             target: nil,
@@ -159,6 +170,7 @@ extension PTYSession: iTermBrowserViewControllerDelegate {
     }
 
     func browserViewControllerSplit(_ controller: iTermBrowserViewController, vertically: Bool, guid: String) {
+        guard (delegate as? PTYTab)?.sessionIsSidebar(self) != true else { return }
         textViewSplitVertically(vertically, withProfileGuid: guid)
     }
 
@@ -367,6 +379,7 @@ extension PTYSession: iTermBrowserViewControllerDelegate {
     }
 
     func browserViewControllerCurrentTabHasMultipleSessions(_ controller: iTermBrowserViewController) -> Bool {
+        if (delegate as? PTYTab)?.sessionIsSidebar(self) == true { return false }
         return (delegate?.sessions().count ?? 0) > 1
     }
 

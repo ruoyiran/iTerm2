@@ -60,6 +60,9 @@
 #import "iTermVariableScope+Global.h"
 #import "iTermWarning.h"
 
+@interface iTermAPIHelper () <iTermBrowserAutomationHost>
+@end
+
 NSString *const iTermRemoveAPIServerSubscriptionsNotification = @"iTermRemoveAPIServerSubscriptionsNotification";
 NSString *const iTermAPIRegisteredFunctionsDidChangeNotification = @"iTermAPIRegisteredFunctionsDidChangeNotification";
 NSString *const iTermAPIDidRegisterSessionTitleFunctionNotification = @"iTermAPIDidRegisterSessionTitleFunctionNotification";
@@ -348,6 +351,7 @@ static BOOL iTermAPIHelperLastApplescriptAuthRequiredSetting;
 
 @implementation iTermAPIHelper {
     iTermAPIServer *_apiServer;
+    iTermBrowserAutomationBroker *_browserAutomationBroker;
     BOOL _layoutChanged;
 
     // Workaround for iterm2 Python library < 2.23 losing the selection of a
@@ -872,6 +876,7 @@ static BOOL iTermAPIHelperLastApplescriptAuthRequiredSetting;
         server = _apiServer;
         _apiServer = nil;
     }
+    [_browserAutomationBroker cancelAllRequests];
     [server stop];
     server.delegate = nil;
     [_newSessionSubscriptions removeAllObjects];
@@ -1115,7 +1120,8 @@ static BOOL iTermAPIHelperLastApplescriptAuthRequiredSetting;
     // Deferrable: held from a connection that is mid-CreateTab (see the deferral).
     [self handleFocusChange:focusChange
                  deferrable:YES
-      floatingPaneAwareOnly:[session.delegate sessionIsFloating:session]];
+      floatingPaneAwareOnly:[session.delegate sessionIsFloating:session]
+           sidebarAwareOnly:[(PTYTab *)session.delegate sessionIsSidebar:session]];
 }
 
 // Python library versions before this one do not know about floating panes. A focus change to a
@@ -1140,6 +1146,15 @@ static NSString *const iTermAPIFloatingPanesFirstAwarePythonVersion = @"2.26";
     }
     return [version compare:iTermAPIFloatingPanesFirstAwarePythonVersion
                     options:NSNumericSearch] != NSOrderedAscending;
+}
+
++ (BOOL)libraryVersionUnderstandsSidebar:(NSString *)libraryVersion {
+    NSArray<NSString *> *parts = [libraryVersion componentsSeparatedByString:@" "];
+    if (parts.count != 2 || ![parts[0] isEqualToString:@"python"]) { return YES; }
+    NSString *version = parts[1];
+    NSCharacterSet *allowed = [NSCharacterSet characterSetWithCharactersInString:@"0123456789."];
+    if (!version.length || [version rangeOfCharacterFromSet:allowed.invertedSet].location != NSNotFound) { return YES; }
+    return [version compare:@"2.31" options:NSNumericSearch] != NSOrderedAscending;
 }
 
 - (BOOL)connectionKeyUnderstandsFloatingPanes:(NSString *)connectionKey {
@@ -1182,6 +1197,13 @@ static NSString *const iTermAPIFloatingPanesFirstAwarePythonVersion = @"2.26";
 - (void)handleFocusChange:(ITMFocusChangedNotification *)notif
                deferrable:(BOOL)deferrable
     floatingPaneAwareOnly:(BOOL)floatingPaneAwareOnly {
+    [self handleFocusChange:notif deferrable:deferrable floatingPaneAwareOnly:floatingPaneAwareOnly sidebarAwareOnly:NO];
+}
+
+- (void)handleFocusChange:(ITMFocusChangedNotification *)notif
+               deferrable:(BOOL)deferrable
+    floatingPaneAwareOnly:(BOOL)floatingPaneAwareOnly
+         sidebarAwareOnly:(BOOL)sidebarAwareOnly {
     void (^handle)(void) = ^{
         [self->_focusChangeSubscriptions enumerateKeysAndObjectsUsingBlock:^(id  _Nonnull key, ITMNotificationRequest * _Nonnull obj, BOOL * _Nonnull stop) {
             if (deferrable &&
@@ -1191,6 +1213,7 @@ static NSString *const iTermAPIFloatingPanesFirstAwarePythonVersion = @"2.26";
             if (floatingPaneAwareOnly && ![self connectionKeyUnderstandsFloatingPanes:key]) {
                 return;
             }
+            if (sidebarAwareOnly && ![iTermAPIHelper libraryVersionUnderstandsSidebar:[self->_apiServer libraryVersionForConnectionKey:key]]) { return; }
             ITMNotification *notification = [[ITMNotification alloc] init];
             notification.focusChangedNotification = notif;
             [self postAPINotification:notification toConnectionKey:key];
@@ -2287,6 +2310,7 @@ static NSString *const iTermAPIFloatingPanesFirstAwarePythonVersion = @"2.26";
 }
 
 - (void)apiServerDidCloseConnectionWithKey:(id)connectionKey {
+    [_browserAutomationBroker cancelConnection:connectionKey];
     [[NSNotificationCenter defaultCenter] postNotificationName:iTermRemoveAPIServerSubscriptionsNotification object:connectionKey];
 
     // Clean up outstanding iterm2->script RPCs.
@@ -2458,6 +2482,82 @@ static NSString *const iTermAPIFloatingPanesFirstAwarePythonVersion = @"2.26";
     handler([session handleGetProfilePropertyForKeys:request.keysArray]);
 }
 
+#pragma mark - Scoped browser automation
+
+- (void)apiServerBrowserRequest:(ITMBrowserRequest *)request
+                  connectionKey:(NSString *)connectionKey
+                        handler:(void (^)(ITMBrowserResponse *))handler {
+    if (!_browserAutomationBroker) {
+        _browserAutomationBroker = [[iTermBrowserAutomationBroker alloc] initWithHost:self];
+    }
+    iTermScriptHistoryEntry *entry = [self scriptHistoryEntryForConnectionKey:connectionKey];
+    NSString *scriptName = entry.name ?: NSLocalizedStringWithDefaultValue(@"BrowserAutomation.ScriptName", nil, [NSBundle mainBundle], @"A script", @"Fallback name for an authenticated browser automation script");
+    [_browserAutomationBroker handleRequest:request connectionKey:connectionKey scriptName:scriptName completion:handler];
+}
+
+- (PTYSession *)browserAutomationSessionWithID:(NSString *)identifier {
+    // Explicit IDs only; never reuse sessionForAPIIdentifier's active/all aliases.
+    for (PTYSession *session in [self allSessions]) {
+        if ([session.guid isEqualToString:identifier]) {
+            return session;
+        }
+    }
+    return nil;
+}
+
+- (PTYTab *)browserAutomationTabForSession:(PTYSession *)session {
+    for (PseudoTerminal *window in [[iTermController sharedInstance] terminals]) {
+        PTYTab *tab = [window tabForSession:session];
+        if (tab) {
+            return tab;
+        }
+    }
+    return nil;
+}
+
+- (NSArray<PTYSession *> *)browserAutomationSessionsForOrigin:(PTYSession *)origin {
+    return [self browserAutomationTabForSession:origin].allSessions ?: @[];
+}
+
+- (NSString *)browserAutomationScopeForOrigin:(PTYSession *)origin {
+    PTYTab *tab = [self browserAutomationTabForSession:origin];
+    return tab ? [@(tab.uniqueId) stringValue] : nil;
+}
+
+- (BOOL)browserAutomationIsSidebar:(PTYSession *)session {
+    return [[self browserAutomationTabForSession:session] sessionIsSidebar:session];
+}
+
+- (void)browserAutomationOpen:(NSURL *)url origin:(PTYSession *)origin completion:(void (^)(PTYSession *, NSError *))completion {
+    PTYTab *tab = [self browserAutomationTabForSession:origin];
+    PseudoTerminal *window = (PseudoTerminal *)tab.realParentWindow;
+    if (!window || !tab) {
+        completion(nil, [NSError errorWithDomain:@"com.iterm2.browser-automation" code:1 userInfo:nil]);
+        return;
+    }
+    [window openSidebarBrowserWithURL:url originSession:origin completion:completion];
+}
+
+- (BOOL)browserAutomationSelect:(PTYSession *)session {
+    PTYTab *tab = [self browserAutomationTabForSession:session];
+    PseudoTerminal *window = (PseudoTerminal *)tab.realParentWindow;
+    if (!window || ![tab sessionIsSidebar:session]) {
+        return NO;
+    }
+    [window selectSidebarSession:session];
+    return tab.selectedSidebarSession == session;
+}
+
+- (void)browserAutomationClose:(PTYSession *)session completion:(void (^)(BOOL))completion {
+    PTYTab *tab = [self browserAutomationTabForSession:session];
+    PseudoTerminal *window = (PseudoTerminal *)tab.realParentWindow;
+    if (!window || ![tab sessionIsSidebar:session]) {
+        completion(NO);
+        return;
+    }
+    [window closeSidebarSession:session completion:completion];
+}
+
 - (void)apiServerListSessions:(ITMListSessionsRequest *)request
                       handler:(void (^)(ITMListSessionsResponse *))handler {
     handler([self newListSessionsResponse]);
@@ -2486,6 +2586,12 @@ static NSString *const iTermAPIFloatingPanesFirstAwarePythonVersion = @"2.26";
             ITMListSessionsResponse_Tab *tabMessage = [[ITMListSessionsResponse_Tab alloc] init];
             tabMessage.tabId = [@(tab.uniqueId) stringValue];
             tabMessage.root = [tab rootSplitTreeNode];
+            for (PTYSession *session in tab.sidebarSessions) {
+                ITMSessionSummary *summary = [[ITMSessionSummary alloc] init];
+                summary.uniqueIdentifier = session.guid;
+                summary.title = session.name;
+                [tabMessage.sidebarSessionsArray addObject:summary];
+            }
             // Floats are not in root (protocol 1.21+). Older clients ignore the field.
             [tabMessage.floatingPanesArray addObjectsFromArray:[tab floatingPaneMessages]];
             if (tab.floatingPanes.count > 0) {
@@ -2493,7 +2599,7 @@ static NSString *const iTermAPIFloatingPanesFirstAwarePythonVersion = @"2.26";
             }
             // Report the tab's active session so clients know the current
             // session without waiting for a focus notification (protocol 1.18+).
-            PTYSession *activeSession = tab.activeSession;
+            PTYSession *activeSession = tab == window.currentTab ? window.currentSession : tab.activeSession;
             if (activeSession) {
                 tabMessage.activeSessionId = activeSession.guid;
             }
@@ -2711,7 +2817,7 @@ static NSString *const iTermAPIFloatingPanesFirstAwarePythonVersion = @"2.26";
         // out so no pane is split twice.
         sessions = [[self allSessions] filteredArrayUsingBlock:^BOOL(PTYSession *session) {
             PTYTab *tab = [[[iTermController sharedInstance] terminalWithSession:session] tabForSession:session];
-            return ![tab sessionIsFloating:session];
+            return ![tab sessionIsFloating:session] && ![tab sessionIsSidebar:session];
         }];
     } else {
         PTYSession *session = [self sessionForAPIIdentifier:request.session includeBuriedSessions:YES];
@@ -2725,7 +2831,7 @@ static NSString *const iTermAPIFloatingPanesFirstAwarePythonVersion = @"2.26";
         // tiled pane instead, but a script asked for this pane and should know. tmux makes another
         // float, except tmux 3.7, which can't.
         PTYTab *tab = [[[iTermController sharedInstance] terminalWithSession:session] tabForSession:session];
-        if ([tab sessionIsFloating:session] && (!tab.isTmuxTab || ![tab tmuxAllowsChangingFloatingPanes])) {
+        if ([tab sessionIsSidebar:session] || ([tab sessionIsFloating:session] && (!tab.isTmuxTab || ![tab tmuxAllowsChangingFloatingPanes]))) {
             ITMSplitPaneResponse *response = [[ITMSplitPaneResponse alloc] init];
             response.status = ITMSplitPaneResponse_Status_CannotSplit;
             handler(response);
@@ -3482,6 +3588,7 @@ static NSString *const iTermAPIFloatingPanesFirstAwarePythonVersion = @"2.26";
         libraryVersion:(NSString *)libraryVersion
                handler:(void (^)(ITMFocusResponse *))handler {
     const BOOL understandsFloatingPanes = [iTermAPIHelper libraryVersionUnderstandsFloatingPanes:libraryVersion];
+    const BOOL understandsSidebar = [iTermAPIHelper libraryVersionUnderstandsSidebar:libraryVersion];
     ITMFocusResponse *response = [[ITMFocusResponse alloc] init];
 
     ITMFocusChangedNotification *focusChange = [[ITMFocusChangedNotification alloc] init];
@@ -3523,7 +3630,9 @@ static NSString *const iTermAPIFloatingPanesFirstAwarePythonVersion = @"2.26";
                 continue;
             }
             focusChange = [[ITMFocusChangedNotification alloc] init];
-            focusChange.session = tab.activeSession.guid;
+            PTYSession *focused = tab == term.currentTab ? term.currentSession : tab.activeSession;
+            if (!understandsSidebar && [tab sessionIsSidebar:focused]) { continue; }
+            focusChange.session = focused.guid;
             [response.notificationsArray addObject:focusChange];
         }
     }

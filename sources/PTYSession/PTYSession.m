@@ -3916,16 +3916,13 @@ webViewConfiguration:(WKWebViewConfiguration *)webViewConfiguration
                 if (count > 0) {
                     return;
                 }
-                const iTermWarningSelection selection = [iTermWarning showWarningWithTitle:NSLocalizedStringWithDefaultValue(@"PTYSession.BrowserPluginMissingMessage", nil, [NSBundle mainBundle], @"A browser session failed to start because the iTerm2 Browser Plugin couldn’t be found.", @"Warning that a browser session could not start because the browser plugin is missing")
-                                           actions:@[ [iTermWarningAction localOnlyActionWithLabel:NSLocalizedStringWithDefaultValue(@"PTYSession.Download", nil, [NSBundle mainBundle], @"Download", @"Button that downloads a plugin")], iTermLocalizedCancel() ]
+                [iTermWarning showWarningWithTitle:NSLocalizedStringWithDefaultValue(@"PTYSession.BrowserDisabledMessage", nil, [NSBundle mainBundle], @"Built-in browsing is disabled. Enable browser-style profiles in Settings > Advanced and restart iTerm2.", @"Warning shown when the built-in browser is disabled in advanced settings")
+                                           actions:@[ iTermLocalizedOK() ]
                                          accessory:nil
                                         identifier:nil
                                        silenceable:kiTermWarningTypePersistent
-                                           heading:NSLocalizedStringWithDefaultValue(@"PTYSession.BrowserPluginMissingHeading", nil, [NSBundle mainBundle], @"Browser Plugin Missing", @"Heading for a warning that the browser plugin is missing")
+                                           heading:NSLocalizedStringWithDefaultValue(@"PTYSession.BrowserDisabledHeading", nil, [NSBundle mainBundle], @"Built-in Browser Disabled", @"Heading for a warning that built-in browsing is disabled")
                                             window:nil];
-                if (selection == kiTermWarningSelection0) {
-                    [[NSWorkspace sharedWorkspace] openURL:[NSURL URLWithString:@"https://iterm2.com/browser-plugin.html"]];
-                }
             });
         }
         return;

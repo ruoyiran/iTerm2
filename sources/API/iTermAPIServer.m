@@ -800,6 +800,25 @@ NSString *const iTermAPIServerConnectionClosed = @"iTermAPIServerConnectionClose
     }];
 }
 
+- (void)handleBrowserRequest:(ITMClientOriginatedMessage *)request connection:(id<iTermAPIServerConnection>)connection {
+    ITMServerOriginatedMessage *response = [self newResponseForRequest:request];
+    // Transactions drain synchronously on the main thread. Browser work awaits
+    // WebKit and permission sheets on that thread, so it cannot run in a transaction.
+    if (self.transaction) {
+        ITMBrowserResponse *browserResponse = [[ITMBrowserResponse alloc] init];
+        browserResponse.errorCode = @"unsupported";  // Localization unneeded: wire code.
+        browserResponse.errorMessage = NSLocalizedStringWithDefaultValue(@"BrowserAutomation.InTransaction", nil, [NSBundle mainBundle], @"Browser automation cannot run inside an API transaction.", @"Error returned when browser automation is requested from a main-thread-blocking API transaction");
+        response.browserResponse = browserResponse;
+        [self finishHandlingRequestWithResponse:response onConnection:connection];
+        return;
+    }
+    __weak __typeof(self) weakSelf = self;
+    [_delegate apiServerBrowserRequest:request.browserRequest connectionKey:connection.guid handler:^(ITMBrowserResponse *browserResponse) {
+        response.browserResponse = browserResponse;
+        [weakSelf finishHandlingRequestWithResponse:response onConnection:connection];
+    }];
+}
+
 - (void)handleScreenshotRequest:(ITMClientOriginatedMessage *)request connection:(id<iTermAPIServerConnection>)webSocketConnection {
     ITMServerOriginatedMessage *response = [self newResponseForRequest:request];
 
@@ -1276,6 +1295,10 @@ NSString *const iTermAPIServerConnectionClosed = @"iTermAPIServerConnectionClose
 
         case ITMClientOriginatedMessage_Submessage_OneOfCase_ListPromptsRequest:
             [self handleListPromptsRequest:request connection:webSocketConnection];
+            break;
+
+        case ITMClientOriginatedMessage_Submessage_OneOfCase_BrowserRequest:
+            [self handleBrowserRequest:request connection:webSocketConnection];
             break;
 
         case ITMClientOriginatedMessage_Submessage_OneOfCase_ScreenshotRequest:

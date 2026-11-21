@@ -43,6 +43,7 @@ TOP-LEVEL keys
   Snippets, NoSyncSnippetsSupersededFallbackBackup,
     NoSyncSnippetsDiscardedFallbackBackup  snippet "value"/"title"/"tags"
   Window Arrangements .................... deep session state (recursed)
+    Sidebar Workspace / Sidebar Sessions  page titles, URLs, paths and session data (removed)
   Default Arrangement Name ............... arrangement name (label; aggressive)
   Workgroups ............................. JSON Data: command/perFileCommand/
                                            urlString/displayName/name
@@ -193,6 +194,9 @@ def is_profile_boolean_parameter(value):
 # anywhere in the tree (values only; dict keys are never matched), so nested
 # and embedded structures are covered automatically by the recursive walk.
 CONTENT_KEYS = {
+    # Sidebar restoration contains URLs, file paths, page titles and live-session records.
+    "Sidebar Workspace": REMOVE,
+    "Sidebar Sessions": REMOVE,
     # project catalog and file tree restoration (dictionary keys can contain paths)
     "NoSyncProjectDirectories": REMOVE,
     "NoSyncFileWorkspaceAnnotations": REMOVE,

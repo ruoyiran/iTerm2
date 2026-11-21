@@ -5,6 +5,7 @@ The iTerm2 module provides a Python interface for controlling iTerm2.
 from __future__ import annotations
 
 from ._version import __version__
+from .browser import Browser, BrowserError
 from .alert import Alert, PolyModalAlert, TextInputAlert
 from .app import App, async_get_app, async_get_variable, async_invoke_function
 from .arrangement import Arrangement, SavedArrangementException
@@ -203,6 +204,8 @@ __all__ = [
     "BindingAction",
     "BounceTrigger",
     "BroadcastDomain",
+    "Browser",
+    "BrowserError",
     "BufferInputTrigger",
     "CaptureTrigger",
     "CharacterEncoding",

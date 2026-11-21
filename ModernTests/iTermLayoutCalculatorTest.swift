@@ -12,6 +12,58 @@ import XCTest
 @testable import iTerm2SharedARC
 
 final class iTermLayoutCalculatorTest: XCTestCase {
+    func testDefaultWorkspaceWidthUsesMinimumAndLeavesBothSidebarsSeparate() {
+        var input = makeDefaultInputs()
+        input.contentViewWidth = 1400
+        input.shouldShowProjectSidebar = true
+        input.projectSidebarWidth = 220
+        input.shouldShowSidebarWorkspace = true
+        input.sidebarWorkspaceWidth = 0
+        input.minimumTerminalWidth = 300
+        let result = iTermLayoutCalculator.calculateLayout(with: input)
+        XCTAssertEqual(result.sidebarWorkspaceFrame.width, 360)
+        XCTAssertEqual(result.projectSidebarFrame.width, 220)
+        XCTAssertEqual(result.tabViewFrame.width, 820)
+        XCTAssertFalse(result.projectSidebarFrame.intersects(result.sidebarWorkspaceFrame))
+    }
+
+    func testSidebarWorkspaceKeepsPrimaryGeometryAndToolbeltSeparate() {
+        var input = makeDefaultInputs()
+        input.contentViewWidth = 1400
+        input.shouldShowSidebarWorkspace = true
+        input.sidebarWorkspaceWidth = 480
+        input.minimumTerminalWidth = 300
+        let result = iTermLayoutCalculator.calculateLayout(with: input)
+        XCTAssertEqual(result.sidebarWorkspaceFrame.width, 480)
+        XCTAssertEqual(result.tabViewFrame.width, 920)
+        XCTAssertTrue(result.toolbeltFrame.isEmpty)
+    }
+
+    func testSidebarWorkspaceTemporarilyCollapsesWithoutChangingPreference() {
+        var input = makeDefaultInputs()
+        input.contentViewWidth = 600
+        input.shouldShowSidebarWorkspace = true
+        input.sidebarWorkspaceWidth = 480
+        input.minimumTerminalWidth = 300
+        let result = iTermLayoutCalculator.calculateLayout(with: input)
+        XCTAssertTrue(result.sidebarWorkspaceFrame.isEmpty)
+        XCTAssertEqual(result.tabViewFrame.width, 600)
+        XCTAssertTrue(input.shouldShowSidebarWorkspace.boolValue)
+    }
+
+    func testSidebarWorkspaceExpansionKeepsTheTabStripAndRestoresWidth() {
+        var input = makeDefaultInputs()
+        input.contentViewWidth = 1400
+        input.shouldShowSidebarWorkspace = true
+        input.sidebarWorkspaceWidth = 480
+        input.sidebarWorkspaceExpanded = true
+        input.minimumTerminalWidth = 300
+        let expanded = iTermLayoutCalculator.calculateLayout(with: input)
+        XCTAssertEqual(expanded.sidebarWorkspaceFrame.width, 1400)
+        XCTAssertEqual(expanded.sidebarWorkspaceFrame.height, expanded.tabViewFrame.height)
+        input.sidebarWorkspaceExpanded = false
+        XCTAssertEqual(iTermLayoutCalculator.calculateLayout(with: input).sidebarWorkspaceFrame.width, 480)
+    }
 
     // MARK: - Test Fixtures
 

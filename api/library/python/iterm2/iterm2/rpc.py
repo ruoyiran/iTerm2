@@ -31,6 +31,29 @@ class RPCException(Exception):
 # APIs -----------------------------------------------------------------------
 
 
+async def async_browser_request(
+    connection: Connection,
+    origin_session_id: str,
+    browser_session_id: str | None,
+    action: str,
+    arguments: Mapping[str, Any],
+    timeout_ms: int = 30000,
+    request_id: str | None = None,
+) -> api_pb2.ServerOriginatedMessage:
+    """Send explicitly scoped browser automation over the authenticated API."""
+    request = _alloc_request()
+    browser = request.browser_request
+    browser.origin_session_id = origin_session_id
+    if browser_session_id is not None:
+        browser.browser_session_id = browser_session_id
+    browser.action = action
+    browser.arguments_json = json.dumps(arguments, allow_nan=False)
+    browser.timeout_ms = timeout_ms
+    if request_id is not None:
+        browser.request_id = request_id
+    return await _async_call(connection, request)
+
+
 async def async_list_sessions(
     connection: Connection,
 ) -> api_pb2.ServerOriginatedMessage:
